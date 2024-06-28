@@ -33,170 +33,171 @@ The main tools here are *declarative Kubernetes API translation* and *incrementa
 # design.
 
 #+BEGIN_SRC go
-package main
+  package main
 
-import (
-	"context"
-	"os"
+  import (
+          "context"
+          "os"
 
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+          logf "sigs.k8s.io/controller-runtime/pkg/log"
+          "sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	dcontroller "hsnlab/declarative-controller/pkg/controller/differential" // use /controller/materialized for non-diff controller
-	dmanager "hsnlab/declarative-controller/pkg/manager"
-	pipeline "hsnlab/declarative-controller/pkg/pipeline"
-	op "hsnlab/declarative-controller/pkg/pipeline/op"
-	dreconcile "hsnlab/declarative-controller/pkg/reconcile"
+          dcontroller "hsnlab/dcontroller/pkg/controller/differential" // use /controller/materialized for non-diff controller
+          dmanager "hsnlab/dcontroller/pkg/manager"
+          pipeline "hsnlab/dcontroller/pkg/pipeline"
+          op "hsnlab/dcontroller/pkg/pipeline/op"
+          dreconcile "hsnlab/dcontroller/pkg/reconcile"
 
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
-)
+          "sigs.k8s.io/controller-runtime/pkg/client/config"
+  )
 
-func main() {
-	log := logf.Log.WithName("manager-example")
+  func main() {
+          log := logf.Log.WithName("manager-example")
 
-	// Get cluster config
-	cfg, err := config.GetConfig()
-	if err != nil {
-		log.Error(err, "unable to get kubeconfig")
-		os.Exit(1)
-	}
+          // Get cluster config
+          cfg, err := config.GetConfig()
+          if err != nil {
+                  log.Error(err, "unable to get kubeconfig")
+                  os.Exit(1)
+          }
 
-	// Create a declarative manager
-	mgr, err := dmanager.New(cfg, dmanager.Options{})
-	if err != nil {
-		log.Error(err, "unable to set up manager")
-		os.Exit(1)
-	}
+          // Create a declarative manager
+          mgr, err := dmanager.New(cfg, dmanager.Options{})
+          if err != nil {
+                  log.Error(err, "unable to set up dmanager")
+                  os.Exit(1)
+          }
 
-	// Register the "collections": a collection is a "controller" (as in controller-runtime/pkg/controller) plus a "watch" (as in controller-runtime/pkg/source) for an API resource
+          // Register the base K8s API resources: will create a "controller" (as in
+          // controller-runtime/pkg/controller) plus a "watch" (as in controller-runtime/pkg/source)
+          // for the API resource
+          // - creates a K8s Controller and K8s Watch on the resource (the reconciler knows the event type)
+          // - registers a base view for the resource
+          // - mgr.Start() will take care of starting the watch
+          cd, err := mgr.Register("CD", &apiv1.ConfigDeployment{})
+          if err != nil {
+                  log.Error(err, "unable to register base API configdeployment")
+                  os.Exit(1)
+          }
 
-	// NewCollection:
-	// - creates a K8s Controller and K8s Watch on the resource (the reconciler knows the event type)
-	// - mgr.Start() will take care of starting the watch
-	cd, err := mgr.NewCollection("CD", "configdeployments.v1alpha.declarative-controller")
-	if err != nil {
-		log.Error(err, "unable to register configdeployment collection")
-		os.Exit(1)
-	}
+          cm, err := mgr.Register("CM", &corev1.ConfigMap{})
+          if err != nil {
+                  log.Error(err, "unable to register base API configmap")
+                  os.Exit(1)
+          }
 
-	cm, err := mgr.NewCollection("CM", "configmaps.v1.")
-	if err != nil {
-		log.Error(err, "unable to register configmap collection")
-		os.Exit(1)
-	}
+          dp, err := mgr.Register("DP", &appsv1.Deployment{})
+          if err != nil {
+                  log.Error(err, "unable to register deployment collection")
+                  os.Exit(1)
+          }
 
-	dp, err := mgr.NewCollection("DP", "deployments.v1.apps")
-	if err != nil {
-		log.Error(err, "unable to register deployment collection")
-		os.Exit(1)
-	}
+          // Specify the "views" on the collections: a view is a user-defined aggregationquery on the
+          // set of collections whose result is available as a "collection
 
-	// Specify the "views" on the collections: a view is a user-defined aggregationquery on the
-	// set of collections whose result is available as a "collection
+          // - the below is equivalent to the SQL query (all resources in the same namespace)
+          // ```
+          // SELECT CD.Name, DP.Name, CM.RV
+          // FROM ConfigDeployments CD
+          // JOIN ConfigMaps CM
+          // ON CD.CmName=CM.Name
+          // JOIN Deployments DP
+          // ON CD.DpName=DP.Name;
+          // }
+          // ```
 
-	// - the below is equivalent to the SQL query (all resources in the same namespace)
-	// ```
-	// SELECT CD.Name, DP.Name, CM.RV
-	// FROM ConfigDeployments CD
-	// JOIN ConfigMaps CM
-	// ON CD.CmName=CM.Name
-	// JOIN Deployments DP
-	// ON CD.DpName=DP.Name;
-	// }
-	// ```
+          // CreateView takes a view name and an aggregation pipeline as input and creates a
+          // materialized or differential view using the specified aggregation pipeline
+          view, err := mgr.CreateView("VIEW", pipeline.Aggregate(
+                  op.Map(
+                          op.Field("CD", "$CD"),
+                          op.Field("CM", "$CM"),
+                          op.Field("DP", "$DP"),
+                  ),
+                  op.Match(
+                          op.And(
+                                  op.Eq("$CD.spec.cmName", "$CM.medatata.name"),
+                                  op.Eq("$CD.medatata.namespace", "$CM.medatata.namespace"),
+                                  op.Eq("$CD.spec.dpName", "$DP.medatata.name"),
+                                  op.Eq("$CD.medatata.namespace", "$DP.medatata.namespace"),
+                          ),
+                  ),
+                  op.Map(
+                          op.Field("CD", "$CD"),
+                          op.Field("CM", "$CM"),
+                          op.Field("DP", "$DP"),
+                  ),
+          cd, cm, dp))
+          if err != nil {
+                  log.Error(err, "unable to create base view on the deployment collection")
+                  os.Exit(1)
+          }
 
-	// CreateView takes a view name and an aggregation pipeline as input and creates a
-	// materialized or differential view using the specified aggregation pipeline
-	view, err := mgr.CreateView("VIEW", pipeline.Aggregate(
-		op.Map(
-			op.Field("CD", "$CD"),
-			op.Field("CM", "$CM"),
-			op.Field("DP", "$DP"),
-		),
-		op.Match(
-			op.And(
-				op.Eq("$CD.spec.cmName", "$CM.medatata.name"),
-				op.Eq("$CD.medatata.namespace", "$CM.medatata.namespace"),
-				op.Eq("$CD.spec.dpName", "$DP.medatata.name"),
-				op.Eq("$CD.medatata.namespace", "$DP.medatata.namespace"),
-			),
-		),
-		op.Map(
-			op.Field("CD", "$CD"),
-			op.Field("CM", "$CM"),
-			op.Field("DP", "$DP"),
-		),
-	), cd, cm, dp)
-	if err != nil {
-		log.Error(err, "unable to create base view on the deployment collection")
-		os.Exit(1)
-	}
+          // delta controller watches for deltas
+          c, err := dcontroller.New("view-controller", mgr, dcontroller.Options{
+                  // reconcider must implement Create and Delete
+                  // dreconcile.Request contains an unstructured.Unstructured
+                  Reconciler: dreconcile.Reconciler{
+                          Upsert: func(ctx context.Context, req dreconcile.Request) (dreconcile.Result, error) {
+                                  // update the deployment
+                                  if mgr.Insert(dp, pipeline.Aggregate(
+                                          op.Map(
+                                                  op.Field("name", "$name"),
+                                                  op.Field("namespace", "$namespace"),
+                                                  op.Field("spec",
+                                                          op.Field("template",
+                                                                  op.Field("metadata",
+                                                                          op.Field("labels",
+                                                                                  op.Field("configMapVersion", "$resourceVersion"),
+                                                                          ),
+                                                                  ),
+                                                          ),
+                                                  ),
+                                          ), req.Object)); err != nil {
+                                          return dreconcile.Result{}, dreconcile.TerminalError{}
+                                  }
 
-	// delta controller watches for deltas
-	c, err := dcontroller.New("view-controller", mgr, dcontroller.Options{
-		// reconcider must implement Create and Delete
-		// dreconcile.Request contains an unstructured.Unstructured
-		Reconciler: dreconcile.Reconciler{
-			Upsert: func(ctx context.Context, req dreconcile.Request) (dreconcile.Result, error) {
-				// update the deployment
-				if mgr.Insert(dp, pipeline.Aggregate(
-					op.Map(
-						op.Field("name", "$name"),
-						op.Field("namespace", "$namespace"),
-						op.Field("spec",
-							op.Field("template",
-								op.Field("metadata",
-									op.Field("labels",
-										op.Field("configMapVersion", "$resourceVersion"),
-									),
-								),
-							),
-						),
-					), req.Object)); err != nil {
-					return dreconcile.Result{}, dreconcile.TerminalError{}
-				}
+                                  // update the configdeployment status
+                                  if mgr.Insert(cd, pipeline.Aggregate(
+                                          op.Map(
+                                                  op.Field("name", "$name"),
+                                                  op.Field("namespace", "$namespace"),
+                                                  op.Field("status",
+                                                          op.List(
+                                                                  op.Field("type", "Programmed"),
+                                                                  op.Field("status", "True"),
+                                                                  op.Field("lastTransitionTime", "$date"),
+                                                          ),
+                                                  ),
+                                          ), req.Object)); err != nil {
+                                          return dreconcile.Result{}, dreconcile.TerminalError{}
+                                  }
+                                  return dreconcile.Result{}, nil
+                          },
+                          Delete: func(context.Context, dreconcile.Request) (dreconcile.Result, error) {
+                                  // no need to do anything
+                                  return dreconcile.Result{}, nil
+                          },
+                  },
+          })
+          if err != nil {
+                  log.Error(err, "unable to create view controller")
+                  os.Exit(1)
+          }
 
-				// update the configdeployment status
-				if mgr.Insert(cd, pipeline.Aggregate(
-					op.Map(
-						op.Field("name", "$name"),
-						op.Field("namespace", "$namespace"),
-						op.Field("status",
-							op.List(
-								op.Field("type", "Programmed"),
-								op.Field("status", "True"),
-								op.Field("lastTransitionTime", "$date"),
-							),
-						),
-					), req.Object)); err != nil {
-					return dreconcile.Result{}, dreconcile.TerminalError{}
-				}
-				return dreconcile.Result{}, nil
-			},
-			Delete: func(context.Context, dreconcile.Request) (dreconcile.Result, error) {
-				// no need to do anything
-				return dreconcile.Result{}, nil
-			},
-		},
-	})
-	if err != nil {
-		log.Error(err, "unable to create view controller")
-		os.Exit(1)
-	}
+          // Watch for create / update / delete deltas on the view
+          err = c.WatchDelta(view)
+          if err != nil {
+                  log.Error(err, "unable to watch view")
+                  os.Exit(1)
+          }
 
-	// Watch for create / update / delete deltas on the view
-	err = c.WatchDelta(view)
-	if err != nil {
-		log.Error(err, "unable to watch view")
-		os.Exit(1)
-	}
-
-	// Start the Controller through the manager.
-	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
-		log.Error(err, "unable to continue running manager")
-		os.Exit(1)
-	}
-}
+          // Start the Controller through the manager.
+          if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
+                  log.Error(err, "unable to continue running manager")
+                  os.Exit(1)
+          }
+  }
 #+END_SRC
 
 * Declarative API translation

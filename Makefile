@@ -1,5 +1,5 @@
 # Build variables
-PACKAGE = github.com/rg0now/declarative-controller-runtime
+PACKAGE = github.com/hsnlab/dcontroller-runtime
 BUILD_DIR ?= bin/
 VERSION ?= $(shell (git describe --tags --abbrev=8 --always --long) | tr "/" "-")
 COMMIT_HASH ?= $(shell git rev-parse --short HEAD 2>/dev/null)
@@ -32,7 +32,7 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
 # l7mp.io/stunner-gateway-operator-bundle:$VERSION and l7mp.io/stunner-gateway-operator-catalog:$VERSION.
 # IMAGE_TAG_BASE ?= l7mp.io/stunner-gateway-operator
-IMAGE_TAG_BASE ?= rg0now/declarative-controller-runtime
+IMAGE_TAG_BASE ?= hsnlab/dcontroller-runtime
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
