@@ -2,87 +2,114 @@ package cache
 
 import (
 	"context"
-	"fmt"
-	"hsnlab/dcontroller-runtime/pkg/object"
+	"errors"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/watch"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
-// Client provides a read-only interface to the cache.
-type Client interface {
-	Get(id string) (*object.Object, error)
-	List() ([]*object.Object, error)
-	Watch(ctx context.Context) (watch.Interface, error)
+type ReadOnlyClient interface {
+	client.Reader
+	Watch(ctx context.Context, obj client.ObjectList, opts ...client.ListOption) (watch.Interface, error)
 }
 
-// clientImpl implements read-only Client.
-type clientImpl struct {
-	cache *Cache
+type cacheClient struct {
+	*Cache
 }
 
-// NewClient creates a new read-only client
-func (cc *Cache) NewClient() Client {
-	return &clientImpl{cache: cc}
+func (c *Cache) NewClient() ReadOnlyClient {
+	return &cacheClient{c}
 }
 
-func (c *clientImpl) Get(id string) (*object.Object, error) {
-	obj, exists, err := c.cache.indexer.GetByKey(id)
-	if err != nil {
-		return nil, err
+// Get retrieves an obj for the given object. The paraamter obj must be a struct pointer with a
+// valid kind (view), key must be a namespace/name pair, and obj will be updated with the response.
+func (c *cacheClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if c.Cache == nil {
+		return apierrors.NewInternalError(errors.New("invalid cache"))
 	}
+
+	o, ok := obj.(*object.Object)
+	if !ok {
+		return apierrors.NewBadRequest("obj must be *object.Object")
+	}
+
+	return c.Cache.get(key, o)
+}
+
+// List retrieves list of objects for a view. The list parameter must be a client.ObjectList with a
+// kind (view) specified. On a successful call, Items field in the list will be populated with the
+// result.
+func (c *cacheClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	if c.Cache == nil {
+		return apierrors.NewInternalError(errors.New("invalid cache"))
+	}
+
+	l, ok := list.(*object.ObjectList)
+	if !ok {
+		return apierrors.NewBadRequest("list must be *object.ObjectList")
+	}
+
+	return c.Cache.list(l)
+}
+
+// Watch creates a watch for the specified resource. The list parameter must be a client.ObjectList
+// with a kind (view) specified.
+func (c *cacheClient) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
+	if c.Cache == nil {
+		return nil, apierrors.NewInternalError(errors.New("invalid cache"))
+	}
+
+	l, ok := list.(*object.ObjectList)
+	if !ok {
+		return nil, apierrors.NewBadRequest("list must be *object.ObjectList")
+	}
+
+	return c.Cache.watch(ctx, l.GroupVersionKind())
+}
+
+func (c *Cache) get(key client.ObjectKey, obj *object.Object) error {
+	gvk := obj.GroupVersionKind()
+
+	c.mu.RLock()
+	indexer, exists := c.caches[gvk]
+	c.mu.RUnlock()
+
 	if !exists {
-		return nil, fmt.Errorf("not found: id %q", id)
-	}
-	return obj.(*object.Object), nil
-}
-
-func (c *clientImpl) List() ([]*object.Object, error) {
-	objs := c.cache.indexer.List()
-	result := make([]*object.Object, len(objs))
-	for i, obj := range objs {
-		result[i] = obj.(*object.Object)
-	}
-	return result, nil
-}
-
-type watcher struct {
-	id       int
-	ch       chan watch.Event
-	cache    *Cache
-	cancelCh chan any
-}
-
-func (c *clientImpl) Watch(ctx context.Context) (watch.Interface, error) {
-	c.cache.watchMutex.Lock()
-	defer c.cache.watchMutex.Unlock()
-
-	id := c.cache.nextID
-	c.cache.nextID++
-	ch := make(chan watch.Event, 100)
-	c.cache.watches[id] = ch
-
-	cancelCh := make(chan any)
-	w := &watcher{
-		id:       id,
-		ch:       ch,
-		cache:    c.cache,
-		cancelCh: cancelCh,
+		return apierrors.NewBadRequest("GVK not registered")
 	}
 
-	go func() {
-		<-ctx.Done()
-		c.cache.watchMutex.Lock()
-		defer c.cache.watchMutex.Unlock()
-		delete(c.cache.watches, w.id)
-		close(w.ch)
-		close(w.cancelCh)
-	}()
+	item, exists, err := indexer.GetByKey(key.String())
+	if err != nil {
+		return err
+	}
 
-	return w, nil
+	if !exists {
+		return apierrors.NewNotFound(obj.GroupResource(), key.String())
+	}
+
+	item.(*object.Object).DeepCopyInto(obj)
+
+	return nil
 }
 
-func (w *watcher) Stop() { w.cancelCh <- struct{}{} }
+// TODO: implement ListOptions
+func (c *Cache) list(list *object.ObjectList) error {
+	gvk := list.GroupVersionKind()
 
-func (w *watcher) ResultChan() <-chan watch.Event {
-	return w.ch
+	c.mu.RLock()
+	indexer, exists := c.caches[gvk]
+	c.mu.RUnlock()
+
+	if !exists {
+		return apierrors.NewBadRequest("GVK not registered")
+	}
+
+	list.Items = make([]object.Object, len(indexer.ListKeys()))
+	for i, item := range indexer.List() {
+		item.(*object.Object).DeepCopyInto(&list.Items[i])
+	}
+	return nil
 }

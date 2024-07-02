@@ -1,64 +1,108 @@
 package cache
 
 import (
+	"fmt"
 	"sync"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/cache"
 
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
-// Cache manages our custom objects
 type Cache struct {
-	indexer    cache.Indexer
-	watches    map[int]chan watch.Event
-	nextID     int
-	watchMutex sync.Mutex
+	mu       sync.RWMutex
+	caches   map[schema.GroupVersionKind]cache.Indexer
+	watchers map[schema.GroupVersionKind][]*cacheWatcher
 }
 
-// NewCache creates a new Cache.
-func NewCache() *Cache {
+func New() *Cache {
 	return &Cache{
-		indexer: cache.NewIndexer(
-			func(obj interface{}) (string, error) {
-				return obj.(*object.Object).GetID(), nil
-			},
-			cache.Indexers{},
-		),
-		watches: make(map[int]chan watch.Event),
+		caches:   make(map[schema.GroupVersionKind]cache.Indexer),
+		watchers: make(map[schema.GroupVersionKind][]*cacheWatcher),
 	}
 }
 
-// Add adds a new object to the cache
-func (cc *Cache) Add(obj *object.Object) error {
-	err := cc.indexer.Add(obj)
-	if err != nil {
-		return err
+func (c *Cache) RegisterGVK(gvk schema.GroupVersionKind) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if _, exists := c.caches[gvk]; exists {
+		return fmt.Errorf("GVK %s is already registered", gvk)
 	}
-	cc.notifyWatchers(watch.Added, obj)
+
+	indexer := cache.NewIndexer(
+		cache.MetaNamespaceKeyFunc,
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+	)
+	c.caches[gvk] = indexer
 	return nil
 }
 
-// Update updates an existing object in the cache
-func (cc *Cache) Update(obj *object.Object) error {
-	err := cc.indexer.Update(obj)
+func (c *Cache) Upsert(obj *object.Object) error {
+	gvk := obj.GroupVersionKind()
+	c.mu.RLock()
+	indexer, exists := c.caches[gvk]
+	c.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("GVK %s is not registered", gvk)
+	}
+
+	key, err := cache.MetaNamespaceKeyFunc(obj)
 	if err != nil {
 		return err
 	}
-	cc.notifyWatchers(watch.Modified, obj)
+
+	oldObj, exists, err := indexer.GetByKey(key)
+	if err != nil {
+		return err
+	}
+
+	err = indexer.Update(obj)
+	if err != nil {
+		return err
+	}
+
+	eventType := watch.Added
+	if exists && !obj.DeepEqual(oldObj.(*object.Object)) {
+		eventType = watch.Modified
+	}
+
+	c.notifyWatchers(gvk, watch.Event{Type: eventType, Object: obj})
+
 	return nil
 }
 
-func (cc *Cache) notifyWatchers(eventType watch.EventType, obj *object.Object) {
-	event := watch.Event{Type: eventType, Object: obj}
-	cc.watchMutex.Lock()
-	defer cc.watchMutex.Unlock()
-	for _, ch := range cc.watches {
-		select {
-		case ch <- event:
-		default:
-			// Channel is full, skip this watcher
-		}
+func (c *Cache) Delete(obj *object.Object) error {
+	gvk := obj.GroupVersionKind()
+	c.mu.RLock()
+	indexer, exists := c.caches[gvk]
+	c.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("GVK %s is not registered", gvk)
 	}
+
+	key, err := cache.MetaNamespaceKeyFunc(obj)
+	if err != nil {
+		return err
+	}
+
+	existingObj, exists, err := indexer.GetByKey(key)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil // Object doesn't exist, nothing to delete
+	}
+
+	err = indexer.Delete(obj)
+	if err != nil {
+		return err
+	}
+
+	c.notifyWatchers(gvk, watch.Event{Type: watch.Deleted, Object: existingObj.(*object.Object)})
+	return nil
 }
