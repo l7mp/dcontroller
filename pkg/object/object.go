@@ -30,6 +30,19 @@ func New(view string) *Object {
 	return &obj
 }
 
+func NewFromNativeObject(view string, clientObj client.Object) (*Object, error) {
+	unstructuredObj := &unstructured.Unstructured{}
+	var err error
+	unstructuredObj.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(clientObj)
+	if err != nil {
+		return nil, err
+	}
+
+	obj := New(view).WithName(clientObj.GetNamespace(), clientObj.GetName())
+	obj.SetUnstructuredContent(unstructuredObj.Object)
+	return obj, nil
+}
+
 func (obj *Object) WithName(namespace, name string) *Object {
 	obj.SetNamespace(namespace)
 	obj.SetName(name)

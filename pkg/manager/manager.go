@@ -1,13 +1,20 @@
 package manager
 
-//logf "sigs.k8s.io/controller-runtime/pkg/log"
+import (
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-// type Manager struct {
-// 	base   basemgr.Manager
-// 	ctrls  map[string]controller.Controller // a controller per view
-// 	caches map[string]cache.Cache           // a cache per view
-// 	dep    *dag.Graph                       // the dependency graph
-// }
+	"hsnlab/dcontroller-runtime/pkg/cache"
+)
+
+// logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+type Manager struct {
+	manager.Manager
+	ctrls map[string]controller.Controller // a controller per view
+	cache *cache.Cache                     // a cache per view
+	views map[string]string                // view store
+}
 
 // // New creates a new dmanager
 // func (m *Manager) New(config *rest.Config, options basemgr.Options) (*Manager, error) {
@@ -24,27 +31,6 @@ package manager
 // 	}, nil
 // }
 
-// // Register starts to watch the base K8s API resource defined in obj and creates a view eith the
-// // given name, possibly applying the aggregation on the base view.
-// func (m *Manager) Register(name string, obj client.Object, aggr aggregate.Aggregate) (*view.View, error) {
-// 	r := &view.View{
-// 		mgr:  *Manager,
-// 		name: name,
-// 		aggr: aggr,
-// 	}
-
-// 	c, err := basectrl.New(name, m.base, basectrl.Options{Reconciler: r})
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	if err := c.Watch(source.Kind(m.base.GetCache(), obj,
-// 		&handler.EnqueueRequestForObject{},
-// 		predicate.GenerationChangedPredicate{},
-// 	)); err != nil {
-// 		return nil, err
-// 	}
-
-// 	return r, nil
-
-// }
+func (m *Manager) GetCache() *cache.Cache {
+	return m.cache
+}

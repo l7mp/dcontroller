@@ -36,7 +36,7 @@ var _ = Describe("Cache", func() {
 	})
 
 	Describe("Registering views", func() {
-		It("should allow a view to be resgistered", func() {
+		It("should allow a view to be registered", func() {
 			err := cache.RegisterGVK(apiv1.NewGVK("view"))
 			Expect(err).NotTo(HaveOccurred())
 		})
