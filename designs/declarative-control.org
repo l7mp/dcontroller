@@ -204,7 +204,25 @@ The main tools here are *declarative Kubernetes API translation* and *incrementa
 
 Query language usage alternatives:
 
-1. ~@aggregate~ works on multiple collections simultaneously
+1. explicit ~@join~: more efficient then Cartesian product
+   - first join and then map
+     #+begin_src yaml
+       - "@join":
+           views: [ "CD", "CM", "$DP"]
+           condition:
+             "@and":
+               - {"@eq": ["$CD.spec.cmName", "$CM.medatata.name"]}
+               - {"@eq": ["$CD.medatata.namespace", "$CM.medatata.namespace"]}
+               - {"@eq": ["$CD.spec.dpName", "$DP.medatata.name"]}
+               - {"@eq": ["$CD.medatata.namespace", "$DP.medatata.namespace"]}
+       - "@map":
+           name: "$CD.medatata.name"
+           namespace: "$CD.medatata.namespace"
+           dpName: "$CD.spec.dpName"
+           resourceVersion: "$CM.medatata.resourceVersion"
+  #+end_src
+
+2. ~@aggregate~ works on multiple collections simultaneously
    - input is the Cartesian product ~CD x CM x DP~ -- inefficient
    - first join and then map
      #+begin_src yaml
@@ -225,7 +243,7 @@ Query language usage alternatives:
          resourceVersion: "$CM.medatata.resourceVersion"
   #+end_src
 
-2. ~@aggregate~ works on multiple collections simultaneously:
+3. ~@aggregate~ works on multiple collections simultaneously:
    - input is the Cartesian product CD x CM x DP -- inefficient
    - first map and then join
      #+begin_src yaml
@@ -255,7 +273,7 @@ Query language usage alternatives:
          resourceVersion: "$CM.resourceVersion"
   #+end_src
 
-3. ~@aggregate~ works on multiple collections simultaneously:
+4. ~@aggregate~ works on multiple collections simultaneously:
    - input is the Cartesian product ~CD x CM x DP~ -- inefficient
    - first map and then join
      #+begin_src yaml

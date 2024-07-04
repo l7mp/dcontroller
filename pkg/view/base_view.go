@@ -18,9 +18,9 @@ import (
 
 	apiv1 "hsnlab/dcontroller-runtime/pkg/api/v1"
 	"hsnlab/dcontroller-runtime/pkg/cache"
-	"hsnlab/dcontroller-runtime/pkg/engine"
 	"hsnlab/dcontroller-runtime/pkg/manager"
 	"hsnlab/dcontroller-runtime/pkg/object"
+	"hsnlab/dcontroller-runtime/pkg/pipeline"
 )
 
 type baseView struct {
@@ -28,14 +28,14 @@ type baseView struct {
 	scheme     *runtime.Scheme
 	baseGVK    schema.GroupVersionKind
 	cache      *cache.Cache
-	pipeline   engine.Pipeline
+	pipeline   pipeline.Pipeline
 	ctrlClient client.Client
 	stop       bool
 }
 
 // NewBaseView registers a base view with the manager. A base view is a given by the view name, the
 // native Kubernetes object to watch, and an aggregation pipeline to process it into a view.
-func NewBaseView(name string, mgr *manager.Manager, pipeline engine.Pipeline, obj ...client.Object) (View, error) {
+func NewBaseView(name string, mgr *manager.Manager, pipeline pipeline.Pipeline, obj ...client.Object) (View, error) {
 	if len(obj) != 1 {
 		return nil, errors.New("base view must be called with a single object")
 	}
@@ -129,7 +129,7 @@ func (v *baseView) getBaseGVK(obj client.Object) (schema.GroupVersionKind, error
 
 // NewFakeBaseView is a base-view that is useful for testing. The function takes a variable number
 // of objects that are added to the initial cache.
-func NewFakeBaseView(name string, scheme *runtime.Scheme, pipeline engine.Pipeline, obj ...client.Object) (View, error) {
+func NewFakeBaseView(name string, scheme *runtime.Scheme, pipeline pipeline.Pipeline, obj ...client.Object) (View, error) {
 	if len(obj) == 0 {
 		return nil, errors.New("base view must be called with at least one object")
 	}
