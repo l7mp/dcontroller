@@ -1,6 +1,10 @@
 package pipeline
 
-import "hsnlab/dcontroller-runtime/pkg/object"
+import (
+	"github.com/go-logr/logr"
+
+	"hsnlab/dcontroller-runtime/pkg/object"
+)
 
 type VerdictType int
 
@@ -14,5 +18,6 @@ const (
 type State struct {
 	Object    *object.Object
 	Variables map[string]any
+	Log       logr.Logger
 	// Verdict VerdictType
 }

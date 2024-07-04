@@ -8,7 +8,7 @@ func (e *Expression) asBool(d any) (bool, error) {
 	if reflect.ValueOf(d).Kind() == reflect.Bool {
 		return reflect.ValueOf(d).Bool(), nil
 	}
-	return false, NewExpressionError(e, "bool", e.Raw)
+	return false, NewExpressionError("bool", e.Raw)
 }
 
 func (e *Expression) asBoolList(ds []any) ([]bool, error) {
@@ -30,7 +30,7 @@ func (e *Expression) asBinaryBoolList(ds []any) ([]bool, error) {
 	}
 
 	if len(vs) != 2 {
-		return []bool{}, NewExpressionError(e, "binary bool list", e.Raw)
+		return []bool{}, NewExpressionError("binary bool list", e.Raw)
 	}
 
 	return vs, nil
@@ -40,7 +40,7 @@ func (e *Expression) asString(d any) (string, error) {
 	if reflect.ValueOf(d).Kind() == reflect.String {
 		return reflect.ValueOf(d).String(), nil
 	}
-	return "", NewExpressionError(e, "string", e.Raw)
+	return "", NewExpressionError("string", e.Raw)
 }
 
 func (e *Expression) asStringList(ds []any) ([]string, error) {
@@ -62,7 +62,7 @@ func (e *Expression) asBinaryStringList(ds []any) ([]string, error) {
 	}
 
 	if len(vs) != 2 {
-		return []string{}, NewExpressionError(e, "binary string list", e.Raw)
+		return []string{}, NewExpressionError("binary string list", e.Raw)
 	}
 
 	return vs, nil
@@ -74,7 +74,7 @@ func (e *Expression) asInt(d any) (int64, error) {
 		reflect.ValueOf(d).Kind() == reflect.Int64 {
 		return reflect.ValueOf(d).Int(), nil
 	}
-	return 0, NewExpressionError(e, "int", e.Raw)
+	return 0, NewExpressionError("int", e.Raw)
 }
 
 func (e *Expression) asIntList(ds []any) ([]int64, error) {
@@ -96,7 +96,7 @@ func (e *Expression) asBinaryIntList(ds []any) ([]int64, error) {
 	}
 
 	if len(vs) != 2 {
-		return []int64{}, NewExpressionError(e, "binary int list", e.Raw)
+		return []int64{}, NewExpressionError("binary int list", e.Raw)
 	}
 
 	return vs, nil
@@ -111,7 +111,7 @@ func (e *Expression) asFloat(d any) (float64, error) {
 		return reflect.ValueOf(d).Convert(reflect.TypeOf(0.0)).Float(), nil
 	}
 
-	return 0.0, NewExpressionError(e, "float", e.Raw)
+	return 0.0, NewExpressionError("float", e.Raw)
 }
 
 func (e *Expression) asFloatList(ds []any) ([]float64, error) {
@@ -133,7 +133,7 @@ func (e *Expression) asBinaryFloatList(ds []any) ([]float64, error) {
 	}
 
 	if len(vs) != 2 {
-		return []float64{}, NewExpressionError(e, "binary float list", e.Raw)
+		return []float64{}, NewExpressionError("binary float list", e.Raw)
 	}
 
 	return vs, nil
@@ -152,7 +152,7 @@ func (e *Expression) asIntOrFloat(d any) (int64, float64, reflect.Kind, error) {
 		return 0, f, reflect.Float64, nil
 	}
 
-	return 0, 0.0, reflect.Invalid, NewExpressionError(e, "int or float", e.Raw)
+	return 0, 0.0, reflect.Invalid, NewExpressionError("int or float", e.Raw)
 }
 
 func (e *Expression) asIntOrFloatList(ds []any) ([]int64, []float64, reflect.Kind, error) {
@@ -166,7 +166,7 @@ func (e *Expression) asIntOrFloatList(ds []any) ([]int64, []float64, reflect.Kin
 		return []int64{}, fs, reflect.Float64, nil
 	}
 
-	return []int64{}, []float64{}, reflect.Invalid, NewExpressionError(e, "numeric list", e.Raw)
+	return []int64{}, []float64{}, reflect.Invalid, NewExpressionError("numeric list", e.Raw)
 }
 
 func (e *Expression) asBinaryIntOrFloatList(ds []any) ([]int64, []float64, reflect.Kind, error) {
@@ -176,11 +176,11 @@ func (e *Expression) asBinaryIntOrFloatList(ds []any) ([]int64, []float64, refle
 	}
 
 	if kind == reflect.Int64 && len(is) != 2 {
-		return is, fs, kind, NewExpressionError(e, "binary int or float list", e.Raw)
+		return is, fs, kind, NewExpressionError("binary int or float list", e.Raw)
 	}
 
 	if kind == reflect.Float64 && len(fs) != 2 {
-		return is, fs, kind, NewExpressionError(e, "binary int or float list", e.Raw)
+		return is, fs, kind, NewExpressionError("binary int or float list", e.Raw)
 	}
 
 	return is, fs, kind, nil

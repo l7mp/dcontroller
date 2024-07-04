@@ -18,6 +18,6 @@ func NewUnmarshalError(kind, content string) ErrUnmarshal {
 
 type ErrExpression = error
 
-func NewExpressionError(e *Expression, kind, content string) ErrExpression {
-	return fmt.Errorf("cannot evaluate %s expression %q (parsed: %s)", kind, content, e.String())
+func NewExpressionError(kind, content string) ErrExpression {
+	return fmt.Errorf("cannot evaluate %s expression %q", kind, content)
 }
