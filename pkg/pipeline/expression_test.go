@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -14,7 +15,7 @@ import (
 )
 
 var _ = Describe("Expressions", func() {
-	var state = State{
+	var state = &State{
 		Object: object.New("view").WithName("default", "name").
 			WithContent(map[string]any{"spec": map[string]any{"a": 1, "b": map[string]any{"c": 2}}}),
 		Log: logger,
@@ -39,7 +40,7 @@ var _ = Describe("Expressions", func() {
 			var exp Expression
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exp).To(Equal(Expression{Op: "@int", Literal: 10, Raw: jsonData}))
+			Expect(exp).To(Equal(Expression{Op: "@int", Literal: int64(10), Raw: jsonData}))
 
 			res, err := exp.Evaluate(state)
 			Expect(err).NotTo(HaveOccurred())
@@ -73,6 +74,86 @@ var _ = Describe("Expressions", func() {
 			Expect(reflect.ValueOf(res).String()).To(Equal("a10"))
 		})
 
+		// It("should deserialize and evaluate a literal map expression", func() {
+		// 	jsonData := `{"a": }`
+		// 	var exp Expression
+		// 	err := json.Unmarshal([]byte(jsonData), &exp)
+		// 	Expect(err).NotTo(HaveOccurred())
+		// 	Expect(exp).To(Equal(Expression{Op: "@bool", Literal: true, Raw: jsonData}))
+
+		// 	res, err := exp.Evaluate(state)
+		// 	Expect(err).NotTo(HaveOccurred())
+		// 	Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
+		// 	Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+		// })
+	})
+
+	Describe("Evaluating list expressions", func() {
+		It("should deserialize and evaluate a literal list expression", func() {
+			jsonData := `{"dummy":[1,2,3]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exp).To(Equal(Expression{
+				Op: "dummy",
+				Args: []Expression{
+					{Op: "@int", Raw: "1", Literal: int64(1)},
+					{Op: "@int", Raw: "2", Literal: int64(2)},
+					{Op: "@int", Raw: "3", Literal: int64(3)},
+				},
+				Raw: jsonData,
+			}))
+
+			res, err := exp.Evaluate(state)
+			Expect(err).NotTo(HaveOccurred())
+			kind := reflect.ValueOf(res).Kind()
+			Expect(kind == reflect.Map).To(BeTrue(),
+				fmt.Sprintf("%q is not a map", kind))
+			Expect(reflect.ValueOf(res).Interface().(map[string]any)).
+				To(Equal(map[string]any{"dummy": []any{int64(1), int64(2), int64(3)}}))
+		})
+
+		It("should deserialize and evaluate a compound list expression", func() {
+			jsonData := `{"another-dummy":[{"a":1,"b":2.2},{"x": [1,2,3]}]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exp).To(Equal(Expression{
+				Op: "another-dummy",
+				Args: []Expression{
+					{
+						Op:  "@dict",
+						Raw: "{\"a\":1,\"b\":2.2}",
+						Literal: map[string]Expression{
+							"a": {Op: "@int", Raw: "1", Literal: int64(1)},
+							"b": {Op: "@float", Raw: "2.2", Literal: 2.2},
+						},
+					},
+					{
+						Op: "x",
+						Args: []Expression{
+							{Op: "@int", Raw: "1", Literal: int64(1)},
+							{Op: "@int", Raw: "2", Literal: int64(2)},
+							{Op: "@int", Raw: "3", Literal: int64(3)},
+						},
+						Raw:     "{\"x\": [1,2,3]}",
+						Literal: nil,
+					},
+				},
+				Raw: jsonData,
+			}))
+
+			res, err := exp.Evaluate(state)
+			Expect(err).NotTo(HaveOccurred())
+			kind := reflect.ValueOf(res).Kind()
+			Expect(kind == reflect.Map).To(BeTrue(),
+				fmt.Sprintf("%q is not a map", kind))
+			Expect(reflect.ValueOf(res).Interface().(map[string]any)).
+				To(Equal(map[string]any{"another-dummy": []any{
+					map[string]any{"a": int64(1), "b": 2.2},
+					map[string]any{"x": []any{int64(1), int64(2), int64(3)}},
+				}}))
+		})
 	})
 
 	Describe("Evaluating JSONpath expressions", func() {
@@ -212,11 +293,10 @@ var _ = Describe("Expressions", func() {
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(exp).To(Equal(Expression{Op: "@eq",
-				Args: []Expression{{
-					Op: "@int", Literal: 10, Raw: "10",
-				}, {
-					Op: "@int", Literal: 10, Raw: "10",
-				}},
+				Args: []Expression{
+					{Op: "@int", Literal: int64(10), Raw: "10"},
+					{Op: "@int", Literal: int64(10), Raw: "10"},
+				},
 				Raw: jsonData}))
 
 			res, err := exp.Evaluate(state)
@@ -233,19 +313,17 @@ var _ = Describe("Expressions", func() {
 			Expect(exp).To(Equal(Expression{Op: "@and",
 				Args: []Expression{{
 					Op: "@eq",
-					Args: []Expression{{
-						Op: "@int", Literal: 10, Raw: "10",
-					}, {
-						Op: "@int", Literal: 10, Raw: "10",
-					}},
+					Args: []Expression{
+						{Op: "@int", Literal: int64(10), Raw: "10"},
+						{Op: "@int", Literal: int64(10), Raw: "10"},
+					},
 					Raw: `{"@eq": [10, 10]}`,
 				}, {
 					Op: "@lt",
-					Args: []Expression{{
-						Op: "@int", Literal: 1, Raw: "1",
-					}, {
-						Op: "@int", Literal: 2, Raw: "2",
-					}},
+					Args: []Expression{
+						{Op: "@int", Literal: int64(1), Raw: "1"},
+						{Op: "@int", Literal: int64(2), Raw: "2"},
+					},
 					Raw: `{"@lt": [1, 2]}`,
 				}},
 				Raw: jsonData,
@@ -266,11 +344,10 @@ var _ = Describe("Expressions", func() {
 				Op: "@bool",
 				Args: []Expression{{
 					Op: "@eq",
-					Args: []Expression{{
-						Op: "@int", Literal: 10, Raw: "10",
-					}, {
-						Op: "@int", Literal: 10, Raw: "10",
-					}},
+					Args: []Expression{
+						{Op: "@int", Literal: int64(10), Raw: "10"},
+						{Op: "@int", Literal: int64(10), Raw: "10"},
+					},
 					Raw: `{"@eq": [10, 10]}`,
 				}},
 				Raw: jsonData,
@@ -307,19 +384,17 @@ var _ = Describe("Expressions", func() {
 			Expect(exp).To(Equal(Expression{Op: "@and",
 				Args: []Expression{{
 					Op: "@eq",
-					Args: []Expression{{
-						Op: "@int", Literal: 10, Raw: "10",
-					}, {
-						Op: "@int", Literal: 10, Raw: "10",
-					}},
+					Args: []Expression{
+						{Op: "@int", Literal: int64(10), Raw: "10"},
+						{Op: "@int", Literal: int64(10), Raw: "10"},
+					},
 					Raw: `{"@eq": [10, 10]}`,
 				}, {
 					Op: "@lt",
-					Args: []Expression{{
-						Op: "@int", Literal: 1, Raw: "1",
-					}, {
-						Op: "@int", Literal: 2, Raw: "2",
-					}},
+					Args: []Expression{
+						{Op: "@int", Literal: int64(1), Raw: "1"},
+						{Op: "@int", Literal: int64(2), Raw: "2"},
+					},
 					Raw: `{"@lt": [1, 2]}`,
 				}},
 				Raw: jsonData,
@@ -350,6 +425,91 @@ var _ = Describe("Expressions", func() {
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
 			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
 		})
+	})
 
+	Describe("Evaluating literal map expressions", func() {
+		It("should deserialize and evaluate a constant literal map expression", func() {
+			jsonData := `{"a":1, "b":{"c":"x"}}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exp).To(Equal(Expression{
+				Op: "@dict",
+				Literal: map[string]Expression{
+					"a": Expression{Op: "@int", Raw: "1", Literal: int64(1)},
+					"b": Expression{
+						Op:  "@dict",
+						Raw: "{\"c\":\"x\"}",
+						Literal: map[string]Expression{
+							"c": Expression{Op: "@string", Raw: "\"x\"", Literal: "x"},
+						},
+					},
+				},
+				Raw: jsonData,
+			}))
+
+			res, err := exp.Evaluate(state)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Map))
+			Expect(res).To(Equal(map[string]any{"a": int64(1), "b": map[string]any{"c": "x"}}))
+		})
+
+		It("should deserialize and evaluate a compound literal map expression", func() {
+			jsonData := `{"a":1.1,"b":{"@sum":[1,2]},"c":{"@concat":["ab","ba"]}}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(exp.Op).To(Equal("@dict"))
+			Expect(reflect.ValueOf(exp.Literal).MapIndex(reflect.ValueOf("a")).Interface().(Expression)).
+				To(Equal(Expression{Op: "@float", Raw: "1.1", Literal: 1.1}))
+			Expect(reflect.ValueOf(exp.Literal).MapIndex(reflect.ValueOf("b")).Interface().(Expression)).
+				To(Equal(Expression{
+					Op:  "@sum",
+					Raw: `{"@sum":[1,2]}`,
+					Args: []Expression{
+						{Op: "@int", Raw: "1", Literal: int64(1)},
+						{Op: "@int", Raw: "2", Literal: int64(2)},
+					},
+				}))
+			Expect(reflect.ValueOf(exp.Literal).MapIndex(reflect.ValueOf("c")).Interface().(Expression)).
+				To(Equal(Expression{
+					Op:  "@concat",
+					Raw: `{"@concat":["ab","ba"]}`,
+					Args: []Expression{
+						{Op: "@string", Raw: `"ab"`, Literal: "ab"},
+						{Op: "@string", Raw: `"ba"`, Literal: "ba"},
+					},
+				}))
+
+			Expect(exp).To(Equal(Expression{
+				Op: "@dict",
+				Literal: map[string]Expression{
+					"a": {Op: "@float", Raw: "1.1", Literal: 1.1},
+					"b": {
+						Op:  "@sum",
+						Raw: `{"@sum":[1,2]}`,
+						Args: []Expression{
+							{Op: "@int", Raw: "1", Literal: int64(1)},
+							{Op: "@int", Raw: "2", Literal: int64(2)},
+						},
+					},
+					"c": {
+						Op:  "@concat",
+						Raw: `{"@concat":["ab","ba"]}`,
+						Args: []Expression{
+							{Op: "@string", Raw: `"ab"`, Literal: "ab"},
+							{Op: "@string", Raw: `"ba"`, Literal: "ba"},
+						},
+					},
+				},
+				Raw: jsonData,
+			}))
+
+			res, err := exp.Evaluate(state)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Map))
+			Expect(res).To(Equal(map[string]any{"a": 1.1, "b": int64(3), "c": "abba"}))
+		})
 	})
 })

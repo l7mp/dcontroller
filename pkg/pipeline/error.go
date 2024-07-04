@@ -21,3 +21,16 @@ type ErrExpression = error
 func NewExpressionError(kind, content string) ErrExpression {
 	return fmt.Errorf("cannot evaluate %s expression %q", kind, content)
 }
+
+type ErrAggregation = error
+
+func NewAggregationError(kind, content string, err error) ErrAggregation {
+	return fmt.Errorf("cannot evaluate %s aggregation with expression %q: %w",
+		kind, content, err)
+}
+
+type ErrInvalidObject = error
+
+func NewInvalidObjectError(message string) ErrInvalidObject {
+	return fmt.Errorf("invalid object: %s", message)
+}

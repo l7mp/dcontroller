@@ -21,7 +21,6 @@ func (obj *Object) String() string {
 
 	// default dump
 	output := fmt.Sprintf("%#v", ro)
-
 	if json, err := json.Marshal(ro); err == nil {
 		output = string(json)
 	}
