@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -9,133 +10,207 @@ import (
 	"strings"
 
 	"k8s.io/client-go/util/jsonpath"
+
+	"hsnlab/dcontroller-runtime/pkg/util"
 )
 
+// Expression is an operator, an argument, and potentially a literal value.
 type Expression struct {
 	Op      string
-	Args    []Expression
-	Raw     string
+	Arg     *Expression
 	Literal any
+	Raw     string
 }
 
 func (e *Expression) Evaluate(state *State) (any, error) {
-	// literal maps are special
-	if e.Op == "@dict" {
-		if reflect.ValueOf(e.Literal).Kind() != reflect.Map {
-			return nil, NewExpressionError("@dict",
-				fmt.Sprintf("must contain a map literal: %q", e.Raw))
-		}
+	if len(e.Op) == 0 {
+		return nil, NewInvalidArgumentsError(fmt.Sprintf("empty operator in expession %q", e.Raw))
+	}
 
-		ret := map[string]any{}
-		iter := reflect.ValueOf(e.Literal).MapRange()
-		for iter.Next() {
-			v := iter.Value()
-			if v.Kind() != reflect.Struct {
-				return nil, NewExpressionError("@dict",
-					fmt.Sprintf("value must be an struct: %q", e.Raw))
-			}
-			e, ok := v.Interface().(Expression)
-			if !ok {
-				return nil, NewExpressionError("@dict",
-					fmt.Sprintf("value must be an expression: %q", e.Raw))
-			}
-
-			res, err := e.Evaluate(state)
+	switch e.Op {
+	case "@bool":
+		lit := e.Literal
+		if e.Arg != nil {
+			// eval stacked expressions stored in e.Arg
+			v, err := e.Arg.Evaluate(state)
 			if err != nil {
 				return nil, err
 			}
-			ret[iter.Key().String()] = res
+			lit = v
 		}
-		return ret, nil
-	}
 
-	// evaluate subexpressions
-	args := []any{}
-	for _, sub := range e.Args {
-		res, err := sub.Evaluate(state)
+		v, err := e.asBool(lit)
 		if err != nil {
 			return nil, err
 		}
-		args = append(args, res)
+
+		state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
+
+		return v, nil
+
+	case "@int":
+		lit := e.Literal
+		if e.Arg != nil {
+			// eval stacked expressions stored in e.Arg
+			v, err := e.Arg.Evaluate(state)
+			if err != nil {
+				return nil, err
+			}
+			lit = v
+		}
+
+		v, err := e.asInt(lit)
+		if err != nil {
+			return nil, err
+		}
+
+		state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
+
+		return v, nil
+
+	case "@float":
+		lit := e.Literal
+		if e.Arg != nil {
+			// eval stacked expressions stored in e.Arg
+			v, err := e.Arg.Evaluate(state)
+			if err != nil {
+				return nil, err
+			}
+			lit = v
+		}
+
+		v, err := e.asFloat(lit)
+		if err != nil {
+			return nil, err
+		}
+
+		state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
+
+		return v, nil
+
+	case "@string":
+		lit := e.Literal
+		if e.Arg != nil {
+			// eval stacked expressions stored in e.Arg
+			v, err := e.Arg.Evaluate(state)
+			if err != nil {
+				return nil, err
+			}
+			lit = v
+		}
+
+		v, err := e.asString(lit)
+		if err != nil {
+			return nil, err
+		}
+
+		state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
+
+		return e.EvalStringExp(state, v)
+
+	case "@list":
+		ret := []any{}
+		if e.Arg != nil {
+			// eval stacked expressions stored in e.Arg
+			v, err := e.Arg.Evaluate(state)
+			if err != nil {
+				return nil, err
+			}
+
+			// must be []any
+			vs, ok := v.([]any)
+			if !ok {
+				return nil, NewExpressionError("@list", e.Raw,
+					errors.New("argument must be a list"))
+			}
+			ret = vs
+		} else {
+			// literal lists stored in Literal
+			vs, ok := e.Literal.([]Expression)
+			if !ok {
+				return nil, NewExpressionError("@list", e.Raw,
+					errors.New("argument must be an expression list"))
+			}
+
+			for _, exp := range vs {
+				res, err := exp.Evaluate(state)
+				if err != nil {
+					return nil, err
+				}
+				ret = append(ret, res)
+			}
+		}
+
+		state.Log.V(4).Info("eval ready", "expression", e.String(), "result", ret)
+
+		return ret, nil
+
+	case "@dict":
+		ret := map[string]any{}
+		if e.Arg != nil {
+			// eval stacked expressions stored in e.Arg
+			v, err := e.Arg.Evaluate(state)
+			if err != nil {
+				return nil, err
+			}
+
+			// must be map[string]any
+			vs, ok := v.(map[string]any)
+			if !ok {
+				return nil, NewExpressionError("@dict", e.Raw,
+					errors.New("argument must be a map"))
+			}
+			ret = vs
+
+		} else {
+			// map stored as a Literal
+			if reflect.ValueOf(e.Literal).Kind() != reflect.Map {
+				return nil, NewExpressionError("@dict", e.Raw,
+					errors.New("argument must be a map literal"))
+			}
+
+			vm, ok := e.Literal.(map[string]Expression)
+			if !ok {
+				return nil, NewExpressionError("@dict", e.Raw,
+					errors.New("argument must be a string->expression map: %q"))
+			}
+
+			for k, exp := range vm {
+				// evaluate arguments
+				res, err := exp.Evaluate(state)
+				if err != nil {
+					return nil, err
+				}
+				ret[k] = res
+			}
+		}
+
+		state.Log.V(4).Info("eval ready", "expression", e.String(), "result", ret)
+
+		return ret, nil
 	}
 
-	// references
-	if len(e.Op) == 0 {
-		return nil, NewExpressionError("@dict",
-			fmt.Sprintf("empty operator: %q", e.Raw))
+	// operators
+	// evaluate subexpression
+	if e.Arg == nil {
+		return nil, NewExpressionError(e.Op, e.Raw, errors.New("empty argument list"))
+	}
+
+	arg, err := e.Arg.Evaluate(state)
+	if err != nil {
+		return nil, err
+	}
+
+	if arg == nil || reflect.ValueOf(arg).IsNil() {
+		return nil, NewExpressionError(e.Op, e.Raw,
+			errors.New("argument evaluates to undefined value"))
 	}
 
 	if string(e.Op[0]) == "@" {
 		switch e.Op {
-		case "@bool":
-			lit := e.Literal
-			if len(args) != 0 {
-				lit = args[0]
-			}
-
-			// for safety
-			v, err := e.asBool(lit)
-
-			if err != nil {
-				return nil, err
-			}
-
-			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
-
-			return v, nil
-
-		case "@int":
-			lit := e.Literal
-			if len(args) != 0 {
-				lit = args[0]
-			}
-
-			// for safety
-			v, err := e.asInt(lit)
-			if err != nil {
-				return nil, err
-			}
-
-			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
-
-			return v, nil
-
-		case "@float":
-			lit := e.Literal
-			if len(args) != 0 {
-				lit = args[0]
-			}
-
-			// for safety
-			v, err := e.asFloat(lit)
-			if err != nil {
-				return nil, err
-			}
-
-			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
-
-			return v, nil
-
-		case "@string":
-			lit := e.Literal
-			if len(args) != 0 {
-				lit = args[0]
-			}
-
-			// for safety
-			v, err := e.asString(lit)
-			if err != nil {
-				return nil, err
-			}
-
-			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
-
-			return e.EvalStringExp(state, v)
-
-			// binary bool
+		// binary bool
 		case "@eq":
-			// try args as int-or-float
-			is, fs, kind, err := e.asBinaryIntOrFloatList(args)
+			is, fs, kind, err := e.asBinaryIntOrFloatList(arg)
 			if err == nil {
 				if kind == reflect.Int64 {
 					v := is[0] == is[1]
@@ -149,8 +224,7 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 				}
 			}
 
-			// try args as string
-			vs, err := e.asBinaryStringList(args)
+			vs, err := e.asBinaryStringList(arg)
 			if err == nil {
 				v := vs[0] == vs[1]
 				state.Log.V(4).Info("string-eq eval ready", "expression", e.String(), "result", v)
@@ -158,10 +232,11 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 			}
 
 			// give up
-			return nil, NewExpressionError("@eq", e.Raw)
+			return nil, NewExpressionError("@eq", e.Raw,
+				fmt.Errorf("incompatible arguments: %#v", arg))
 
 		case "@lt":
-			is, fs, kind, err := e.asBinaryIntOrFloatList(args)
+			is, fs, kind, err := e.asBinaryIntOrFloatList(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -177,7 +252,7 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 			return v, nil
 
 		case "@lte":
-			is, fs, kind, err := e.asBinaryIntOrFloatList(args)
+			is, fs, kind, err := e.asBinaryIntOrFloatList(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -193,7 +268,7 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 			return v, nil
 
 		case "@gt":
-			is, fs, kind, err := e.asBinaryIntOrFloatList(args)
+			is, fs, kind, err := e.asBinaryIntOrFloatList(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -209,7 +284,7 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 			return v, nil
 
 		case "@gte":
-			is, fs, kind, err := e.asBinaryIntOrFloatList(args)
+			is, fs, kind, err := e.asBinaryIntOrFloatList(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -224,28 +299,8 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
 			return v, nil
 
-		case "@and":
-			args, err := e.asBinaryBoolList(args)
-			if err != nil {
-				return nil, err
-			}
-
-			v := args[0] && args[1]
-			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
-			return v, nil
-
-		case "@or":
-			args, err := e.asBinaryBoolList(args)
-			if err != nil {
-				return nil, err
-			}
-
-			v := args[0] || args[1]
-			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
-			return v, nil
-
 		case "@not":
-			arg, err := e.asBool(args[0])
+			arg, err := e.asBool(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -256,7 +311,7 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 
 			// arithmetic
 		case "@abs":
-			f, err := e.asFloat(args[0])
+			f, err := e.asFloat(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -266,7 +321,7 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 			return v, nil
 
 		case "@ceil":
-			f, err := e.asFloat(args[0])
+			f, err := e.asFloat(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -276,7 +331,7 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 			return v, nil
 
 		case "@floor":
-			f, err := e.asFloat(args[0])
+			f, err := e.asFloat(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -285,26 +340,68 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
 			return v, nil
 
-			// binary arithmetic
-
+			// list
 		case "@sum":
-			is, fs, kind, err := e.asBinaryIntOrFloatList(args)
+			is, fs, kind, err := e.asIntOrFloatList(arg)
 			if err != nil {
 				return nil, err
 			}
 
 			if kind == reflect.Int64 {
-				v := is[0] + is[1]
+				v := int64(0)
+				for i := range is {
+					v += is[i]
+				}
 				state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
 				return v, nil
 			}
 
-			v := fs[0] + fs[1]
+			v := 0.0
+			for i := range fs {
+				v += fs[i]
+			}
 			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
 			return v, nil
 
+		case "@first":
+			args, err := e.asList(arg)
+			if err != nil {
+				return nil, err
+			}
+
+			if len(args) == 0 {
+				return nil, NewExpressionError("@first", e.Raw, errors.New("empty list"))
+			}
+			v := args[0]
+			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
+			return v, nil
+
+		case "@last":
+			args, err := e.asList(arg)
+			if err != nil {
+				return nil, err
+			}
+
+			if len(args) == 0 {
+				return nil, NewExpressionError("@last", e.Raw, errors.New("empty list"))
+			}
+			v := args[len(args)-1]
+			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
+			return v, nil
+
+		case "@len":
+			args, err := e.asList(arg)
+			if err != nil {
+				return nil, err
+			}
+
+			v := int64(len(args))
+			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
+			return v, nil
+
+			// binary arithmetic
 		case "@sub":
-			is, fs, kind, err := e.asBinaryIntOrFloatList(args)
+			is, fs, kind, err := e.asBinaryIntOrFloatList(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -320,7 +417,7 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 			return v, nil
 
 		case "@mul":
-			is, fs, kind, err := e.asBinaryIntOrFloatList(args)
+			is, fs, kind, err := e.asBinaryIntOrFloatList(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -336,7 +433,7 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 			return v, nil
 
 		case "@div":
-			is, fs, kind, err := e.asBinaryIntOrFloatList(args)
+			is, fs, kind, err := e.asBinaryIntOrFloatList(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -353,7 +450,7 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 
 			// string
 		case "@concat":
-			args, err := e.asStringList(args)
+			args, err := e.asStringList(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -367,13 +464,44 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 
 			return v, nil
 
+		case "@and":
+			args, err := e.asBoolList(arg)
+			if err != nil {
+				return nil, err
+			}
+
+			v := true
+			for i := range args {
+				v = v && args[i]
+			}
+
+			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
+
+			return v, nil
+
+		case "@or":
+			args, err := e.asBoolList(arg)
+			if err != nil {
+				return nil, err
+			}
+
+			v := false
+			for i := range args {
+				v = v || args[i]
+			}
+
+			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
+
+			return v, nil
+
 		default:
-			return nil, NewExpressionError("command reference (@*)", e.Raw)
+			return nil, NewExpressionError("command reference (@*)", e.Raw,
+				fmt.Errorf("unknown operator: %q", e.Op))
 		}
 	}
 
 	// literal map
-	return map[string]any{e.Op: args}, nil
+	return map[string]any{e.Op: arg}, nil
 }
 
 func (e *Expression) UnmarshalJSON(b []byte) error {
@@ -405,19 +533,32 @@ func (e *Expression) UnmarshalJSON(b []byte) error {
 		return nil
 	}
 
-	// try to unmarshal as a compound expression
-	cv := map[string]([]Expression){}
-	if err := json.Unmarshal(b, &cv); err == nil && len(cv) == 1 {
-		for k, v := range cv {
-			*e = Expression{Op: k, Args: v, Raw: string(b)}
-			return nil
-		}
+	// try to unmarshal as a literal list expression
+	mv := []Expression{}
+	if err := json.Unmarshal(b, &mv); err == nil {
+		*e = Expression{Op: "@list", Literal: mv, Raw: string(b)}
+		return nil
 	}
 
-	// try to unmarshal as a literal map expression
-	mv := map[string]Expression{}
-	if err := json.Unmarshal(b, &mv); err == nil {
-		*e = Expression{Op: "@dict", Literal: mv, Raw: string(b)}
+	// try to unmarshal as a map expression
+	cv := map[string]Expression{}
+	if err := json.Unmarshal(b, &cv); err == nil {
+		// specialcase operators: an op has a single key that starts with @
+		if len(cv) == 1 {
+			op := ""
+			for k := range cv {
+				op = k
+				break
+			}
+			if string(op[0]) == "@" {
+				exp := cv[op]
+				*e = Expression{Op: op, Arg: &exp, Raw: string(b)}
+				return nil
+			}
+		}
+
+		// literal map: store as exp with op @dict and map as Literal
+		*e = Expression{Op: "@dict", Literal: cv, Raw: string(b)}
 		return nil
 	}
 
@@ -425,52 +566,63 @@ func (e *Expression) UnmarshalJSON(b []byte) error {
 }
 
 func (e *Expression) String() string {
-	if len(e.Args) == 1 {
-		switch e.Op {
-		// terminals
-		case "@bool":
-			// for safety
-			v, err := e.asBool(e.Args[0].Literal)
-			if err != nil {
-				return "<invalid>"
-			}
-			return fmt.Sprintf("<bool>%t", v)
-		case "@int":
-			// for safety
-			v, err := e.asInt(e.Args[0].Literal)
-			if err != nil {
-				return "<invalid>"
-			}
-			return fmt.Sprintf("<int>%d", v)
-		case "@float":
-			// for safety
-			v, err := e.asFloat(e.Args[0].Literal)
-			if err != nil {
-				return "<invalid>"
-			}
-			return fmt.Sprintf("<float>%f", v)
-		case "@string":
-			// for safety
-			v, err := e.asString(e.Args[0].Literal)
-			if err != nil {
-				return "<invalid>"
-			}
-			return fmt.Sprintf("<string>%q", v)
-		case "@dict":
-			output := fmt.Sprintf("%#v", e.Literal)
-			if json, err := json.Marshal(e.Literal); err == nil {
-				output = string(json)
-			}
-			return fmt.Sprintf("<map>%q", output)
+	// literals
+	switch e.Op {
+	case "@bool":
+		if e.Arg != nil {
+			return fmt.Sprintf("<bool>{%s}", e.Arg.String())
 		}
+		v, err := e.asBool(e.Literal)
+		if err != nil {
+			return "<invalid>"
+		}
+		return fmt.Sprintf("<bool>%t", v)
+	case "@int":
+		if e.Arg != nil {
+			return fmt.Sprintf("<int>{%s}", e.Arg.String())
+		}
+		v, err := e.asInt(e.Literal)
+		if err != nil {
+			return "<invalid>"
+		}
+		return fmt.Sprintf("<int>%d", v)
+	case "@float":
+		if e.Arg != nil {
+			return fmt.Sprintf("<float>{%s}", e.Arg.String())
+		}
+		v, err := e.asFloat(e.Literal)
+		if err != nil {
+			return "<invalid>"
+		}
+		return fmt.Sprintf("<float>%f", v)
+	case "@string":
+		if e.Arg != nil {
+			return fmt.Sprintf("<string>{%s}", e.Arg.String())
+		}
+		v, err := e.asString(e.Literal)
+		if err != nil {
+			return "<invalid>"
+		}
+		return fmt.Sprintf("<string>%q", v)
+	case "@list":
+		if e.Arg != nil {
+			return fmt.Sprintf("<list>{%s}", e.Arg.String())
+		}
+		es, ok := e.Literal.([]Expression)
+		if !ok {
+			return "<invalid>"
+		}
+		return fmt.Sprintf("<list>[%s]", strings.Join(util.Map(
+			func(exp Expression) string { return exp.String() }, es,
+		), ","))
+	case "@dict":
+		if e.Arg != nil {
+			return fmt.Sprintf("<map>{%s}", e.Arg.String())
+		}
+		return fmt.Sprintf("<map>%s", util.Stringify(e.Literal))
 	}
 
-	args := make([]string, len(e.Args))
-	for i, arg := range e.Args {
-		args[i] = arg.String()
-	}
-
-	return fmt.Sprintf("%s: [%s]", e.Op, strings.Join(args, ","))
+	return fmt.Sprintf("%s:[%s]", e.Op, e.Arg.String())
 }
 
 // evaluate a terminal expression (json expression or literal)
@@ -514,7 +666,8 @@ func EvalJSONpathExp(state *State, jsonExp, raw string) (any, error) {
 		"result", values)
 
 	if len(values) == 0 || len(values[0]) == 0 {
-		return nil, NewExpressionError("JSONpath", fmt.Sprintf("%s on %#v", jsonExp, input))
+		return nil, NewExpressionError("JSONpath", jsonExp,
+			fmt.Errorf("failed to apply JSONPath expression on %#v", input))
 	}
 
 	if values[0][0].IsNil() {

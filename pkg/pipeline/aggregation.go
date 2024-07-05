@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"hsnlab/dcontroller-runtime/pkg/object"
+	"hsnlab/dcontroller-runtime/pkg/util"
 )
 
 // Aggregation is an operation that can be used to filter objects by certain condition or alter the
@@ -124,16 +126,12 @@ func (m *Map) Evaluate(state *State) (*State, error) {
 			errors.New("should evaluate to a map[string]any"))
 	}
 
-	str := fmt.Sprintf("%#v", mv)
-	if json, err := json.Marshal(mv); err == nil {
-		str = string(json)
-	}
 	if err := state.Object.Patch(mv); err != nil {
-		return nil, NewAggregationError("@map", str, err)
+		return nil, NewAggregationError("@map", util.Stringify(mv), err)
 	}
 
 	if err := state.Normalize(); err != nil {
-		return nil, NewAggregationError("@map", str, err)
+		return nil, NewAggregationError("@map", util.Stringify(mv), err)
 	}
 
 	return state, nil
@@ -156,7 +154,7 @@ func (f *Filter) Evaluate(state *State) (*State, error) {
 
 	v, err := f.Condition.asBool(res)
 	if err != nil {
-		return nil, NewExpressionError("bool", f.Condition.Raw)
+		return nil, NewExpressionError("bool", f.Condition.Raw, err)
 	}
 
 	state.Log.V(4).Info("aggregation eval ready", "aggreg", f.String(), "result", v)

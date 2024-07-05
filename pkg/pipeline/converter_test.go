@@ -8,7 +8,8 @@ import (
 )
 
 var _ = Describe("Converters", func() {
-	var exp = Expression{Op: "test-op", Args: []Expression{{Literal: "<test-literal>"}}, Raw: "<test-expression>"}
+	// dummy expression for testing
+	var exp = Expression{Op: "test-op", Arg: &Expression{Literal: "<test-literal>"}, Raw: "<test-expression>"}
 	Describe("Bool conversion", func() {
 		It("should read a false bool", func() {
 			var x any = false
@@ -28,24 +29,24 @@ var _ = Describe("Converters", func() {
 			Expect(err).To(HaveOccurred())
 		})
 		It("should read a bool list", func() {
-			var xs []any = []any{false, true, true}
+			var xs any = []any{false, true, true}
 			vs, err := exp.asBoolList(xs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(vs).To(Equal([]bool{false, true, true}))
 		})
 		It("should err for invalid bool list", func() {
-			var xs []any = []any{false, 12, "a"}
+			var xs any = []any{false, 12, "a"}
 			_, err := exp.asBoolList(xs)
 			Expect(err).To(HaveOccurred())
 		})
 		It("should read a binary bool list", func() {
-			var xs []any = []any{false, true}
+			var xs any = []any{false, true}
 			vs, err := exp.asBinaryBoolList(xs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(vs).To(Equal([]bool{false, true}))
 		})
 		It("should err for invalid binary bool list", func() {
-			var xs []any = []any{false, true, false}
+			var xs any = []any{false, true, false}
 			_, err := exp.asBinaryBoolList(xs)
 			Expect(err).To(HaveOccurred())
 		})
@@ -64,24 +65,24 @@ var _ = Describe("Converters", func() {
 			Expect(err).To(HaveOccurred())
 		})
 		It("should read a string list", func() {
-			var xs []any = []any{"a", "x", "12"}
+			var xs any = []any{"a", "x", "12"}
 			vs, err := exp.asStringList(xs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(vs).To(Equal([]string{"a", "x", "12"}))
 		})
 		It("should err for invalid string list", func() {
-			var xs []any = []any{false, 12, "a"}
+			var xs any = []any{false, 12, "a"}
 			_, err := exp.asStringList(xs)
 			Expect(err).To(HaveOccurred())
 		})
 		It("should read a binary string list", func() {
-			var xs []any = []any{"a", "b"}
+			var xs any = []any{"a", "b"}
 			vs, err := exp.asBinaryStringList(xs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(vs).To(Equal([]string{"a", "b"}))
 		})
 		It("should err for invalid binary string list", func() {
-			var xs []any = []any{"a", "b", "c"}
+			var xs any = []any{"a", "b", "c"}
 			_, err := exp.asBinaryStringList(xs)
 			Expect(err).To(HaveOccurred())
 		})
@@ -111,24 +112,24 @@ var _ = Describe("Converters", func() {
 			Expect(err).To(HaveOccurred())
 		})
 		It("should read an int list", func() {
-			var xs []any = []any{12, 24, 36}
+			var xs any = []any{12, 24, 36}
 			vs, err := exp.asIntList(xs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(vs).To(Equal([]int64{12, 24, 36}))
 		})
 		It("should err for invalid int list", func() {
-			var xs []any = []any{false, 12, "a"}
+			var xs any = []any{false, 12, "a"}
 			_, err := exp.asIntList(xs)
 			Expect(err).To(HaveOccurred())
 		})
 		It("should read a binary int list", func() {
-			var xs []any = []any{12, 24}
+			var xs any = []any{12, 24}
 			vs, err := exp.asBinaryIntList(xs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(vs).To(Equal([]int64{12, 24}))
 		})
 		It("should err for invalid binary int list", func() {
-			var xs []any = []any{12, 24, 36}
+			var xs any = []any{12, 24, 36}
 			_, err := exp.asBinaryIntList(xs)
 			Expect(err).To(HaveOccurred())
 		})
@@ -164,24 +165,24 @@ var _ = Describe("Converters", func() {
 			Expect(err).To(HaveOccurred())
 		})
 		It("should read an float list", func() {
-			var xs []any = []any{12.12, 24, -36.12}
+			var xs any = []any{12.12, 24, -36.12}
 			vs, err := exp.asFloatList(xs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(vs).To(Equal([]float64{12.12, 24, -36.12}))
 		})
 		It("should err for invalid float list", func() {
-			var xs []any = []any{false, 12, "a"}
+			var xs any = []any{false, 12, "a"}
 			_, err := exp.asFloatList(xs)
 			Expect(err).To(HaveOccurred())
 		})
 		It("should read a binary float list", func() {
-			var xs []any = []any{12.12, 24}
+			var xs any = []any{12.12, 24}
 			vs, err := exp.asBinaryFloatList(xs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(vs).To(Equal([]float64{12.12, 24}))
 		})
 		It("should err for invalid binary float list", func() {
-			var xs []any = []any{12, 24, 36.21}
+			var xs any = []any{12, 24, 36.21}
 			_, err := exp.asBinaryFloatList(xs)
 			Expect(err).To(HaveOccurred())
 		})
@@ -208,42 +209,73 @@ var _ = Describe("Converters", func() {
 			Expect(err).To(HaveOccurred())
 		})
 		It("should read an int list", func() {
-			var xs []any = []any{12, 24, -36}
+			var xs any = []any{12, 24, -36}
 			vs, _, kind, err := exp.asIntOrFloatList(xs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(kind).To(Equal(reflect.Int64))
 			Expect(vs).To(Equal([]int64{12, 24, -36}))
 		})
 		It("should read a float list", func() {
-			var xs []any = []any{12.1, 24.1, -36.1}
+			var xs any = []any{12.1, 24.1, -36.1}
 			_, vs, kind, err := exp.asIntOrFloatList(xs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(kind).To(Equal(reflect.Float64))
 			Expect(vs).To(Equal([]float64{12.1, 24.1, -36.1}))
 		})
 		It("should read a mixed list", func() {
-			var xs []any = []any{12, 24, -36.1}
+			var xs any = []any{12, 24, -36.1}
 			_, vs, kind, err := exp.asIntOrFloatList(xs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(kind).To(Equal(reflect.Float64))
 			Expect(vs).To(Equal([]float64{12, 24, -36.1}))
 		})
 		It("should err for invalid list", func() {
-			var xs []any = []any{false, 12, "a"}
+			var xs any = []any{false, 12, "a"}
 			_, _, _, err := exp.asIntOrFloatList(xs)
 			Expect(err).To(HaveOccurred())
 		})
 		It("should read a binary float list", func() {
-			var xs []any = []any{12.12, 24}
+			var xs any = []any{12.12, 24}
 			_, vs, kind, err := exp.asBinaryIntOrFloatList(xs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(kind).To(Equal(reflect.Float64))
 			Expect(vs).To(Equal([]float64{12.12, 24}))
 		})
 		It("should err for invalid binary float list", func() {
-			var xs []any = []any{12, 24, 36.21}
+			var xs any = []any{12, 24, 36.21}
 			_, _, _, err := exp.asBinaryIntOrFloatList(xs)
 			Expect(err).To(HaveOccurred())
 		})
 	})
+
+	Describe("Generic lists", func() {
+		It("should read a generic list with homogeneous elems", func() {
+			var xs any = []any{false, true, true}
+			vs, err := exp.asList(xs)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vs).To(Equal([]any{false, true, true}))
+		})
+		It("should read a generic list with heteroneeous elems", func() {
+			var xs any = []any{true, 1, "a"}
+			vs, err := exp.asList(xs)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vs).To(Equal([]any{true, 1, "a"}))
+		})
+		It("should err for invalid list", func() {
+			var xs any = 12
+			_, err := exp.asList(xs)
+			Expect(err).To(HaveOccurred())
+		})
+		It("should err for int list", func() {
+			var xs any = []int{12, 24}
+			_, err := exp.asList(xs)
+			Expect(err).To(HaveOccurred())
+		})
+		It("should err for nil", func() {
+			var xs any = nil
+			_, err := exp.asList(xs)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
 })
