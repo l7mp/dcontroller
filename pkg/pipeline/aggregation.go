@@ -7,6 +7,8 @@ import (
 
 	"hsnlab/dcontroller-runtime/pkg/object"
 	"hsnlab/dcontroller-runtime/pkg/util"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // Aggregation is an operation that can be used to filter objects by certain condition or alter the
@@ -39,24 +41,19 @@ func (a *Aggregation) UnmarshalJSON(b []byte) error {
 	fv := map[string]Expression{}
 	if err := json.Unmarshal(b, &fv); err == nil && len(fv) == 1 {
 		for k, v := range fv {
-			if k == "@filter" {
+			switch k {
+			case "@filter":
 				f := &Filter{Condition: v}
 				*a = Aggregation{Filter: f}
-			}
-		}
-	}
-
-	// parse Project and Map as an Unstructured: hopefully it has a sane deserializer
-	pmv := map[string]Expression{}
-	if err := json.Unmarshal(b, &pmv); err == nil && len(pmv) == 1 {
-		for k, v := range pmv {
-			switch k {
+				return nil
 			case "@project":
 				p := &Project{Projector: v}
 				*a = Aggregation{Project: p}
+				return nil
 			case "@map":
 				m := &Map{Mapper: v}
 				*a = Aggregation{Map: m}
+				return nil
 			}
 		}
 	}
@@ -86,22 +83,56 @@ func (p *Project) Evaluate(state *State) (*State, error) {
 	if err != nil {
 		return nil, NewAggregationError("@project", p.Projector.Raw, err)
 	}
+
 	mv, ok := res.(map[string]any)
 	if !ok {
 		return nil, NewAggregationError("@project", p.Projector.Raw,
 			errors.New("should evaluate to a map[string]any"))
 	}
 
+	state.Log.V(4).Info("project: projection expression eval ready",
+		"aggreg", p.String(), "result", mv)
+
+	obj := object.New(state.View)
+	if name, ok, err := unstructured.NestedString(mv, "metadata", "name"); err != nil {
+		return nil, NewAggregationError("@project", p.Projector.Raw,
+			fmt.Errorf("invalid 'name' in projection result:%w", err))
+	} else {
+		if !ok {
+			return nil, NewAggregationError("@project", p.Projector.Raw,
+				errors.New("missing 'name' in projection result:%w"))
+		}
+		obj.SetName(name)
+	}
+	if namespace, ok, err := unstructured.NestedString(mv, "metadata", "namespace"); err != nil {
+		return nil, NewAggregationError("@project", p.Projector.Raw,
+			fmt.Errorf("invalid 'namespace' in projection result:%w", err))
+	} else {
+		if !ok {
+			state.Log.Info("@project:missing 'namespace' in projection result",
+				"projection", p.String(), "result", util.Stringify(mv))
+			// cannot use SetNested*: it removes key-value for an empty argument
+			// .metadata is guaranteed to exist at this point
+			obj.Object["metadata"].(map[string]any)["namespace"] = ""
+		} else {
+			obj.SetNamespace(namespace)
+		}
+	}
+	obj.WithContent(mv)
+
 	newState := &State{
 		View:      state.View,
-		Object:    object.New(state.View).WithContent(mv),
+		Object:    obj,
 		Variables: state.Variables,
 		Log:       state.Log,
 	}
 
-	if err := newState.Normalize(); err != nil {
+	if err := newState.Normalize(state.View); err != nil {
 		return nil, NewAggregationError("@project", newState.Object.String(), err)
 	}
+
+	state.Log.V(2).Info("project: new object ready", "aggreg", p.String(),
+		"result", newState.Object.String())
 
 	return newState, nil
 }
@@ -130,7 +161,7 @@ func (m *Map) Evaluate(state *State) (*State, error) {
 		return nil, NewAggregationError("@map", util.Stringify(mv), err)
 	}
 
-	if err := state.Normalize(); err != nil {
+	if err := state.Normalize(state.View); err != nil {
 		return nil, NewAggregationError("@map", util.Stringify(mv), err)
 	}
 

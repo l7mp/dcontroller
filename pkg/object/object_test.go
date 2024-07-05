@@ -88,7 +88,7 @@ var _ = Describe("Object", func() {
 	})
 
 	It("should be created with content", func() {
-		obj := New("view").WithContent(map[string]any{"a": 1, "b": map[string]any{"c": 2}})
+		obj := New("view").WithContent(map[string]any{"a": int64(1), "b": map[string]any{"c": int64(2)}})
 		Expect(obj).NotTo(BeNil())
 		obj.SetNamespace("ns")
 		obj.SetName("test-1")
@@ -103,8 +103,8 @@ var _ = Describe("Object", func() {
 				"name":      "test-1",
 				"namespace": "ns",
 			},
-			"a": 1,
-			"b": map[string]any{"c": 2},
+			"a": int64(1),
+			"b": map[string]any{"c": int64(2)},
 		}))
 	})
 

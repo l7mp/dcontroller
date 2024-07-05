@@ -201,7 +201,7 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 		return nil, err
 	}
 
-	if arg == nil || reflect.ValueOf(arg).IsNil() {
+	if arg == nil {
 		return nil, NewExpressionError(e.Op, e.Raw,
 			errors.New("argument evaluates to undefined value"))
 	}
@@ -662,17 +662,19 @@ func EvalJSONpathExp(state *State, jsonExp, raw string) (any, error) {
 		return nil, err
 	}
 
-	state.Log.V(4).Info("JSONpath expression eval ready", "expression", raw,
-		"result", values)
-
 	if len(values) == 0 || len(values[0]) == 0 {
 		return nil, NewExpressionError("JSONpath", jsonExp,
 			fmt.Errorf("failed to apply JSONPath expression on %#v", input))
 	}
 
 	if values[0][0].IsNil() {
+		state.Log.V(4).Info("JSONpath expression eval ready", "expression", raw,
+			"result", "")
 		return "", nil
 	}
+
+	state.Log.V(4).Info("JSONpath expression eval ready", "expression", raw,
+		"result", values[0][0].Interface())
 
 	return values[0][0].Interface(), nil
 }

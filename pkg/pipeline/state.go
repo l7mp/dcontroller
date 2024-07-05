@@ -25,39 +25,45 @@ type State struct {
 	// Verdict VerdictType
 }
 
-func (s *State) Normalize() error {
-	str := s.Object.String()
-
-	// view: cannot be empty
-	if s.View == "" {
-		return NewInvalidObjectError("empty view name")
-	}
+func (s *State) Normalize(view string) error {
+	s.View = view
 	s.Object.SetKind(s.View)
 
-	// name: cannot be empty
-	sv, err := EvalJSONpathExp(s, ".metadata.name", str)
-	if err != nil {
-		return err
+	// metadata: must exist
+	meta, ok := s.Object.Object["metadata"]
+	if !ok {
+		return NewInvalidObjectError("no .metadata in object")
 	}
-	if reflect.ValueOf(sv).Kind() != reflect.String {
+	metaMap, ok := meta.(map[string]any)
+	if !ok {
+		return NewInvalidObjectError("invalid .metadata in object")
+	}
+
+	// name must be defined
+	name, ok := metaMap["name"]
+	if !ok {
+		return NewInvalidObjectError("missing name")
+	}
+	if reflect.ValueOf(name).Kind() != reflect.String {
 		return NewInvalidObjectError("name must be a string")
 	}
-	name := sv.(string)
-	if name == "" {
+	nameStr := name.(string)
+	if nameStr == "" {
 		return NewInvalidObjectError("empty name in projection result")
 	}
-	s.Object.SetName(name)
+	s.Object.SetName(nameStr)
 
 	// namespace: can be empty
-	sv, err = EvalJSONpathExp(s, ".metadata.namespace", str)
-	if err != nil {
-		return err
+	namespace, ok := metaMap["namespace"]
+	if !ok {
+		metaMap["namespace"] = ""
+	} else {
+		if reflect.ValueOf(namespace).Kind() != reflect.String {
+			return NewInvalidObjectError("namespace must be a string")
+		}
+		namespaceStr := namespace.(string)
+		metaMap["namespace"] = namespaceStr
 	}
-	if reflect.ValueOf(sv).Kind() != reflect.String {
-		return NewInvalidObjectError("namespace must be a string")
-	}
-	namespace := sv.(string)
-	s.Object.SetNamespace(namespace)
 
 	return nil
 }

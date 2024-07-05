@@ -52,10 +52,11 @@ func (obj *Object) WithName(namespace, name string) *Object {
 func (obj *Object) WithContent(content map[string]any) *Object {
 	gvk := obj.GroupVersionKind()
 	namespace, name := obj.GetNamespace(), obj.GetName()
-	obj.SetUnstructuredContent(content)
+	obj.SetUnstructuredContent(runtime.DeepCopyJSON(content))
 	obj.SetGroupVersionKind(gvk)
 	obj.SetNamespace(namespace)
 	obj.SetName(name)
+
 	return obj
 }
 
@@ -117,7 +118,7 @@ func (in *Object) DeepCopyInto(out *Object) {
 		return
 	}
 	*out = *in
-	in.Unstructured.DeepCopyInto(&out.Unstructured)
+	out.Unstructured.Object = runtime.DeepCopyJSON(in.Unstructured.Object)
 	return
 }
 
@@ -126,8 +127,7 @@ func (in *Object) DeepCopy() *Object {
 		return nil
 	}
 	out := new(Object)
-	*out = *in
-	in.Unstructured.DeepCopyInto(&out.Unstructured)
+	in.DeepCopyInto(out)
 	return out
 }
 

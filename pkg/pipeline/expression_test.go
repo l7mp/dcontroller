@@ -17,7 +17,7 @@ import (
 var _ = Describe("Expressions", func() {
 	var state = &State{
 		Object: object.New("view").WithName("default", "name").
-			WithContent(map[string]any{"spec": map[string]any{"a": 1, "b": map[string]any{"c": 2}}}),
+			WithContent(map[string]any{"spec": map[string]any{"a": int64(1), "b": map[string]any{"c": int64(2)}}}),
 		Log: logger,
 	}
 
@@ -151,7 +151,7 @@ var _ = Describe("Expressions", func() {
 			res, err := exp.Evaluate(state)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(res).To(Equal(1))
+			Expect(res).To(Equal(int64(1)))
 		})
 
 		It("should deserialize and evaluate a string JSONpath expression", func() {
@@ -177,7 +177,7 @@ var _ = Describe("Expressions", func() {
 			res, err := exp.Evaluate(state)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(res).To(Equal(map[string]any{"c": 2}))
+			Expect(res).To(Equal(map[string]any{"c": int64(2)}))
 		})
 
 		It("should deserialize and evaluate a full JSONpath expression", func() {
@@ -198,8 +198,8 @@ var _ = Describe("Expressions", func() {
 					"namespace": "default",
 				},
 				"spec": map[string]any{
-					"a": 1,
-					"b": map[string]any{"c": 2},
+					"a": int64(1),
+					"b": map[string]any{"c": int64(2)},
 				},
 			}))
 		})
@@ -230,6 +230,25 @@ var _ = Describe("Expressions", func() {
 				fmt.Sprintf("kind mismatch: %v != %v",
 					reflect.ValueOf(res).Kind(), reflect.Int64))
 			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+		})
+
+		It("should deserialize and err for a malformed expression", func() {
+			jsonData := `{"@eq":10}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exp).To(Equal(Expression{
+				Op: "@eq",
+				Arg: &Expression{
+					Op:      "@int",
+					Literal: int64(10),
+					Raw:     "10",
+				},
+				Raw: jsonData,
+			}))
+
+			_, err = exp.Evaluate(state)
+			Expect(err).To(HaveOccurred())
 		})
 
 		It("should deserialize and evaluate a multi-level compound literal expression", func() {
