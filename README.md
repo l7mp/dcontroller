@@ -13,12 +13,12 @@ The main tools here are *declarative Kubernetes API translation* and *incrementa
 reconciliation*. Declarative Kubernetes API translation allows to view the Kubernetes API as a
 NoSQL database and run simple declarative queries on it. This can be done by registering an
 aggregation pipeline (inspired by [MongoDB
-aggregators](https://www.mongodb.com/docs/manual/core/aggregation-pipeline/) to map the Kubernetes
+aggregators](https://www.mongodb.com/docs/manual/core/aggregation-pipeline)) to map the Kubernetes
 API resources to a *view* of interest to the controller. These views are dynamically maintained by
 the declarative controller runtime, by running the aggregation pipeline on the watch events
 automatically installed for the base Kubernetes API resources on top of which the view is defined
 on. Incremental reconciliation then means that the controller can watch the incremental changes to
-the views, instead of the raw ("materialized") views, which simplifies writing [level-triggered
+the views, instead of the raw ("materialized") views, which simplifies writing [edge-triggered
 conrollers](https://hackernoon.com/level-triggering-and-reconciliation-in-kubernetes-1f17fe30333d).
 
 ## Caveats
