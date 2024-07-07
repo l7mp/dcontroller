@@ -58,9 +58,8 @@ func patch(o, m any) (any, error) {
 			return litlm, nil
 		}
 
-		if len(litlm) != len(litlo) {
-			return litlm, nil
-		}
+		ret:=make([]any, len(litlo)
+	        copy(ret,litlo)
 
 		retl := make([]any, len(litlm))
 		for i := range litlm {
@@ -93,10 +92,12 @@ func patch(o, m any) (any, error) {
 			vo, ok := litmo[k]
 			if !ok {
 				retm[k] = v
+				continue
 			}
 
 			if reflect.DeepEqual(vo, v) {
 				retm[k] = v
+				continue
 			}
 
 			v, err := patch(vo, v)
