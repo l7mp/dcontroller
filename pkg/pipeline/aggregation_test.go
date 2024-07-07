@@ -69,10 +69,23 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(s).To(BeNil()) // nil means to block
 		})
+
+		It("should err for a filter expression referring to a nonexistent field", func() {
+			jsonData := `{"@filter":{"@eq":["$.spec.x",true]}}`
+			var ag Aggregation
+			err := json.Unmarshal([]byte(jsonData), &ag)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ag.Filter).NotTo(BeNil())
+			Expect(ag.Project).To(BeNil())
+			Expect(ag.Map).To(BeNil())
+
+			_, err = ag.Evaluate(state)
+			Expect(err).To(HaveOccurred())
+		})
 	})
 
 	Describe("Evaluating projection aggregations", func() {
-		It("should evaluate a valid projection expression", func() {
+		It("should evaluate a simple projection expression", func() {
 			jsonData := `{"@project":{"metadata":{"name":"$.metadata.name"}}}`
 			var ag Aggregation
 			err := json.Unmarshal([]byte(jsonData), &ag)
@@ -118,14 +131,52 @@ var _ = Describe("Aggregations", func() {
 			}))
 		})
 
-		// It("should evaluate a valid projection expression", func() {
-		// 	jsonData := `{"@project":{"@eq":["$.metadata.name","name"]}}`
-		// 	var ag Aggregation
-		// 	err := json.Unmarshal([]byte(jsonData), &ag)
-		// 	Expect(err).NotTo(HaveOccurred())
-		// 	s, err := ag.Evaluate(state)
-		// 	Expect(err).NotTo(HaveOccurred())
-		// 	Expect(s.Object).To(Equal(state.Object))
-		// })
+		It("should evaluate a projection expression with multiple fields", func() {
+			jsonData := `{"@project":{"metadata":{"name":"$.metadata.name","namespace":"$.metadata.namespace"}}}`
+			var ag Aggregation
+			err := json.Unmarshal([]byte(jsonData), &ag)
+			Expect(err).NotTo(HaveOccurred())
+			s, err := ag.Evaluate(state)
+			Expect(err).NotTo(HaveOccurred())
+			raw, ok := s.Object.Object["metadata"]
+			Expect(ok).To(BeTrue())
+			meta, ok := raw.(map[string]any)
+			Expect(ok).To(BeTrue())
+			Expect(meta["namespace"]).To(Equal("default"))
+			Expect(meta["name"]).To(Equal("name"))
+		})
+
+		It("should evaluate a projection expression that copies a subtree", func() {
+			jsonData := `{"@project":{"metadata":"$.metadata"}}`
+			var ag Aggregation
+			err := json.Unmarshal([]byte(jsonData), &ag)
+			Expect(err).NotTo(HaveOccurred())
+			s, err := ag.Evaluate(state)
+			Expect(err).NotTo(HaveOccurred())
+			raw, ok := s.Object.Object["metadata"]
+			Expect(ok).To(BeTrue())
+			meta, ok := raw.(map[string]any)
+			Expect(ok).To(BeTrue())
+			Expect(meta["namespace"]).To(Equal("default"))
+			Expect(meta["name"]).To(Equal("name"))
+		})
+
+		It("should err for a projection that drops .metadata.name", func() {
+			jsonData := `{"@project":{"spec":"$.spec"}}`
+			var ag Aggregation
+			err := json.Unmarshal([]byte(jsonData), &ag)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = ag.Evaluate(state)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should err for a projection that asks for a non-existent field", func() {
+			jsonData := `{"@project":{"x": "$.spec.x"}}`
+			var ag Aggregation
+			err := json.Unmarshal([]byte(jsonData), &ag)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = ag.Evaluate(state)
+			Expect(err).To(HaveOccurred())
+		})
 	})
 })

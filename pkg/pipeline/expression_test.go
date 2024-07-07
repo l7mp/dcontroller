@@ -17,7 +17,11 @@ import (
 var _ = Describe("Expressions", func() {
 	var state = &State{
 		Object: object.New("view").WithName("default", "name").
-			WithContent(map[string]any{"spec": map[string]any{"a": int64(1), "b": map[string]any{"c": int64(2)}}}),
+			WithContent(map[string]any{"spec": map[string]any{
+				"a": int64(1),
+				"b": map[string]any{"c": int64(2)},
+				"x": []any{int64(1), int64(2), int64(3), int64(4), int64(5)},
+			}}),
 		Log: logger,
 	}
 
@@ -200,6 +204,7 @@ var _ = Describe("Expressions", func() {
 				"spec": map[string]any{
 					"a": int64(1),
 					"b": map[string]any{"c": int64(2)},
+					"x": []any{int64(1), int64(2), int64(3), int64(4), int64(5)},
 				},
 			}))
 		})
@@ -374,6 +379,42 @@ var _ = Describe("Expressions", func() {
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
 			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
 		})
+
+		It("should deserialize and evaluate a compound JSONpath expression", func() {
+			//jsonData := `{"@eq": [{"@len": "$.spec.x"}, 5]}`
+			jsonData := `{"@eq": [{"@len": ["$.spec.x"]}, 5]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+			//Expect(exp).To(Equal("aaaaaaaaa"))
+			res, err := exp.Evaluate(state)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
+			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+		})
+
+		It("should deserialize and evaluate a JSONpath list expression", func() {
+			jsonData := `{"@eq": [{"@len": ["$.spec.x"]}, 5]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+			//Expect(exp).To(Equal("aaaaaaaaa"))
+			res, err := exp.Evaluate(state)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
+			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+		})
+
+		It("should deserialize and evaluate a JSONpath list expression without the arg being a list", func() {
+			jsonData := `{"@eq": [{"@last": "$.spec.x"}, 5]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+			res, err := exp.Evaluate(state)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
+			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+		})
 	})
 
 	Describe("Evaluating list expressions", func() {
@@ -388,6 +429,19 @@ var _ = Describe("Expressions", func() {
 			Expect(kind == reflect.Int64).To(BeTrue(),
 				fmt.Sprintf("kind mismatch: %v != %v", kind, reflect.Int64))
 			Expect(res).To(Equal(int64(1)))
+		})
+
+		It("should deserialize and evaluate a stacked list expression", func() {
+			jsonData := `{"@list":[1,2,3]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+			res, err := exp.Evaluate(state)
+			Expect(err).NotTo(HaveOccurred())
+			kind := reflect.ValueOf(res).Kind()
+			Expect(kind == reflect.Slice || kind == reflect.Array).To(BeTrue(),
+				fmt.Sprintf("kind mismatch: %v != %v", kind, reflect.Int64))
+			Expect(res).To(Equal([]any{int64(1), int64(2), int64(3)}))
 		})
 
 		It("should deserialize and evaluate a simple list expression", func() {

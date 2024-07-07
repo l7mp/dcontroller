@@ -117,12 +117,12 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 				return nil, err
 			}
 
-			// must be []any
 			vs, ok := v.([]any)
 			if !ok {
 				return nil, NewExpressionError("@list", e.Raw,
 					errors.New("argument must be a list"))
 			}
+
 			ret = vs
 		} else {
 			// literal lists stored in Literal
@@ -140,6 +140,9 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 				ret = append(ret, res)
 			}
 		}
+
+		// WARNING: this will destroy multi-dimensional arrays
+		ret = unpackList(ret)
 
 		state.Log.V(4).Info("eval ready", "expression", e.String(), "result", ret)
 
@@ -394,6 +397,8 @@ func (e *Expression) Evaluate(state *State) (any, error) {
 			if err != nil {
 				return nil, err
 			}
+
+			args = unpackList(args)
 
 			v := int64(len(args))
 			state.Log.V(4).Info("eval ready", "expression", e.String(), "result", v)
@@ -676,7 +681,12 @@ func EvalJSONpathExp(state *State, jsonExp, raw string) (any, error) {
 	state.Log.V(4).Info("JSONpath expression eval ready", "expression", raw,
 		"result", values[0][0].Interface())
 
-	return values[0][0].Interface(), nil
+	var ret any
+	if len(values) > 0 && len(values[0]) > 0 && !values[0][0].IsNil() {
+		ret = values[0][0].Interface()
+	}
+
+	return ret, nil
 }
 
 // from https://github.com/kubernetes/kubectl/blob/master/pkg/cmd/get/customcolumn.go
@@ -708,4 +718,36 @@ func RelaxedJSONPathExpression(pathExpression string) (string, error) {
 		fieldSpec = submatches[2]
 	}
 	return fmt.Sprintf("{.%s}", fieldSpec), nil
+}
+
+// unpacks the first-level list if any
+func unpackList(a any) []any {
+	v := reflect.ValueOf(a)
+
+	// If it's not a slice, return nil
+	if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
+		return []any{a}
+	}
+
+	// If it's an empty slice, return nil
+	if v.IsNil() || v.Len() == 0 {
+		return []any{}
+	}
+
+	// If it's [][]any, return the first slice
+	elemKind := v.Type().Elem().Kind()
+	if elemKind == reflect.Slice || elemKind == reflect.Array {
+		return v.Index(0).Interface().([]any)
+	}
+
+	// If it's []any{[]any, ...}, check if the first element is a slice
+	first := v.Index(0)
+	if !first.IsNil() {
+		vs, ok := first.Interface().([]any)
+		if ok {
+			return vs
+		}
+	}
+
+	return a.([]any)
 }

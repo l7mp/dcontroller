@@ -21,6 +21,17 @@ on. Incremental reconciliation then means that the controller can watch the incr
 the views, instead of the raw ("materialized") views, which simplifies writing [level-triggered
 conrollers](https://hackernoon.com/level-triggering-and-reconciliation-in-kubernetes-1f17fe30333d).
 
+## Caveats
+
+### Expressions
+
+- Aggregations work on objects that are indexed on (.metadata.namespace, .metadata.name): all
+  objects at every stage of the aggregation must have valid .metadata.
+- Operator arguments go into lists, optional for single-argument ops (like @len and @not). 
+- No multi-dimensional lists: arrays our unpacked to the top level.
+
+
+
 <!-- The Kubernetes controller-runtime Project is a set of go libraries for building -->
 <!-- Controllers. It is leveraged by [Kubebuilder](https://book.kubebuilder.io/) and -->
 <!-- [Operator SDK](https://github.com/operator-framework/operator-sdk). Both are -->
