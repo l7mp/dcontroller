@@ -25,6 +25,21 @@ var _ = Describe("Expressions", func() {
 		Log: logger,
 	}
 
+	var state2 = &State{
+		Object: object.New("view").WithName("default", "name").
+			WithContent(map[string]any{"spec": []any{
+				map[string]any{
+					"name": "name1",
+					"a":    int64(1),
+					"b":    map[string]any{"c": int64(2)},
+				}, map[string]any{
+					"name": "name2",
+					"a":    int64(2),
+					"b":    map[string]any{"d": int64(3)},
+				}}}),
+		Log: logger,
+	}
+
 	Describe("Evaluating terminal expressions", func() {
 		It("should deserialize and evaluate a bool literal expression", func() {
 			jsonData := "true"
@@ -208,6 +223,79 @@ var _ = Describe("Expressions", func() {
 				},
 			}))
 		})
+
+		It("should deserialize and evaluate a list search JSONpath expression with deref", func() {
+			jsonData := `"$.spec[?(@.name == 'name1')].b"`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exp).To(Equal(Expression{
+				Op:      "@string",
+				Literal: "$.spec[?(@.name == 'name1')].b",
+				Raw:     jsonData,
+			}))
+
+			res, err := exp.Evaluate(state2)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(res).To(Equal(map[string]any{"c": int64(2)}))
+		})
+
+		It("should deserialize and evaluate a list search JSONpath expression returning a list", func() {
+			jsonData := `"$.spec[?(@.name == 'name2')]"`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+			res, err := exp.Evaluate(state2)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal(map[string]any{
+				"name": "name2",
+				"a":    int64(2),
+				"b":    map[string]any{"d": int64(3)},
+			}))
+		})
+
+		It("should deserialize and evaluate a list search JSONpath expression returning a list", func() {
+			jsonData := `"$.spec[?(@.name in ['name1', 'name2'])].b.d"` // we return the last match
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+			res, err := exp.Evaluate(state2)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal(int64(3)))
+		})
+
+		// FIt("should deserialize and evaluate a list search JSONpath key", func() {
+		// 	jsonData := `{"spec":{"$.[?(@.name == 'name2')].name":"name3"}}`
+		// 	var exp Expression
+		// 	err := json.Unmarshal([]byte(jsonData), &exp)
+		// 	Expect(err).NotTo(HaveOccurred())
+		// 	Expect(exp).To(Equal(Expression{
+		// 		Op: "@dict",
+		// 		Literal: map[string]Expression{
+		// 			"spec": {
+		// 				Op: "@dict",
+		// 				Literal: map[string]Expression{
+		// 					"$.[?(@.name == 'name2')].name": {
+		// 						Op:      "@string",
+		// 						Literal: "name3",
+		// 						Raw:     "\"name3\"",
+		// 					},
+		// 				},
+		// 				Raw: "{\"$.[?(@.name == 'name2')].name\":\"name3\"}",
+		// 			},
+		// 		},
+		// 		Raw: "{\"spec\":{\"$.[?(@.name == 'name2')].name\":\"name3\"}}",
+		// 	}))
+		// 	res, err := exp.Evaluate(state2)
+		// 	Expect(err).NotTo(HaveOccurred())
+		// 	Expect(res).To(Equal(map[string]any{
+		// 		"spec":
+		// 		"name": "name3",
+		// 		"a":    int64(2),
+		// 		"b":    map[string]any{"d": int64(3)},
+		// 	}))
+		// })
 	})
 
 	Describe("Evaluating compound expressions", func() {

@@ -5,109 +5,102 @@ import (
 	"reflect"
 )
 
+// Patch performs an in-place patch.
 func (obj *Object) Patch(m map[string]any) error {
-	res, err := patch(obj.Object, m)
-	if err != nil {
-		return err
-	}
+	res := patch(obj.Object, m)
+
 	m, ok := res.(map[string]any)
 	if !ok {
 		fmt.Errorf("patch result: expected map[string]any but obtained %#v", res)
 	}
+
 	obj.SetUnstructuredContent(m)
 
 	return nil
 }
 
-func patch(o, m any) (any, error) {
+func patch(o, m any) any {
 	if reflect.DeepEqual(o, m) {
-		return m, nil
+		return deepCopy(m)
 	}
 
 	if o == nil {
-		return m, nil
+		return deepCopy(m)
 	}
 
 	// scalars
-	litb, ok := m.(bool)
-	if ok {
-		return litb, nil
-	}
+	switch m.(type) {
+	case bool, int64, float64, string:
+		return m
 
-	liti, ok := m.(int64)
-	if ok {
-		return liti, nil
-	}
-
-	litf, ok := m.(float64)
-	if ok {
-		return litf, nil
-	}
-
-	lits, ok := m.(string)
-	if ok {
-		return lits, nil
-	}
-
-	// list
-	litlm, ok := m.([]any)
-	if ok {
-		fmt.Printf("---------------%#v\n", litlm)
+	case []any:
+		litlm := m.([]any)
 		litlo, ok2 := o.([]any)
 		if !ok2 {
-			return litlm, nil
+			return deepCopy(litlm)
 		}
 
-		ret:=make([]any, len(litlo)
-	        copy(ret,litlo)
-
-		retl := make([]any, len(litlm))
+		retl := deepCopy(litlo).([]any)
 		for i := range litlm {
-			if reflect.DeepEqual(litlo[i], litlm[i]) {
-				retl[i] = litlm[i]
-			} else {
-				v, err := patch(litlo[i], litlm[i])
-				if err != nil {
-					return nil, err
-				}
-				retl[i] = v
+			if i >= len(litlo) {
+				retl = append(retl, deepCopy(litlm[i]))
+				continue
 			}
+			if reflect.DeepEqual(litlo[i], litlm[i]) {
+				retl[i] = deepCopy(litlm[i])
+				continue
+			}
+			retl[i] = patch(litlo[i], litlm[i])
 		}
-		return retl, nil
-	}
+		return retl
 
-	litmm, ok := m.(map[string]any)
-	if ok {
+	case map[string]any:
+		litmm := m.(map[string]any)
 		litmo, ok2 := o.(map[string]any)
 		if !ok2 {
-			return litmm, nil
+			return deepCopy(litmm)
 		}
 
-		retm := map[string]any{}
-		for k, v := range litmo {
-			retm[k] = v
-		}
-
+		retm := deepCopy(litmo).(map[string]any)
 		for k, v := range litmm {
 			vo, ok := litmo[k]
 			if !ok {
-				retm[k] = v
+				retm[k] = deepCopy(v)
 				continue
 			}
 
 			if reflect.DeepEqual(vo, v) {
-				retm[k] = v
+				retm[k] = deepCopy(v)
 				continue
 			}
 
-			v, err := patch(vo, v)
-			if err != nil {
-				return nil, err
-			}
+			v := patch(vo, v)
 			retm[k] = v
 		}
-		return retm, nil
+		return retm
+	default:
+		// this should never happen so we should panic here but we won't
+		return nil
 	}
+}
 
-	return nil, fmt.Errorf("could not patch %#v with %#v", o, m)
+func deepCopy(value any) any {
+	switch v := value.(type) {
+	case bool, int64, float64, string:
+		return v
+	case []any:
+		newList := make([]any, len(v))
+		for i, item := range v {
+			newList[i] = deepCopy(item)
+		}
+		return newList
+	case map[string]any:
+		newMap := make(map[string]any)
+		for k, item := range v {
+			newMap[k] = deepCopy(item)
+		}
+		return newMap
+	default:
+		return v
+	}
 }

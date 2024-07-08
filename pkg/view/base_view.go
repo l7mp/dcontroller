@@ -24,29 +24,29 @@ import (
 )
 
 type baseView struct {
-	name       string
-	scheme     *runtime.Scheme
-	baseGVK    schema.GroupVersionKind
-	cache      *cache.Cache
-	pipeline   pipeline.Pipeline
-	ctrlClient client.Client
-	stop       bool
+	name        string
+	scheme      *runtime.Scheme
+	baseGVK     schema.GroupVersionKind
+	cache       *cache.Cache
+	aggregation pipeline.Aggregation
+	ctrlClient  client.Client
+	stop        bool
 }
 
 // NewBaseView registers a base view with the manager. A base view is a given by the view name, the
 // native Kubernetes object to watch, and an aggregation pipeline to process it into a view.
-func NewBaseView(name string, mgr *manager.Manager, pipeline pipeline.Pipeline, obj ...client.Object) (View, error) {
+func NewBaseView(name string, mgr *manager.Manager, aggregation pipeline.Aggregation, obj ...client.Object) (View, error) {
 	if len(obj) != 1 {
 		return nil, errors.New("base view must be called with a single object")
 	}
 
 	v := &baseView{
-		name:       name,
-		scheme:     mgr.GetScheme(),
-		cache:      mgr.GetCache(),
-		pipeline:   pipeline,
-		ctrlClient: mgr.Manager.GetClient(),
-		stop:       false,
+		name:        name,
+		scheme:      mgr.GetScheme(),
+		cache:       mgr.GetCache(),
+		aggregation: aggregation,
+		ctrlClient:  mgr.Manager.GetClient(),
+		stop:        false,
 	}
 
 	baseGVK, err := v.getBaseGVK(obj[0])
@@ -100,7 +100,7 @@ func (v *baseView) Reconcile(ctx context.Context, req reconcile.Request) (reconc
 	obj.SetUnstructuredContent(u.Object)
 	log.V(2).Info("new object received", "object", obj.String())
 
-	res, err := v.pipeline.Process(obj)
+	res, err := v.aggregation.Process(obj)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -129,7 +129,7 @@ func (v *baseView) getBaseGVK(obj client.Object) (schema.GroupVersionKind, error
 
 // NewFakeBaseView is a base-view that is useful for testing. The function takes a variable number
 // of objects that are added to the initial cache.
-func NewFakeBaseView(name string, scheme *runtime.Scheme, pipeline pipeline.Pipeline, obj ...client.Object) (View, error) {
+func NewFakeBaseView(name string, scheme *runtime.Scheme, aggregation pipeline.Aggregation, obj ...client.Object) (View, error) {
 	if len(obj) == 0 {
 		return nil, errors.New("base view must be called with at least one object")
 	}
@@ -140,12 +140,12 @@ func NewFakeBaseView(name string, scheme *runtime.Scheme, pipeline pipeline.Pipe
 		Build()
 
 	v := &baseView{
-		name:       "view",
-		scheme:     scheme,
-		cache:      cache.New(),
-		pipeline:   pipeline,
-		ctrlClient: fakeClient,
-		stop:       false,
+		name:        "view",
+		scheme:      scheme,
+		cache:       cache.New(),
+		aggregation: aggregation,
+		ctrlClient:  fakeClient,
+		stop:        false,
 	}
 
 	baseGVK, err := v.getBaseGVK(obj[0])

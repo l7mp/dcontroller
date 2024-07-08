@@ -6,10 +6,6 @@ type Pipeline struct {
 	Aggregation []Aggregation
 }
 
-type Evaluatable interface {
-	Evaluate(State) (State, error)
-}
-
 // type Join interface {
 // 	Join        Join
 // 	Aggregation []Aggregation
