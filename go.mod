@@ -4,6 +4,7 @@ go 1.22.0
 
 require (
 	github.com/go-logr/logr v1.4.1
+	github.com/ohler55/ojg v1.23.0
 	github.com/onsi/ginkgo/v2 v2.17.1
 	github.com/onsi/gomega v1.32.0
 	go.uber.org/zap v1.26.0

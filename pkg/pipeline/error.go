@@ -24,9 +24,9 @@ func NewExpressionError(kind, content string, err error) ErrExpression {
 
 type ErrAggregation = error
 
-func NewAggregationError(kind, content string, err error) ErrAggregation {
-	return fmt.Errorf("failed to evaluate %s aggregation with expression %q: %w",
-		kind, content, err)
+func NewAggregationError(content string, err error) ErrAggregation {
+	return fmt.Errorf("failed to evaluate aggregation on expression %q: %w",
+		content, err)
 }
 
 type ErrInvalidObject = error

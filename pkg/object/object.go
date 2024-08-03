@@ -1,6 +1,8 @@
 package object
 
 import (
+	"errors"
+
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -30,7 +32,7 @@ func New(view string) *Object {
 	return &obj
 }
 
-func NewFromNativeObject(view string, clientObj client.Object) (*Object, error) {
+func FromNativeObject(view string, clientObj client.Object) (*Object, error) {
 	unstructuredObj := &unstructured.Unstructured{}
 	var err error
 	unstructuredObj.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(clientObj)
@@ -39,8 +41,29 @@ func NewFromNativeObject(view string, clientObj client.Object) (*Object, error) 
 	}
 
 	obj := New(view).WithName(clientObj.GetNamespace(), clientObj.GetName())
-	obj.SetUnstructuredContent(unstructuredObj.Object)
+	obj.SetUnstructuredContent(unstructuredObj.UnstructuredContent())
 	return obj, nil
+}
+
+func FromUnstructured(u *unstructured.Unstructured) *Object {
+	return New(u.GetKind()).WithName(u.GetNamespace(), u.GetName()).
+		WithContent(u.UnstructuredContent())
+}
+
+func FromContent(view string, m map[string]any) (*Object, error) {
+	namespace := ""
+	if ns, ok, _ := unstructured.NestedString(m, "metadata", "namespace"); ok {
+		namespace = ns
+	}
+	name, ok, err := unstructured.NestedString(m, "metadata", "name")
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, errors.New("empty name")
+	}
+
+	return New(view).WithName(namespace, name).WithContent(m), nil
 }
 
 func (obj *Object) WithName(namespace, name string) *Object {
