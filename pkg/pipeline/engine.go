@@ -12,7 +12,7 @@ import (
 type Engine struct {
 	view   string
 	inputs []ObjectContent
-	joins  [][]ObjectContent // only used for joins
+	views  [][]ObjectContent // only used for joins
 	vars   ObjectContent
 	stack  []any // for holding object contexts on which to eval JSONpath exprs
 	log    logr.Logger
@@ -98,20 +98,6 @@ func (eng *Engine) Normalize(arg any) ([]*object.Object, error) {
 	return ret, nil
 }
 
-// func (eng *Engine) pushStack(arg any) {
-// 	eng.stack = arg
-// }
-
-// func (eng *Engine) popStack() any {
-// 	ret := eng.stack
-// 	eng.stack = nil
-// 	return ret
-// }
-
-// func (eng *Engine) hasObjCtx() bool {
-// 	return eng.stack != nil
-// }
-
 func (eng *Engine) pushStack(arg any) {
 	eng.stack = append(eng.stack, arg)
 }
@@ -171,7 +157,7 @@ func (eng *Engine) prepareListCommandArgs(args []Expression) ([]any, error) {
 // and if it evalutates to true then it adds it to the result set.
 func (eng *Engine) cartesianProduct(cond func(current []ObjectContent) (ObjectContent, bool, error)) ([]ObjectContent, error) {
 	ret := []ObjectContent{}
-	if len(eng.joins) < 2 {
+	if len(eng.views) < 2 {
 		return nil, errors.New("at least two views required")
 	}
 
@@ -185,7 +171,7 @@ func (eng *Engine) cartesianProduct(cond func(current []ObjectContent) (ObjectCo
 }
 
 func (eng *Engine) recurseCP(current, ret []ObjectContent, cond func(current []ObjectContent) (ObjectContent, bool, error), depth int) error {
-	if depth == len(eng.joins)-1 {
+	if depth == len(eng.views)-1 {
 		newObj, ok, err := cond(current)
 		if err != nil {
 			return err
@@ -196,7 +182,7 @@ func (eng *Engine) recurseCP(current, ret []ObjectContent, cond func(current []O
 		return nil
 	}
 
-	for _, o := range eng.joins[depth] {
+	for _, o := range eng.views[depth] {
 		next := make([]ObjectContent, len(current))
 		copy(next, current)
 		next = append(next, o)

@@ -7,15 +7,13 @@ import (
 	"github.com/go-logr/logr"
 )
 
-// Aggregation is an operation that can be used to filter objects by certain condition or alter the
-// object's shape.
+// Aggregation is an operation that can be used to process, objects, or alter the shape of a list
+// of objects in a view.
 type Aggregation struct {
 	Expression
 }
 
-// Evaluate processes an aggregation expression on the given state. Returns the new state
-// if there were no errors, nil if there were no errors but the pipeline execution should
-// stop, and error otherwise.
+// Run processes an aggregation expression.
 func (a *Aggregation) Run(view string, objects []*object.Object, log logr.Logger) ([]*object.Object, error) {
 	eng := NewEngine(view, log).WithObjects(objects)
 
@@ -34,9 +32,7 @@ func (a *Aggregation) Run(view string, objects []*object.Object, log logr.Logger
 	return ret, nil
 }
 
-// Evaluate processes an aggregation expression on the given state. Returns the new state
-// if there were no errors, nil if there were no errors but the pipeline execution should
-// stop, and error otherwise.
+// Evaluate processes an aggregation expression on the given state.
 func (a *Aggregation) Evaluate(eng *Engine) (any, error) {
 	res, err := a.Expression.Evaluate(eng)
 	if err != nil {
@@ -46,16 +42,6 @@ func (a *Aggregation) Evaluate(eng *Engine) (any, error) {
 
 	return res, nil
 }
-
-// func (a *Aggregation) UnmarshalJSON(b []byte) error {
-// 	// single arg
-// 	fv := Expression{}
-// 	if err := json.Unmarshal(b, &fv); err == nil {
-// 		*a = Aggregation{Expression: fv}
-// 	}
-
-// 	return NewUnmarshalError("aggregation", string(b))
-// }
 
 func (a *Aggregation) String() string {
 	return fmt.Sprintf("aggregation:{%s}", a.Expression.String())
