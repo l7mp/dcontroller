@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"errors"
 	"reflect"
 
 	"github.com/go-logr/logr"
@@ -10,23 +11,24 @@ import (
 
 type Engine struct {
 	view   string
-	inputs []map[string]any
-	vars   map[string]any
+	inputs []ObjectContent
+	joins  [][]ObjectContent // only used for joins
+	vars   ObjectContent
 	stack  []any // for holding object contexts on which to eval JSONpath exprs
 	log    logr.Logger
 }
 
 func NewEngine(view string, log logr.Logger) *Engine {
-	return &Engine{view: view, vars: map[string]any{}, stack: []any{}, log: log}
+	return &Engine{view: view, vars: ObjectContent{}, stack: []any{}, log: log}
 }
 
-func (eng *Engine) WithInput(us []map[string]any) *Engine {
+func (eng *Engine) WithInput(us []ObjectContent) *Engine {
 	eng.inputs = us
 	return eng
 }
 
 func (eng *Engine) WithObjects(objs []*object.Object) *Engine {
-	us := make([]map[string]any, len(objs))
+	us := make([]ObjectContent, len(objs))
 	for i := range objs {
 		us[i] = objs[i].UnstructuredContent()
 	}
@@ -44,7 +46,7 @@ func (eng *Engine) Normalize(arg any) ([]*object.Object, error) {
 	}
 
 	for _, res := range objs {
-		content, ok := res.(map[string]any)
+		content, ok := res.(ObjectContent)
 		if !ok {
 			return nil, NewInvalidObjectError("normalize: evaluation result must " +
 				"be an unstructured object")
@@ -57,7 +59,7 @@ func (eng *Engine) Normalize(arg any) ([]*object.Object, error) {
 		if !ok {
 			return nil, NewInvalidObjectError("no .metadata in object")
 		}
-		metaMap, ok := meta.(map[string]any)
+		metaMap, ok := meta.(ObjectContent)
 		if !ok {
 			return nil, NewInvalidObjectError("invalid .metadata in object")
 		}
@@ -133,4 +135,76 @@ func (eng *Engine) peekStack() any {
 
 func (eng *Engine) isStackEmpty() bool {
 	return len(eng.stack) == 0
+}
+
+// returns a list of arguments to for a list command (@map, @filter, etc) to iterate on
+//   - if there is explicit argument list, use that
+//   - if there is no argument list, use the provided objects (useful for the top-level aggregation
+//     command)
+func (eng *Engine) prepareListCommandArgs(args []Expression) ([]any, error) {
+	ret := []any{}
+
+	// if no args, use the object context
+	if len(args) == 0 {
+		for i := range eng.inputs {
+			ret = append(ret, eng.inputs[i])
+		}
+		return ret, nil
+	}
+
+	// use the explicit args provided by the expression
+	rawArg, err := args[0].Evaluate(eng)
+	if err != nil {
+		return nil, errors.New("failed to evaluate arguments")
+	}
+
+	ret, err = asList(rawArg)
+	if err != nil {
+		return nil, errors.New("invlaid arguments: expecting a list")
+	}
+
+	return ret, nil
+}
+
+// cartesianProduct takes n slices of objects (n >= 2) and a condition expression, generates the
+// Cartesian product of the elements of the slices, applies the expression to to each combination,
+// and if it evalutates to true then it adds it to the result set.
+func (eng *Engine) cartesianProduct(cond func(current []ObjectContent) (ObjectContent, bool, error)) ([]ObjectContent, error) {
+	ret := []ObjectContent{}
+	if len(eng.joins) < 2 {
+		return nil, errors.New("at least two views required")
+	}
+
+	current := []ObjectContent{}
+	err := eng.recurseCP(current, ret, cond, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
+}
+
+func (eng *Engine) recurseCP(current, ret []ObjectContent, cond func(current []ObjectContent) (ObjectContent, bool, error), depth int) error {
+	if depth == len(eng.joins)-1 {
+		newObj, ok, err := cond(current)
+		if err != nil {
+			return err
+		}
+		if ok {
+			ret = append(ret, newObj)
+		}
+		return nil
+	}
+
+	for _, o := range eng.joins[depth] {
+		next := make([]ObjectContent, len(current))
+		copy(next, current)
+		next = append(next, o)
+		err := eng.recurseCP(next, ret, cond, depth+1)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

@@ -1,7 +1,12 @@
 package pipeline
 
-type Join interface {
-}
+// // Join implements an SQL inner join.
+// type Join struct {
+// }
 
-type InnerJoin struct {
-}
+// // Joiner is a
+// type Joiner struct {
+// 	Expression
+// }
+
+// //

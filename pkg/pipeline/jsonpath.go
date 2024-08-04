@@ -50,7 +50,7 @@ func (e *Expression) SetJSONPath(eng *Engine, key string, value, data any) error
 	}
 
 	// if not a JSONpath, just set it as is
-	if d, ok := data.(map[string]any); ok && key[0] != '$' {
+	if d, ok := data.(ObjectContent); ok && key[0] != '$' {
 		d[key] = value
 		return nil
 	}

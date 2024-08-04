@@ -29,6 +29,13 @@ func NewAggregationError(content string, err error) ErrAggregation {
 		content, err)
 }
 
+type ErrJoin = error
+
+func NewJoinError(content string, err error) ErrJoin {
+	return fmt.Errorf("failed to evaluate join on expression %q: %w",
+		content, err)
+}
+
 type ErrInvalidObject = error
 
 func NewInvalidObjectError(message string) ErrInvalidObject {

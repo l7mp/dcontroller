@@ -9,7 +9,11 @@ import (
 	"strings"
 
 	"hsnlab/dcontroller-runtime/pkg/util"
+
+	"k8s.io/apimachinery/pkg/runtime"
 )
+
+type ObjectContent = map[string]any
 
 // Expression is an operator, an argument, and potentially a literal value.
 type Expression struct {
@@ -166,7 +170,7 @@ func (e *Expression) Evaluate(eng *Engine) (any, error) {
 		return ret, nil
 
 	case "@dict":
-		ret := map[string]any{}
+		ret := ObjectContent{}
 		if e.Arg != nil {
 			// eval stacked expressions stored in e.Arg
 			v, err := e.Arg.Evaluate(eng)
@@ -174,8 +178,8 @@ func (e *Expression) Evaluate(eng *Engine) (any, error) {
 				return nil, err
 			}
 
-			// must be map[string]any
-			vs, ok := v.(map[string]any)
+			// must be ObjectContent
+			vs, ok := v.(ObjectContent)
 			if !ok {
 				return nil, NewExpressionError("@dict", e.Raw,
 					errors.New("argument must be a map"))
@@ -232,7 +236,7 @@ func (e *Expression) Evaluate(eng *Engine) (any, error) {
 			args = args[1:]
 
 			// arguments
-			inputs, err := prepareListCommandArgs(eng, args)
+			inputs, err := eng.prepareListCommandArgs(args)
 			if err != nil {
 				return nil, NewExpressionError(e.Op, e.Raw, err)
 			}
@@ -278,7 +282,7 @@ func (e *Expression) Evaluate(eng *Engine) (any, error) {
 			fun := args[0]
 			args = args[1:]
 
-			inputs, err := prepareListCommandArgs(eng, args)
+			inputs, err := eng.prepareListCommandArgs(args)
 			if err != nil {
 				return nil, NewExpressionError(e.Op, e.Raw, err)
 			}
@@ -310,7 +314,7 @@ func (e *Expression) Evaluate(eng *Engine) (any, error) {
 				return nil, NewExpressionError(e.Op, e.Raw, errors.New("not enough arguments"))
 			}
 
-			var outputs []map[string]any
+			var outputs []ObjectContent
 			for _, exp := range args {
 				res, err := exp.Evaluate(eng)
 				if err != nil {
@@ -329,6 +333,55 @@ func (e *Expression) Evaluate(eng *Engine) (any, error) {
 			eng.log.V(4).Info("eval ready", "expression", e.String(), "result", outputs)
 
 			return outputs, nil
+
+		case "@join":
+			res, err := eng.cartesianProduct(func(current []ObjectContent) (ObjectContent, bool, error) {
+				// prepare input
+				input := ObjectContent{}
+				for _, v := range current {
+					kind, ok := v["kind"]
+					if !ok {
+						return nil, false, NewExpressionError(e.Op, e.Raw,
+							fmt.Errorf("missing kind/view in object %q",
+								util.Stringify(v)))
+					}
+
+					view, err := asString(kind)
+					if err != nil {
+						return nil, false, NewExpressionError(e.Op, e.Raw,
+							fmt.Errorf("kind/view is not a string in object %q",
+								util.Stringify(v)))
+					}
+					input[view] = v
+				}
+
+				// evalutate conditional expression on the input
+				eng.pushStack(input)
+				res, err := e.Arg.Evaluate(eng)
+				eng.popStack()
+				if err != nil {
+					return nil, false, NewExpressionError(e.Op, e.Raw, err)
+				}
+
+				arg, err := asBool(res)
+				if err != nil {
+					return nil, false, NewExpressionError(e.Op, e.Raw, err)
+				}
+
+				if !arg {
+					return nil, false, nil
+				}
+
+				// add input to the join list
+				return runtime.DeepCopyJSON(input), true, nil
+			})
+			if err != nil {
+				return nil, NewExpressionError(e.Op, e.Raw, err)
+			}
+
+			eng.log.V(4).Info("eval ready", "expression", e.String(), "result", res)
+
+			return res, nil
 		}
 	}
 
@@ -650,7 +703,7 @@ func (e *Expression) Evaluate(eng *Engine) (any, error) {
 	}
 
 	// literal map
-	return map[string]any{e.Op: arg}, nil
+	return ObjectContent{e.Op: arg}, nil
 }
 
 // unpacks the first-level list if any
@@ -806,33 +859,4 @@ func (e *Expression) String() string {
 	}
 
 	return fmt.Sprintf("%s:[%s]", e.Op, e.Arg.String())
-}
-
-// returns a list of arguments to for a list command (@map, @filter, etc) to iterate on
-//   - if there is explicit argument list, use that
-//   - if there is no argument list, use the provided objects (useful for the top-level aggregation
-//     command)
-func prepareListCommandArgs(eng *Engine, args []Expression) ([]any, error) {
-	ret := []any{}
-
-	// if no args, use the object context
-	if len(args) == 0 {
-		for i := range eng.inputs {
-			ret = append(ret, eng.inputs[i])
-		}
-		return ret, nil
-	}
-
-	// use the explicit args provided by the expression
-	rawArg, err := args[0].Evaluate(eng)
-	if err != nil {
-		return nil, errors.New("failed to evaluate arguments")
-	}
-
-	ret, err = asList(rawArg)
-	if err != nil {
-		return nil, errors.New("invlaid arguments: expecting a list")
-	}
-
-	return ret, nil
 }

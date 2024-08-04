@@ -18,40 +18,40 @@ var _ = Describe("Expressions", func() {
 
 	BeforeEach(func() {
 		eng = NewEngine("view", logger).WithInput(
-			[]map[string]any{{
-				"metadata": map[string]any{
+			[]ObjectContent{{
+				"metadata": ObjectContent{
 					"namespace": "default",
 					"name":      "name",
 				},
-				"spec": map[string]any{
+				"spec": ObjectContent{
 					"a": int64(1),
-					"b": map[string]any{"c": int64(2)},
+					"b": ObjectContent{"c": int64(2)},
 					"x": []any{int64(1), int64(2), int64(3), int64(4), int64(5)},
 				},
 			}})
 		eng.pushStack(eng.inputs[0])
 
 		eng2 = NewEngine("view", logger).WithInput(
-			[]map[string]any{{
-				"metadata": map[string]any{
+			[]ObjectContent{{
+				"metadata": ObjectContent{
 					"namespace": "default2",
 					"name":      "name",
 				},
 				"spec": []any{
-					map[string]any{
+					ObjectContent{
 						"name": "name1",
 						"a":    int64(1),
-						"b":    map[string]any{"c": int64(2)},
-					}, map[string]any{
+						"b":    ObjectContent{"c": int64(2)},
+					}, ObjectContent{
 						"name": "name2",
 						"a":    int64(2),
-						"b":    map[string]any{"d": int64(3)},
+						"b":    ObjectContent{"d": int64(3)},
 					},
 				},
 			}})
 		eng2.pushStack(eng2.inputs[0])
 
-		eng3 = NewEngine("view", logger).WithInput([]map[string]any{eng.inputs[0], eng2.inputs[0]})
+		eng3 = NewEngine("view", logger).WithInput([]ObjectContent{eng.inputs[0], eng2.inputs[0]})
 
 	})
 
@@ -172,7 +172,7 @@ var _ = Describe("Expressions", func() {
 			res, err = GetJSONPathExp(`$.metadata`, obj.UnstructuredContent())
 			Expect(err).NotTo(HaveOccurred())
 
-			d, ok := res.(map[string]any)
+			d, ok := res.(ObjectContent)
 			Expect(ok).To(BeTrue())
 			Expect(d).To(HaveKey("namespace"))
 			Expect(d["namespace"]).To(Equal("testnamespace"))
@@ -237,7 +237,7 @@ var _ = Describe("Expressions", func() {
 			res, err := exp.Evaluate(eng)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(res).To(Equal(map[string]any{"c": int64(2)}))
+			Expect(res).To(Equal(ObjectContent{"c": int64(2)}))
 		})
 
 		It("should deserialize and evaluate a full JSONPath expression", func() {
@@ -250,14 +250,14 @@ var _ = Describe("Expressions", func() {
 			res, err := exp.Evaluate(eng)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(res).To(Equal(map[string]any{
-				"metadata": map[string]any{
+			Expect(res).To(Equal(ObjectContent{
+				"metadata": ObjectContent{
 					"name":      "name",
 					"namespace": "default",
 				},
-				"spec": map[string]any{
+				"spec": ObjectContent{
 					"a": int64(1),
-					"b": map[string]any{"c": int64(2)},
+					"b": ObjectContent{"c": int64(2)},
 					"x": []any{int64(1), int64(2), int64(3), int64(4), int64(5)},
 				},
 			}))
@@ -277,7 +277,7 @@ var _ = Describe("Expressions", func() {
 			res, err := exp.Evaluate(eng2)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(res).To(Equal(map[string]any{"c": int64(2)}))
+			Expect(res).To(Equal(ObjectContent{"c": int64(2)}))
 		})
 
 		It("should deserialize and evaluate a list search JSONPath expression returning a list", func() {
@@ -287,10 +287,10 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 			res, err := exp.Evaluate(eng2)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(Equal(map[string]any{
+			Expect(res).To(Equal(ObjectContent{
 				"name": "name2",
 				"a":    int64(2),
-				"b":    map[string]any{"d": int64(3)},
+				"b":    ObjectContent{"d": int64(3)},
 			}))
 		})
 
@@ -313,7 +313,7 @@ var _ = Describe("Expressions", func() {
 			res, err := exp.Evaluate(eng)
 			Expect(err).NotTo(HaveOccurred())
 
-			d, ok := res.(map[string]any)
+			d, ok := res.(ObjectContent)
 			Expect(ok).To(BeTrue())
 			Expect(d).To(HaveKey("y"))
 			Expect(d["y"]).To(Equal([]any{nil, nil, nil, int64(12)}))
@@ -328,10 +328,10 @@ var _ = Describe("Expressions", func() {
 			res, err := exp.Evaluate(eng)
 			Expect(err).NotTo(HaveOccurred())
 
-			d, ok := res.(map[string]any)
+			d, ok := res.(ObjectContent)
 			Expect(ok).To(BeTrue())
 			Expect(d).To(HaveKey("y"))
-			Expect(d["y"]).To(Equal(map[string]any{"z": map[string]any{"c": int64(2)}}))
+			Expect(d["y"]).To(Equal(ObjectContent{"z": ObjectContent{"c": int64(2)}}))
 		})
 	})
 
@@ -480,7 +480,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 			res, err := exp.Evaluate(eng)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(Equal(map[string]any{"x": map[string]any{"a": int64(1), "b": int64(2)}}))
+			Expect(res).To(Equal(ObjectContent{"x": ObjectContent{"a": int64(1), "b": int64(2)}}))
 		})
 
 		It("should deserialize and evaluate a multi-level compound literal expression", func() {
@@ -645,8 +645,8 @@ var _ = Describe("Expressions", func() {
 			kind := reflect.ValueOf(res).Kind()
 			Expect(kind == reflect.Map).To(BeTrue(),
 				fmt.Sprintf("%q is not a map", kind))
-			Expect(reflect.ValueOf(res).Interface().(map[string]any)).
-				To(Equal(map[string]any{"dummy": []any{int64(1), int64(2), int64(3)}}))
+			Expect(reflect.ValueOf(res).Interface().(ObjectContent)).
+				To(Equal(ObjectContent{"dummy": []any{int64(1), int64(2), int64(3)}}))
 		})
 
 		It("should deserialize and evaluate a compound list expression", func() {
@@ -659,8 +659,8 @@ var _ = Describe("Expressions", func() {
 			kind := reflect.ValueOf(res).Kind()
 			Expect(kind == reflect.Map).To(BeTrue(),
 				fmt.Sprintf("%q is not a map", kind))
-			Expect(reflect.ValueOf(res).Interface().(map[string]any)).
-				To(Equal(map[string]any{"dummy": []any{int64(1), int64(2), int64(3)}}))
+			Expect(reflect.ValueOf(res).Interface().(ObjectContent)).
+				To(Equal(ObjectContent{"dummy": []any{int64(1), int64(2), int64(3)}}))
 		})
 
 		It("should deserialize and evaluate a literal list expression with multiple keys", func() {
@@ -673,8 +673,8 @@ var _ = Describe("Expressions", func() {
 			kind := reflect.ValueOf(res).Kind()
 			Expect(kind == reflect.Map).To(BeTrue(),
 				fmt.Sprintf("%q is not a map", kind))
-			Expect(reflect.ValueOf(res).Interface().(map[string]any)).
-				To(Equal(map[string]any{"dummy": []any{int64(1), int64(2), int64(3)}, "another-dummy": "a"}))
+			Expect(reflect.ValueOf(res).Interface().(ObjectContent)).
+				To(Equal(ObjectContent{"dummy": []any{int64(1), int64(2), int64(3)}, "another-dummy": "a"}))
 		})
 
 		It("should deserialize and evaluate a mixed list expression", func() {
@@ -688,7 +688,7 @@ var _ = Describe("Expressions", func() {
 			kind := reflect.ValueOf(res).Kind()
 			Expect(kind == reflect.Map).To(BeTrue(),
 				fmt.Sprintf("%q is not a map", kind))
-			Expect(res).To(Equal(map[string]any{"dummy": []any{int64(1), int64(2), int64(3)}, "x": false}))
+			Expect(res).To(Equal(ObjectContent{"dummy": []any{int64(1), int64(2), int64(3)}, "x": false}))
 		})
 
 		It("should deserialize and evaluate a compound list expression", func() {
@@ -701,10 +701,10 @@ var _ = Describe("Expressions", func() {
 			kind := reflect.ValueOf(res).Kind()
 			Expect(kind == reflect.Map).To(BeTrue(),
 				fmt.Sprintf("%q is not a map", kind))
-			Expect(reflect.ValueOf(res).Interface().(map[string]any)).
-				To(Equal(map[string]any{"another-dummy": []any{
-					map[string]any{"a": int64(1), "b": 2.2},
-					map[string]any{"x": []any{int64(1), int64(2), int64(3)}},
+			Expect(reflect.ValueOf(res).Interface().(ObjectContent)).
+				To(Equal(ObjectContent{"another-dummy": []any{
+					ObjectContent{"a": int64(1), "b": 2.2},
+					ObjectContent{"x": []any{int64(1), int64(2), int64(3)}},
 				}}))
 		})
 	})
@@ -733,7 +733,7 @@ var _ = Describe("Expressions", func() {
 			res, err := exp.Evaluate(eng)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Map))
-			Expect(res).To(Equal(map[string]any{"a": int64(1), "b": map[string]any{"c": "x"}}))
+			Expect(res).To(Equal(ObjectContent{"a": int64(1), "b": ObjectContent{"c": "x"}}))
 		})
 
 		It("should deserialize and evaluate a compound literal map expression", func() {
@@ -775,7 +775,7 @@ var _ = Describe("Expressions", func() {
 			res, err := exp.Evaluate(eng)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Map))
-			Expect(res).To(Equal(map[string]any{"a": 1.1, "b": int64(3), "c": "abba"}))
+			Expect(res).To(Equal(ObjectContent{"a": 1.1, "b": int64(3), "c": "abba"}))
 		})
 
 	})
@@ -850,7 +850,7 @@ var _ = Describe("Expressions", func() {
 
 			vs, err := asList(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(vs).To(Equal([]any{map[string]any{"x": int64(1)}, map[string]any{"x": int64(1)}}))
+			Expect(vs).To(Equal([]any{ObjectContent{"x": int64(1)}, ObjectContent{"x": int64(1)}}))
 		})
 
 		It("should evaluate a @map expression over an arithmetic expression on a literal list", func() {
@@ -879,14 +879,14 @@ var _ = Describe("Expressions", func() {
 			vs, err := asList(res)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(vs).To(Equal([]any{
-				map[string]any{
-					"metadata": map[string]any{
+				ObjectContent{
+					"metadata": ObjectContent{
 						"namespace": "default",
 						"name":      "name",
 					},
 				},
-				map[string]any{
-					"metadata": map[string]any{
+				ObjectContent{
+					"metadata": ObjectContent{
 						"namespace": "default2",
 						"name":      "name",
 					},
@@ -951,13 +951,13 @@ var _ = Describe("Expressions", func() {
 			vs, err := asList(res)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(vs).To(Equal([]any{
-				map[string]any{
-					"metadata": map[string]any{
+				ObjectContent{
+					"metadata": ObjectContent{
 						"namespace": "default",
 					},
 				},
-				map[string]any{
-					"metadata": map[string]any{
+				ObjectContent{
+					"metadata": ObjectContent{
 						"namespace": "default2",
 					},
 				},
@@ -992,8 +992,8 @@ var _ = Describe("Expressions", func() {
 			objs, err := asObjectList(eng3.view, res)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(objs).To(HaveLen(1))
-			Expect(objs[0]).To(Equal(map[string]any{
-				"metadata": map[string]any{"name": "default2"},
+			Expect(objs[0]).To(Equal(ObjectContent{
+				"metadata": ObjectContent{"name": "default2"},
 			}))
 		})
 
@@ -1016,8 +1016,8 @@ var _ = Describe("Expressions", func() {
 
 			res, err := exp.Evaluate(eng3)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(Equal(map[string]any{
-				"metadata": map[string]any{"name": "some-name"},
+			Expect(res).To(Equal(ObjectContent{
+				"metadata": ObjectContent{"name": "some-name"},
 				"len":      int64(2),
 			}))
 		})
@@ -1036,7 +1036,7 @@ var _ = Describe("Expressions", func() {
 		// 	kind := reflect.ValueOf(res).Kind()
 		// 	Expect(kind == reflect.Map).To(BeTrue(),
 		// 		fmt.Sprintf("%q is not a map", kind))
-		// 	Expect(res).To(Equal(map[string]any{"dummy": []any{int64(1), int64(2), int64(3)}}))
+		// 	Expect(res).To(Equal(ObjectContent{"dummy": []any{int64(1), int64(2), int64(3)}}))
 		// })
 
 		It("should deserialize and evaluate complex artithmetic expressions", func() {
@@ -1069,7 +1069,7 @@ var _ = Describe("Expressions", func() {
 			res, err := exp.Evaluate(eng)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Map))
-			Expect(res).To(Equal(map[string]any{"a": int64(1), "b": map[string]any{"c": true}}))
+			Expect(res).To(Equal(ObjectContent{"a": int64(1), "b": ObjectContent{"c": true}}))
 		})
 
 		It("should deserialize and err for simple invalid comparisons", func() {

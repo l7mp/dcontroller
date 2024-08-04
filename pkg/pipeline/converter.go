@@ -295,24 +295,24 @@ func asExpOrList(d any) ([]Expression, error) {
 	return []Expression{exp}, nil
 }
 
-func asObject(view string, d any) (map[string]any, error) {
+func asObject(view string, d any) (ObjectContent, error) {
 	val := reflect.ValueOf(d)
 	if val.Kind() == reflect.Map {
 		p := val.Interface()
-		if u, ok := p.(map[string]any); ok && u != nil {
+		if u, ok := p.(ObjectContent); ok && u != nil {
 			return u, nil
 		}
 	}
 	return nil, fmt.Errorf("argument is not an object: %#v", d)
 }
 
-func asObjectList(view string, d any) ([]map[string]any, error) {
+func asObjectList(view string, d any) ([]ObjectContent, error) {
 	if !isList(d) {
 		return nil, fmt.Errorf("argument is not a list: %#v", d)
 	}
 
 	dv := reflect.ValueOf(d)
-	ret := []map[string]any{}
+	ret := []ObjectContent{}
 	for i := 0; i < dv.Len(); i++ {
 		arg, err := asObject(view, dv.Index(i).Interface())
 		if err != nil {

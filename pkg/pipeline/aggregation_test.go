@@ -15,18 +15,18 @@ var _ = Describe("Aggregations", func() {
 	BeforeEach(func() {
 		objs = []*object.Object{
 			object.New("view").WithName("default", "name").
-				WithContent(map[string]any{
-					"spec": map[string]any{
+				WithContent(ObjectContent{
+					"spec": ObjectContent{
 						"a": int64(1),
-						"b": map[string]any{"c": int64(2)},
+						"b": ObjectContent{"c": int64(2)},
 					},
 					"c": "c",
 				}),
 			object.New("view").WithName("default", "name2").
-				WithContent(map[string]any{
-					"spec": map[string]any{
+				WithContent(ObjectContent{
+					"spec": ObjectContent{
 						"a": int64(2),
-						"b": map[string]any{"c": int64(3)},
+						"b": ObjectContent{"c": int64(3)},
 					},
 					"d": "d",
 				}),
@@ -113,10 +113,10 @@ var _ = Describe("Aggregations", func() {
 		// 		Expect(err).NotTo(HaveOccurred())
 		// 		Expect(s.Object).To(Equal(&object.Object{
 		// 			Unstructured: unstructured.Unstructured{
-		// 				Object: map[string]any{
+		// 				Object: ObjectContent{
 		// 					"apiVersion": "dcontroller.github.io/v1alpha1",
 		// 					"kind":       "view",
-		// 					"metadata": map[string]any{
+		// 					"metadata": ObjectContent{
 		// 						"name":      "name",
 		// 						"namespace": "",
 		// 					},
@@ -135,7 +135,7 @@ var _ = Describe("Aggregations", func() {
 		// 		Expect(err).NotTo(HaveOccurred())
 		// 		raw, ok := s.Object.Object["metadata"]
 		// 		Expect(ok).To(BeTrue())
-		// 		meta, ok := raw.(map[string]any)
+		// 		meta, ok := raw.(ObjectContent)
 		// 		Expect(ok).To(BeTrue())
 		// 		Expect(meta["namespace"]).To(Equal("default"))
 		// 		Expect(meta["name"]).To(Equal("name"))
@@ -150,7 +150,7 @@ var _ = Describe("Aggregations", func() {
 		// 		Expect(err).NotTo(HaveOccurred())
 		// 		raw, ok := s.Object.Object["metadata"]
 		// 		Expect(ok).To(BeTrue())
-		// 		meta, ok := raw.(map[string]any)
+		// 		meta, ok := raw.(ObjectContent)
 		// 		Expect(ok).To(BeTrue())
 		// 		Expect(meta["namespace"]).To(Equal("default"))
 		// 		Expect(meta["name"]).To(Equal("name"))
