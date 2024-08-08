@@ -5,173 +5,198 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
 var _ = Describe("Aggregations", func() {
 	var objs []*object.Object
+	var eng *DefaultEngine
 
 	BeforeEach(func() {
 		objs = []*object.Object{
 			object.New("view").WithName("default", "name").
-				WithContent(ObjectContent{
-					"spec": ObjectContent{
+				WithContent(Unstructured{
+					"spec": Unstructured{
 						"a": int64(1),
-						"b": ObjectContent{"c": int64(2)},
+						"b": Unstructured{"c": int64(2)},
 					},
 					"c": "c",
 				}),
 			object.New("view").WithName("default", "name2").
-				WithContent(ObjectContent{
-					"spec": ObjectContent{
+				WithContent(Unstructured{
+					"spec": Unstructured{
 						"a": int64(2),
-						"b": ObjectContent{"c": int64(3)},
+						"b": Unstructured{"c": int64(3)},
 					},
 					"d": "d",
 				}),
 		}
+		eng = NewDefaultEngine("view", emptyView, logger)
 	})
 
-	Describe("Evaluating filter aggregations", func() {
-		It("should evaluate true filter expression", func() {
-			jsonData := `{"@filter":{"@eq":["$.metadata.name","name"]}}`
+	Describe("Evaluating select aggregations", func() {
+		It("should evaluate true select expression", func() {
+			jsonData := `{"@aggregate":[{"@select":{"@eq":["$.metadata.name","name"]}}]}`
 			var ag Aggregation
 			err := json.Unmarshal([]byte(jsonData), &ag)
 			Expect(err).NotTo(HaveOccurred())
 
-			res, err := ag.Run("view", objs, logger)
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(1))
-			Expect(res[0]).To(Equal(objs[0]))
+			Expect(res.IsUnchanged()).To(BeFalse())
+			Expect(res).To(Equal(cache.Delta{Type: cache.Added, Object: objs[0]}))
+
+			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[1]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res.IsUnchanged()).To(BeTrue())
 		})
 
-		It("should evaluate a false filter expression", func() {
-			jsonData := `{"@filter":{"@eq":["$.spec.b.c",1]}}`
+		It("should evaluate a false select expression", func() {
+			jsonData := `{"@aggregate":[{"@select":{"@eq":["$.spec.b.c",1]}}]}`
 			var ag Aggregation
 			err := json.Unmarshal([]byte(jsonData), &ag)
 			Expect(err).NotTo(HaveOccurred())
 
-			res, err := ag.Run("view", objs, logger)
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(0))
+			Expect(res.IsUnchanged()).To(BeTrue())
+
+			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[1]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res.IsUnchanged()).To(BeTrue())
 		})
 
-		It("should evaluate an inverted false filter expression", func() {
-			jsonData := `{"@filter":{"@not":{"@eq":["$.spec.b.c",1]}}}`
+		It("should evaluate an inverted false select expression", func() {
+			jsonData := `{"@aggregate":[{"@select":{"@not":{"@eq":["$.spec.b.c",1]}}}]}`
 			var ag Aggregation
 			err := json.Unmarshal([]byte(jsonData), &ag)
 			Expect(err).NotTo(HaveOccurred())
 
-			res, err := ag.Run("view", objs, logger)
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(2))
-			Expect(res).To(Equal(objs))
+			Expect(res.IsUnchanged()).To(BeFalse())
+			Expect(res).To(Equal(cache.Delta{Type: cache.Added, Object: objs[0]}))
+
+			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[1]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res.IsUnchanged()).To(BeFalse())
+			Expect(res).To(Equal(cache.Delta{Type: cache.Added, Object: objs[1]}))
 		})
 
-		It("should err for a filter expression referring to a nonexistent field", func() {
-			jsonData := `{"@filter":{"@eq":["$.spec.x",true]}}`
+		It("should not err for a select expression referring to a nonexistent field", func() {
+			jsonData := `{"@aggregate":[{"@select":{"@eq":["$.spec.x",true]}}]}`
 			var ag Aggregation
 			err := json.Unmarshal([]byte(jsonData), &ag)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = ag.Run("view", objs, logger)
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res.IsUnchanged()).To(BeTrue())
+		})
+	})
+
+	Describe("Evaluating projection aggregations", func() {
+		It("should evaluate a simple projection expression", func() {
+			jsonData := `{"@aggregate":[{"@project":{"metadata":{"name":"$.metadata.name"}}}]}`
+			var ag Aggregation
+			err := json.Unmarshal([]byte(jsonData), &ag)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ag.Expressions).To(HaveLen(1))
+			Expect(ag.Expressions[0]).To(Equal(Expression{
+				Op: "@project",
+				Arg: &Expression{
+					Op: "@dict",
+					Literal: map[string]Expression{
+						"metadata": {
+							Op: "@dict",
+							Literal: map[string]Expression{
+								"name": {
+									Op:      "@string",
+									Literal: "$.metadata.name",
+									Raw:     "\"$.metadata.name\"",
+								},
+							},
+							Raw: "{\"name\":\"$.metadata.name\"}",
+						},
+					},
+					Raw: "{\"metadata\":{\"name\":\"$.metadata.name\"}}",
+				},
+				Raw: ag.Expressions[0].Raw,
+			}))
+
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(res.Type).To(Equal(cache.Updated))
+			Expect(res.Object).To(Equal(&object.Object{
+				Unstructured: unstructured.Unstructured{
+					Object: Unstructured{
+						"apiVersion": "dcontroller.github.io/v1alpha1",
+						"kind":       "view",
+						"metadata": Unstructured{
+							"name": "name",
+						},
+					},
+				},
+				View: "view",
+			}))
+		})
+
+		It("should evaluate a projection expression with multiple fields", func() {
+			jsonData := `{"@aggregate":[{"@project":{"metadata":{"name":"$.metadata.name","namespace":"$.metadata.namespace"}}}]}`
+			var ag Aggregation
+			err := json.Unmarshal([]byte(jsonData), &ag)
+			Expect(err).NotTo(HaveOccurred())
+
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(res.Type).To(Equal(cache.Updated))
+			raw, ok := res.Object.Object["metadata"]
+			Expect(ok).To(BeTrue())
+			meta, ok := raw.(Unstructured)
+			Expect(ok).To(BeTrue())
+			Expect(meta["namespace"]).To(Equal("default"))
+			Expect(meta["name"]).To(Equal("name"))
+		})
+
+		It("should evaluate a projection expression that copies a subtree", func() {
+			jsonData := `{"@aggregate":[{"@project":{"metadata":"$.metadata"}}]}`
+			var ag Aggregation
+			err := json.Unmarshal([]byte(jsonData), &ag)
+			Expect(err).NotTo(HaveOccurred())
+
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+
+			raw, ok := res.Object.Object["metadata"]
+			Expect(ok).To(BeTrue())
+			meta, ok := raw.(Unstructured)
+			Expect(ok).To(BeTrue())
+			Expect(meta["namespace"]).To(Equal("default"))
+			Expect(meta["name"]).To(Equal("name"))
+		})
+
+		It("should err for a projection that drops .metadata.name", func() {
+			jsonData := `{"@aggregate":[{"@project":{"spec":"$.spec"}}]}`
+			var ag Aggregation
+			err := json.Unmarshal([]byte(jsonData), &ag)
+
+			_, err = ag.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: objs[0]})
 			Expect(err).To(HaveOccurred())
 		})
 
-		// Describe("Evaluating projection aggregations", func() {
-		// 	It("should evaluate a simple projection expression", func() {
-		// 		jsonData := `{"@project":{"metadata":{"name":"$.metadata.name"}}}`
-		// 		var ag Aggregation
-		// 		err := json.Unmarshal([]byte(jsonData), &ag)
-		// 		Expect(err).NotTo(HaveOccurred())
-		// 		Expect(ag).To(Equal(Aggregation{
-		// 			Filter: nil,
-		// 			Map:    nil,
-		// 			Set: &Set{
-		// 				Setters: Expression{
-		// 					Op: "@dict",
-		// 					Literal: map[string]Expression{
-		// 						"metadata": {
-		// 							Op: "@dict",
-		// 							Literal: map[string]Expression{
-		// 								"name": {
-		// 									Op:      "@string",
-		// 									Literal: "$.metadata.name",
-		// 									Raw:     "\"$.metadata.name\"",
-		// 								},
-		// 							},
-		// 							Raw: "{\"name\":\"$.metadata.name\"}",
-		// 						},
-		// 					},
-		// 					Raw: "{\"metadata\":{\"name\":\"$.metadata.name\"}}",
-		// 				},
-		// 			},
-		// 		}))
-		// 		s, err := ag.Evaluate(state)
+		It("should err for a projection that asks for a non-existent field", func() {
+			jsonData := `{"@aggregate":[{"@project":{"x": "$.spec.x"}}]}`
+			var ag Aggregation
+			err := json.Unmarshal([]byte(jsonData), &ag)
+			Expect(err).NotTo(HaveOccurred())
 
-		// 		Expect(err).NotTo(HaveOccurred())
-		// 		Expect(s.Object).To(Equal(&object.Object{
-		// 			Unstructured: unstructured.Unstructured{
-		// 				Object: ObjectContent{
-		// 					"apiVersion": "dcontroller.github.io/v1alpha1",
-		// 					"kind":       "view",
-		// 					"metadata": ObjectContent{
-		// 						"name":      "name",
-		// 						"namespace": "",
-		// 					},
-		// 				},
-		// 			},
-		// 			View: "view",
-		// 		}))
-		// 	})
-
-		// 	It("should evaluate a projection expression with multiple fields", func() {
-		// 		jsonData := `{"@project":{"metadata":{"name":"$.metadata.name","namespace":"$.metadata.namespace"}}}`
-		// 		var ag Aggregation
-		// 		err := json.Unmarshal([]byte(jsonData), &ag)
-		// 		Expect(err).NotTo(HaveOccurred())
-		// 		s, err := ag.Evaluate(state)
-		// 		Expect(err).NotTo(HaveOccurred())
-		// 		raw, ok := s.Object.Object["metadata"]
-		// 		Expect(ok).To(BeTrue())
-		// 		meta, ok := raw.(ObjectContent)
-		// 		Expect(ok).To(BeTrue())
-		// 		Expect(meta["namespace"]).To(Equal("default"))
-		// 		Expect(meta["name"]).To(Equal("name"))
-		// 	})
-
-		// 	It("should evaluate a projection expression that copies a subtree", func() {
-		// 		jsonData := `{"@project":{"metadata":"$.metadata"}}`
-		// 		var ag Aggregation
-		// 		err := json.Unmarshal([]byte(jsonData), &ag)
-		// 		Expect(err).NotTo(HaveOccurred())
-		// 		s, err := ag.Evaluate(state)
-		// 		Expect(err).NotTo(HaveOccurred())
-		// 		raw, ok := s.Object.Object["metadata"]
-		// 		Expect(ok).To(BeTrue())
-		// 		meta, ok := raw.(ObjectContent)
-		// 		Expect(ok).To(BeTrue())
-		// 		Expect(meta["namespace"]).To(Equal("default"))
-		// 		Expect(meta["name"]).To(Equal("name"))
-		// 	})
-
-		// 	It("should err for a projection that drops .metadata.name", func() {
-		// 		jsonData := `{"@project":{"spec":"$.spec"}}`
-		// 		var ag Aggregation
-		// 		err := json.Unmarshal([]byte(jsonData), &ag)
-		// 		Expect(err).NotTo(HaveOccurred())
-		// 		_, err = ag.Evaluate(state)
-		// 		Expect(err).To(HaveOccurred())
-		// 	})
-
-		// 	It("should err for a projection that asks for a non-existent field", func() {
-		// 		jsonData := `{"@project":{"x": "$.spec.x"}}`
-		// 		var ag Aggregation
-		// 		err := json.Unmarshal([]byte(jsonData), &ag)
-		// 		Expect(err).NotTo(HaveOccurred())
-		// 		_, err = ag.Evaluate(state)
-		// 		Expect(err).To(HaveOccurred())
-		// 	})
+			_, err = ag.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: objs[0]})
+			Expect(err).To(HaveOccurred())
+		})
 	})
 })

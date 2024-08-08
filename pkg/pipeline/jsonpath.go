@@ -7,50 +7,34 @@ import (
 	"github.com/ohler55/ojg/jp"
 )
 
-func (e *Expression) GetJSONPath(eng *Engine, key string) (any, error) {
+func (e *Expression) GetJSONPath(ctx expEvalCtx, key string) (any, error) {
 	if len(key) == 0 || key[0] != '$' {
 		return key, nil
 	}
 
-	// $@ evaluates to the actual object list
-	if key == "$@" {
-		objs := make([]any, len(eng.inputs))
-		for i := range eng.inputs {
-			objs[i] = eng.inputs[i]
-		}
-		return objs, nil
-	}
-
-	// stack must exist
-	if eng.isStackEmpty() {
-		return nil, NewExpressionError(e.Op, e.Raw,
-			errors.New("cannot evalutate JSONPath expression: empty stack"))
-	}
-
-	// leave arg on the stack
-	ret, err := GetJSONPathExp(key, eng.peekStack())
+	ret, err := GetJSONPathExp(key, ctx.subject)
 	if err != nil {
 		return nil, NewExpressionError(e.Op, e.Raw, err)
 	}
 	return ret, nil
 }
 
-func (e *Expression) SetJSONPath(eng *Engine, key string, value, data any) error {
+func (e *Expression) SetJSONPath(ctx expEvalCtx, key string, value, data any) error {
 	if len(key) == 0 {
 		return errors.New("empty key")
 	}
 
 	// first get the value
 	if str, ok := value.(string); ok {
-		res, err := e.GetJSONPath(eng, str)
+		res, err := e.GetJSONPath(ctx, str)
 		if err != nil {
-			return err
+			return NewExpressionError(e.Op, e.Raw, err)
 		}
 		value = res
 	}
 
 	// if not a JSONpath, just set it as is
-	if d, ok := data.(ObjectContent); ok && key[0] != '$' {
+	if d, ok := data.(Unstructured); ok && key[0] != '$' {
 		d[key] = value
 		return nil
 	}

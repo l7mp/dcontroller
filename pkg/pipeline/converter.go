@@ -295,26 +295,26 @@ func asExpOrList(d any) ([]Expression, error) {
 	return []Expression{exp}, nil
 }
 
-func asObject(view string, d any) (ObjectContent, error) {
+func asObject(d any) (Unstructured, error) {
 	val := reflect.ValueOf(d)
 	if val.Kind() == reflect.Map {
 		p := val.Interface()
-		if u, ok := p.(ObjectContent); ok && u != nil {
+		if u, ok := p.(Unstructured); ok && u != nil {
 			return u, nil
 		}
 	}
 	return nil, fmt.Errorf("argument is not an object: %#v", d)
 }
 
-func asObjectList(view string, d any) ([]ObjectContent, error) {
+func asObjectList(d any) ([]Unstructured, error) {
 	if !isList(d) {
 		return nil, fmt.Errorf("argument is not a list: %#v", d)
 	}
 
 	dv := reflect.ValueOf(d)
-	ret := []ObjectContent{}
+	ret := []Unstructured{}
 	for i := 0; i < dv.Len(); i++ {
-		arg, err := asObject(view, dv.Index(i).Interface())
+		arg, err := asObject(dv.Index(i).Interface())
 		if err != nil {
 			return nil, err
 		}
