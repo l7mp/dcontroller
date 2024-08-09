@@ -6,6 +6,8 @@ import (
 	toolscache "k8s.io/client-go/tools/cache"
 )
 
+type DeltaType = toolscache.DeltaType
+
 const (
 	Added    = toolscache.Added
 	Deleted  = toolscache.Deleted

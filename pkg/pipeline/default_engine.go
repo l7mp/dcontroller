@@ -44,39 +44,32 @@ func (eng *DefaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 		return cache.Delta{}, NewAggregationError(a.String(), err)
 	}
 
-	switch a.Op {
-	case "@aggregate":
-		content := delta.Object.UnstructuredContent()
-		for _, s := range a.Expressions {
-			res, err := eng.evalStage(&s, content)
-			if err != nil {
-				return cache.Delta{}, NewAggregationError(a.String(), err)
-			}
-
-			content = res
-
-			if content == nil {
-				// @select shortcuts the iteration
-				return cache.NilDelta, nil
-			}
-
-		}
-
-		obj, err := Normalize(eng, content)
+	content := delta.Object.UnstructuredContent()
+	for _, s := range a.Expressions {
+		res, err := eng.evalStage(&s, content)
 		if err != nil {
 			return cache.Delta{}, NewAggregationError(a.String(), err)
 		}
 
-		d := cache.Delta{Object: obj, Type: delta.Type}
+		content = res
 
-		eng.Log().V(4).Info("eval ready", "aggregation", a.String(), "result", d)
+		if content == nil {
+			// @select shortcuts the iteration
+			return cache.NilDelta, nil
+		}
 
-		return d, nil
-
-	default:
-		return cache.Delta{}, NewAggregationError(a.String(),
-			errors.New("unknown aggregation"))
 	}
+
+	obj, err := Normalize(eng, content)
+	if err != nil {
+		return cache.Delta{}, NewAggregationError(a.String(), err)
+	}
+
+	d := cache.Delta{Object: obj, Type: delta.Type}
+
+	eng.Log().V(4).Info("eval ready", "aggregation", a.String(), "result", d)
+
+	return d, nil
 }
 
 func (eng *DefaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured, error) {
@@ -135,7 +128,8 @@ func (eng *DefaultEngine) EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 		return ds, err
 	}
 
-	// clean up __id
+	// clean up __id (must do outside the main join routine because evaluateJoin calls itself
+	// on Updates)
 	for _, d := range ds {
 		if d.Object != nil {
 			delete(d.Object.UnstructuredContent(), "__id")

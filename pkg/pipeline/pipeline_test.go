@@ -1,12 +1,15 @@
 package pipeline
 
 import (
+	"hsnlab/dcontroller-runtime/pkg/cache"
+	"hsnlab/dcontroller-runtime/pkg/object"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap/zapcore"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/yaml"
 )
 
 var (
@@ -25,7 +28,291 @@ func TestPipeline(t *testing.T) {
 	RunSpecs(t, "Pipeline")
 }
 
-var TestGw = map[string]any{
+var _ = Describe("Pipelines", func() {
+	var dep1, dep2, pod1, pod2, pod3, rs1, rs2 *object.Object
+	var eng *DefaultEngine
+
+	BeforeEach(func() {
+		pod1 = object.New("pod").WithName("default", "pod1").
+			WithContent(Unstructured{
+				"spec": Unstructured{
+					"image":  "image1",
+					"parent": "dep1",
+				},
+			})
+		pod1.SetLabels(map[string]string{"app": "app1"})
+
+		pod2 = object.New("pod").WithName("other", "pod2").
+			WithContent(Unstructured{
+				"spec": Unstructured{
+					"image":  "image2",
+					"parent": "dep1",
+				},
+			})
+		pod2.SetLabels(map[string]string{"app": "app2"})
+
+		pod3 = object.New("pod").WithName("default", "pod3").
+			WithContent(Unstructured{
+				"spec": Unstructured{
+					"image":  "image1",
+					"parent": "dep2",
+				},
+			})
+		pod3.SetLabels(map[string]string{"app": "app1"})
+
+		dep1 = object.New("dep").WithName("default", "dep1").
+			WithContent(Unstructured{
+				"spec": Unstructured{
+					"replicas": int64(3),
+				},
+			})
+		dep1.SetLabels(map[string]string{"app": "app1"})
+
+		dep2 = object.New("dep").WithName("default", "dep2").
+			WithContent(Unstructured{
+				"spec": Unstructured{
+					"replicas": int64(1),
+				},
+			})
+		dep2.SetLabels(map[string]string{"app": "app2"})
+
+		rs1 = object.New("rs").WithName("default", "rs1").
+			WithContent(Unstructured{
+				"spec": Unstructured{
+					"dep": "dep1",
+				},
+				"status": Unstructured{
+					"ready": int64(2),
+				},
+			})
+		rs1.SetLabels(map[string]string{"app": "app1"})
+
+		rs2 = object.New("rs").WithName("default", "rs2").
+			WithContent(Unstructured{
+				"spec": Unstructured{
+					"dep": "dep2",
+				},
+				"status": Unstructured{
+					"ready": int64(1),
+				},
+			})
+		rs2.SetLabels(map[string]string{"app": "app2"})
+
+		eng = NewDefaultEngine("view", []string{"pod", "dep", "rs"}, logger)
+	})
+
+	Describe("Evaluating pipeline expressions for Added events", func() {
+		It("should evaluate a simple pipeline", func() {
+			jsonData := `
+'@join':
+  '@eq':
+    - $.dep.metadata.name
+    - $.pod.spec.parent
+'@aggregate':
+  - '@project':
+      $.metadata.name:
+        '@concat':
+          - $.dep.metadata.name
+          - "--"
+          - $.pod.metadata.name
+      $.metadata.namespace: $.pod.metadata.namespace`
+			var p Pipeline
+			err := yaml.Unmarshal([]byte(jsonData), &p)
+			Expect(err).NotTo(HaveOccurred())
+
+			eng.add(dep1, dep2)
+			Expect(eng.views["dep"].List()).To(HaveLen(2))
+			Expect(eng.views).NotTo(HaveKey("pod"))
+
+			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(eng.views).To(HaveKey("pod"))
+
+			Expect(deltas).To(HaveLen(1))
+			delta := deltas[0]
+			Expect(delta.IsUnchanged()).To(BeFalse())
+			Expect(delta.Object.GetName()).To(Equal("dep1--pod1"))
+			Expect(delta.Object.GetNamespace()).To(Equal("default"))
+			Expect(delta.Object.UnstructuredContent()).To(Equal(Unstructured{
+				"apiVersion": "dcontroller.github.io/v1alpha1",
+				"kind":       "view",
+				"metadata": Unstructured{
+					"name":      "dep1--pod1",
+					"namespace": "default",
+				},
+			}))
+		})
+
+		It("should evaluate a pipeline without a @join", func() {
+			jsonData := `
+'@aggregate':
+  - '@project':
+      $.metadata: $.metadata`
+			var p Pipeline
+			err := yaml.Unmarshal([]byte(jsonData), &p)
+			Expect(err).NotTo(HaveOccurred())
+
+			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(deltas).To(HaveLen(1))
+			delta := deltas[0]
+			Expect(delta.IsUnchanged()).To(BeFalse())
+			Expect(delta.Object.GetName()).To(Equal("pod1"))
+			Expect(delta.Object.GetNamespace()).To(Equal("default"))
+			Expect(delta.Object.UnstructuredContent()).To(Equal(Unstructured{
+				"apiVersion": "dcontroller.github.io/v1alpha1",
+				"kind":       "view",
+				"metadata": Unstructured{
+					"name":      "pod1",
+					"namespace": "default",
+					"labels":    map[string]any{"app": "app1"},
+				},
+			}))
+		})
+	})
+
+	Describe("Evaluating pipeline expressions for Update events", func() {
+		It("should evaluate a simple pipeline - 1", func() {
+			jsonData := `
+'@join':
+  '@and':
+    - '@eq':
+        - $.dep.metadata.name
+        - $.pod.spec.parent
+    - '@eq':
+        - $.dep.metadata.name
+        - $.rs.spec.dep
+'@aggregate':
+  - '@project':
+      $.metadata: $.pod.metadata
+      $.replicas: $.dep.spec.replicas
+      $.ready: $.rs.status.ready`
+			var p Pipeline
+			err := yaml.Unmarshal([]byte(jsonData), &p)
+			Expect(err).NotTo(HaveOccurred())
+
+			eng.add(pod1, pod2, pod3, dep2, rs1, rs2)
+			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: dep1})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(deltas).To(HaveLen(2))
+			delta := deltas[0]
+			if delta.Object.GetName() != "pod1" {
+				delta = deltas[1]
+			}
+			Expect(delta.IsUnchanged()).To(BeFalse())
+			Expect(delta.Object.GetName()).To(Equal("pod1"))
+			Expect(delta.Object.GetNamespace()).To(Equal("default"))
+			Expect(delta.Object.UnstructuredContent()["replicas"]).To(Equal(int64(3)))
+			Expect(delta.Object.UnstructuredContent()["ready"]).To(Equal(int64(2)))
+
+			delta = deltas[1]
+			if delta.Object.GetName() != "pod2" {
+				delta = deltas[0]
+			}
+			Expect(delta.IsUnchanged()).To(BeFalse())
+			Expect(delta.Object.GetName()).To(Equal("pod2"))
+			Expect(delta.Object.GetNamespace()).To(Equal("other"))
+			Expect(delta.Object.UnstructuredContent()["replicas"]).To(Equal(int64(3)))
+			Expect(delta.Object.UnstructuredContent()["ready"]).To(Equal(int64(2)))
+
+			// rewrite pod1 parent
+			// oldpod1 := pod1.DeepCopy()
+			pod1.UnstructuredContent()["spec"].(Unstructured)["parent"] = "dep2"
+			deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: pod1})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(deltas).To(HaveLen(1))
+			delta = deltas[0]
+			Expect(delta.IsUnchanged()).To(BeFalse())
+			Expect(delta.Type).To(Equal(cache.Updated))
+			Expect(delta.Object.GetName()).To(Equal("pod1"))
+			Expect(delta.Object.GetNamespace()).To(Equal("default"))
+			Expect(delta.Object.UnstructuredContent()["replicas"]).To(Equal(int64(1)))
+			Expect(delta.Object.UnstructuredContent()["ready"]).To(Equal(int64(1)))
+		})
+
+		// almost the same as the previous but now the two updates (delete+add) must not collapse
+		It("should evaluate a simple pipeline - 2", func() {
+			jsonData := `
+'@join':
+  '@and':
+    - '@eq':
+        - $.dep.metadata.name
+        - $.pod.spec.parent
+    - '@eq':
+        - $.dep.metadata.name
+        - $.rs.spec.dep
+'@aggregate':
+  - '@project':
+      metadata:
+        namespace: $.dep.metadata.namespace
+        name:
+          "@concat":
+            - $.dep.metadata.name
+            - "--"
+            - $.pod.metadata.name
+      $.metadata.namespace: $.dep.metadata.namespace
+      $.replicas: $.dep.spec.replicas
+      $.ready: $.rs.status.ready`
+			var p Pipeline
+			err := yaml.Unmarshal([]byte(jsonData), &p)
+			Expect(err).NotTo(HaveOccurred())
+
+			eng.add(pod1, pod2, pod3, dep2, rs1, rs2)
+			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: dep1})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(deltas).To(HaveLen(2))
+			delta := deltas[0]
+			if delta.Object.GetName() != "dep1--pod1" {
+				delta = deltas[1]
+			}
+			Expect(delta.IsUnchanged()).To(BeFalse())
+			Expect(delta.Object.GetName()).To(Equal("dep1--pod1"))
+			Expect(delta.Object.GetNamespace()).To(Equal("default"))
+			Expect(delta.Object.UnstructuredContent()["replicas"]).To(Equal(int64(3)))
+			Expect(delta.Object.UnstructuredContent()["ready"]).To(Equal(int64(2)))
+
+			delta = deltas[1]
+			if delta.Object.GetName() != "dep1--pod2" {
+				delta = deltas[0]
+			}
+			Expect(delta.IsUnchanged()).To(BeFalse())
+			Expect(delta.Object.GetName()).To(Equal("dep1--pod2"))
+			Expect(delta.Object.GetNamespace()).To(Equal("default"))
+			Expect(delta.Object.UnstructuredContent()["replicas"]).To(Equal(int64(3)))
+			Expect(delta.Object.UnstructuredContent()["ready"]).To(Equal(int64(2)))
+
+			// rewrite pod1 parent
+			// oldpod1 := pod1.DeepCopy()
+			pod1.UnstructuredContent()["spec"].(Unstructured)["parent"] = "dep2"
+			deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: pod1})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(deltas).To(HaveLen(2))
+
+			delta = deltas[0]
+			Expect(delta.IsUnchanged()).To(BeFalse())
+			Expect(delta.Type).To(Equal(cache.Deleted))
+			Expect(delta.Object.GetName()).To(Equal("dep1--pod1"))
+			Expect(delta.Object.GetNamespace()).To(Equal("default"))
+			Expect(delta.Object.UnstructuredContent()["replicas"]).To(Equal(int64(3)))
+			Expect(delta.Object.UnstructuredContent()["ready"]).To(Equal(int64(2)))
+
+			delta = deltas[1]
+			Expect(delta.IsUnchanged()).To(BeFalse())
+			Expect(delta.Type).To(Equal(cache.Added))
+			Expect(delta.Object.GetName()).To(Equal("dep2--pod1"))
+			Expect(delta.Object.GetNamespace()).To(Equal("default"))
+			Expect(delta.Object.UnstructuredContent()["replicas"]).To(Equal(int64(1)))
+			Expect(delta.Object.UnstructuredContent()["ready"]).To(Equal(int64(1)))
+		})
+	})
+})
+
+var testUDPGateway = map[string]any{
 	"apiVersion": "gateway.networking.k8s.io/v1",
 	"kind":       "Gateway",
 	"metadata": map[string]any{
@@ -117,6 +404,102 @@ var TestGw = map[string]any{
 					map[string]any{
 						"group": "stunner.l7mp.io",
 						"kind":  "UDPRoute",
+					},
+				},
+			},
+		},
+	},
+}
+
+var testUDPRoute = map[string]any{
+	"apiVersion": "stunner.l7mp.io/v1",
+	"kind":       "UDPRoute",
+	"metadata": map[string]any{
+		"annotations": map[string]any{
+			"kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"stunner.l7mp.io/v1\",\"kind\":\"UDPRoute\",\"metadata\":{\"annotations\":{},\"name\":\"iperf-server\",\"namespace\":\"stunner\"},\"spec\":{\"parentRefs\":[{\"name\":\"udp-gateway\"},{\"name\":\"tcp-gateway\"}],\"rules\":[{\"backendRefs\":[{\"name\":\"iperf-server\",\"namespace\":\"default\"}]}]}}\n",
+		},
+		"creationTimestamp": "2024-07-16T09:36:59Z",
+		"generation":        1,
+		"name":              "iperf-server",
+		"namespace":         "stunner",
+		"resourceVersion":   "67544699",
+		"uid":               "41c31a35-c7bc-4465-a1af-185ab4b00f90",
+	},
+	"spec": map[string]any{
+		"parentRefs": []any{
+			map[string]any{
+				"group": "gateway.networking.k8s.io",
+				"kind":  "Gateway",
+				"name":  "udp-gateway",
+			}, map[string]any{
+				"group": "gateway.networking.k8s.io",
+				"kind":  "Gateway",
+				"name":  "tcp-gateway",
+			}},
+		"rules": []any{
+			map[string]any{
+				"backendRefs": []any{
+					map[string]any{
+						"group":     "",
+						"kind":      "Service",
+						"name":      "iperf-server",
+						"namespace": "default",
+					},
+				},
+			},
+		},
+		"status": map[string]any{
+			"parents": []any{
+				map[string]any{
+					"conditions": []any{
+						map[string]any{
+							"lastTransitionTime": "2024-08-09T07:10:06Z",
+							"message":            "parent accepts the route",
+							"observedGeneration": 1,
+							"reason":             "Accepted",
+							"status":             "True",
+							"type":               "Accepted",
+						},
+						map[string]any{
+							"lastTransitionTime": "2024-08-09T07:10:06Z",
+							"message":            "all backend references successfully resolved",
+							"observedGeneration": 1,
+							"reason":             "ResolvedRefs",
+							"status":             "True",
+							"type":               "ResolvedRefs",
+						},
+					},
+					"controllerName": "stunner.l7mp.io/gateway-operator",
+					"parentRef": map[string]any{
+						"group": "gateway.networking.k8s.io",
+						"kind":  "Gateway",
+						"name":  "udp-gateway",
+					},
+				},
+				map[string]any{
+					"conditions": []any{
+						map[string]any{
+							"lastTransitionTime": "2024-08-09T07:10:06Z",
+							"message":            "parent accepts the route",
+							"observedGeneration": 1,
+							"reason":             "Accepted",
+							"status":             "True",
+							"type":               "Accepted",
+						},
+						map[string]any{
+							"lastTransitionTime": "2024-08-09T07:10:06Z",
+							"message":            "all backend references successfully resolved",
+							"observedGeneration": 1,
+							"reason":             "ResolvedRefs",
+							"status":             "True",
+							"type":               "ResolvedRefs",
+						},
+					},
+					"controllerName": "stunner.l7mp.io/gateway-operator",
+					"parentRef": map[string]any{
+						"group": "gateway.networking.k8s.io",
+						"kind":  "Gateway",
+						"name":  "tcp-gateway",
 					},
 				},
 			},
