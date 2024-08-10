@@ -924,6 +924,156 @@ var _ = Describe("Expressions", func() {
 		})
 	})
 
+	Describe("Evaluating label selectors", func() {
+		It("should evaluate a @selector expression on a literal labelset", func() {
+			jsonData := `{"@selector":[{"matchLabels":{"app":"nginx"}},{"app":"nginx"}]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := asBool(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(true))
+		})
+
+		It("should evaluate a @selector expression using the short form", func() {
+			jsonData := `{"@selector":[{"app":"nginx"},{"app":"nginx"}]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := asBool(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(true))
+		})
+
+		It("should evaluate a @selector expression on an object's labels", func() {
+			jsonData := `{"@selector":[{"app":"nginx"},"$.metadata.labels"]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			obj := obj1.DeepCopy()
+			obj.SetLabels(map[string]string{"app": "nginx"})
+			ctx := evalCtx{object: obj.UnstructuredContent(), log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := asBool(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(true))
+
+			obj.SetLabels(map[string]string{"app": "apache"})
+			ctx = evalCtx{object: obj.UnstructuredContent(), log: logger}
+			res, err = exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err = asBool(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(false))
+		})
+
+		It("should evaluate a @selector containing a matchLabels expression on an object's labels", func() {
+			jsonData := `{"@selector":[{"matchLabels":{"app":"nginx"}},"$.metadata.labels"]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			obj := obj1.DeepCopy()
+			obj.SetLabels(map[string]string{"app": "nginx"})
+			ctx := evalCtx{object: obj.UnstructuredContent(), log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := asBool(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(true))
+
+			obj.SetLabels(map[string]string{"app": "apache"})
+			ctx = evalCtx{object: obj.UnstructuredContent(), log: logger}
+			res, err = exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err = asBool(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(false))
+		})
+
+		It("should evaluate a @selector expression with a complex match expression", func() {
+			jsonData := `{"@selector":[{"matchExpressions":[{"key":"app","operator":"In","values":["nginx","httpd"]}]},"$.metadata.labels"]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			obj := obj1.DeepCopy()
+			obj.SetLabels(map[string]string{"app": "nginx"})
+			ctx := evalCtx{object: obj.UnstructuredContent(), log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := asBool(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(true))
+
+			obj.SetLabels(map[string]string{"app": "apache"})
+			ctx = evalCtx{object: obj.UnstructuredContent(), log: logger}
+			res, err = exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err = asBool(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(false))
+		})
+
+		It("should evaluate a @selector expression on an object's labels", func() {
+			jsonData := `{"@selector":[{"matchLabels":{"app":"nginx"},"matchExpressions":[{"key":"env","operator":"In","values":["production", "staging"]},{"key":"version","operator": "Exists"}]},"$.metadata.labels"]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			obj := obj1.DeepCopy()
+			obj.SetLabels(map[string]string{"app": "nginx", "env": "production", "version": "v2"})
+			ctx := evalCtx{object: obj.UnstructuredContent(), log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			v, err := asBool(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(true))
+
+			obj.SetLabels(map[string]string{"app": "apache", "env": "production", "version": "v2"})
+			ctx = evalCtx{object: obj.UnstructuredContent(), log: logger}
+			res, err = exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			v, err = asBool(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(false))
+
+			obj.SetLabels(map[string]string{"app": "nginx"})
+			ctx = evalCtx{object: obj.UnstructuredContent(), log: logger}
+			res, err = exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			v, err = asBool(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(false))
+
+			obj.SetLabels(map[string]string{"app": "nginx", "env": "staging", "version": "v3"})
+			ctx = evalCtx{object: obj.UnstructuredContent(), log: logger}
+			res, err = exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			v, err = asBool(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(true))
+		})
+	})
+
 	Describe("Evaluating list commands", func() {
 		// @filter
 		It("should evaluate a @filter expression on a literal list", func() {

@@ -516,11 +516,10 @@ var _ = Describe("Pipelines", func() {
         - "@and":
             - "@eq": ["$$.allowedRoutes.namespaces.from", "Same"]
             - "@eq": ["$.gateway.metadata.namespace", "$.route.metadata.namespace"]
-        # - "@and":  IMPLEMENT LABEL SELECTORS!
-        #     - "@eq": ["$$.allowedRoutes.namespaces.from", "Selector"]
-        #     - "@and":
-        #       - "@eq": ["$$.allowedRoutes.namespaces.selector", "matchLabels"]
-        #       - "@in": ["$$.allowedRoutes.namespaces.selector.matchLabels",...
+        - "@and":
+            - "@eq": ["$$.allowedRoutes.namespaces.from", "Selector"]
+            - "@exists": "$$.allowedRoutes.namespaces.selector"
+            - "@selector": ["$$.allowedRoutes.namespaces.selector", "$.route.metadata.labels"]
     - $.gateway.spec.listeners
 '@aggregate':
   - '@project':
@@ -548,16 +547,17 @@ var _ = Describe("Pipelines", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		unstructured.SetNestedSlice(gateway.UnstructuredContent(),
-			[]any{map[string]any{
-				"allowedRoutes": map[string]any{
-					"namespaces": map[string]any{
-						"from": "All",
+			[]any{
+				map[string]any{
+					"allowedRoutes": map[string]any{
+						"namespaces": map[string]any{
+							"from": "All",
+						},
 					},
+					"name":     "udp-listener",
+					"port":     int64(3478),
+					"protocol": "TURN-UDP",
 				},
-				"name":     "udp-listener",
-				"port":     int64(3478),
-				"protocol": "TURN-UDP",
-			},
 			}, "spec", "listeners")
 		eng.add(gateway)
 		deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})
@@ -601,5 +601,54 @@ var _ = Describe("Pipelines", func() {
 		deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(deltas).To(HaveLen(0))
+	})
+
+	It("should implement the route attachment API with the Selector policy", func() {
+		var p Pipeline
+		err := yaml.Unmarshal([]byte(routeArrachmentRule), &p)
+		Expect(err).NotTo(HaveOccurred())
+
+		unstructured.SetNestedSlice(gateway.UnstructuredContent(),
+			[]any{map[string]any{
+				"allowedRoutes": map[string]any{
+					"namespaces": map[string]any{
+						"from": "Selector",
+						"selector": map[string]any{
+							"matchExpressions": []any{
+								map[string]any{
+									"key":      "app",
+									"operator": "In",
+									"values":   []any{"nginx", "apache"},
+								},
+							},
+						},
+					},
+				},
+				"name":     "udp-listener",
+				"port":     int64(3478),
+				"protocol": "TURN-UDP",
+			},
+			}, "spec", "listeners")
+		eng.add(gateway)
+
+		route.SetLabels(map[string]string{"app": "nginx"})
+		deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(deltas).To(HaveLen(1))
+		delta := deltas[0]
+		Expect(delta.IsUnchanged()).To(BeFalse())
+		Expect(delta.Type).To(Equal(cache.Added))
+		Expect(delta.Object.GetName()).To(Equal("gateway--route"))
+		Expect(delta.Object.GetNamespace()).To(Equal("default"))
+
+		route.SetLabels(map[string]string{"app": "httpd"})
+		deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: route})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(deltas).To(HaveLen(1))
+		delta = deltas[0]
+		Expect(delta.IsUnchanged()).To(BeFalse())
+		Expect(delta.Type).To(Equal(cache.Deleted))
+		Expect(delta.Object.GetName()).To(Equal("gateway--route"))
+		Expect(delta.Object.GetNamespace()).To(Equal("default"))
 	})
 })

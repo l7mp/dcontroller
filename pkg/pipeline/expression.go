@@ -618,6 +618,50 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
 			return v, nil
 
+		case "@selector": // [selector, labels]
+			args, err := asList(arg)
+			if err != nil {
+				return nil, NewExpressionError(e.Op, e.Raw, err)
+
+			}
+
+			if len(args) != 2 {
+				return nil, NewExpressionError(e.Op, e.Raw,
+					errors.New("invalid arguments: expected 2 arguments"))
+			}
+
+			if args[0] == nil || args[1] == nil {
+				return false, nil
+			}
+
+			selector, err := asObject(args[0])
+			if err != nil {
+				return nil, NewExpressionError(e.Op, e.Raw,
+					fmt.Errorf("invalid label selector: %w", err))
+			}
+
+			labels, err := asObject(args[1])
+			if err != nil {
+				return nil, NewExpressionError(e.Op, e.Raw,
+					fmt.Errorf("invalid label set: %w", err))
+			}
+
+			// arguments
+			res, err := MatchLabels(labels, selector)
+			if err != nil {
+				return nil, fmt.Errorf("failed to evaluate label selector: %w", err)
+			}
+
+			v, err := asBool(res)
+			if err != nil {
+				return nil, NewExpressionError(e.Op, e.Raw,
+					fmt.Errorf("expected label selector expression to "+
+						"evaluate to boolean: %w", err))
+			}
+
+			ctx.log.V(4).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			return v, nil
+
 			// unary arithmetic
 		case "@abs":
 			f, err := asFloat(arg)
