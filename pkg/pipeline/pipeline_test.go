@@ -1,15 +1,17 @@
 package pipeline
 
 import (
-	"hsnlab/dcontroller-runtime/pkg/cache"
-	"hsnlab/dcontroller-runtime/pkg/object"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap/zapcore"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/yaml"
+
+	"hsnlab/dcontroller-runtime/pkg/cache"
+	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
 var (
@@ -313,16 +315,14 @@ var _ = Describe("Pipelines", func() {
 })
 
 var testUDPGateway = map[string]any{
-	"apiVersion": "gateway.networking.k8s.io/v1",
-	"kind":       "Gateway",
 	"metadata": map[string]any{
 		"annotations": map[string]any{
 			"kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"gateway.networking.k8s.io/v1\",\"kind\":\"Gateway\",\"metadata\":{\"annotations\":{},\"name\":\"udp-gateway\",\"namespace\":\"stunner\"},\"spec\":{\"gatewayClassName\":\"stunner-gatewayclass\",\"listeners\":[{\"name\":\"udp-listener\",\"port\":3478,\"protocol\":\"TURN-UDP\"}]}}",
 		},
 		"creationTimestamp": "2024-06-27T13:45:32Z",
 		"generation":        int64(1),
-		"name":              "udp-gateway",
-		"namespace":         "stunner",
+		"name":              "gateway",
+		"namespace":         "default",
 		"resourceVersion":   "38412796",
 		"uid":               "3312bf0c-ccac-4998-bbd7-743522839dd2",
 	},
@@ -412,16 +412,14 @@ var testUDPGateway = map[string]any{
 }
 
 var testUDPRoute = map[string]any{
-	"apiVersion": "stunner.l7mp.io/v1",
-	"kind":       "UDPRoute",
 	"metadata": map[string]any{
 		"annotations": map[string]any{
 			"kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"stunner.l7mp.io/v1\",\"kind\":\"UDPRoute\",\"metadata\":{\"annotations\":{},\"name\":\"iperf-server\",\"namespace\":\"stunner\"},\"spec\":{\"parentRefs\":[{\"name\":\"udp-gateway\"},{\"name\":\"tcp-gateway\"}],\"rules\":[{\"backendRefs\":[{\"name\":\"iperf-server\",\"namespace\":\"default\"}]}]}}\n",
 		},
 		"creationTimestamp": "2024-07-16T09:36:59Z",
-		"generation":        1,
-		"name":              "iperf-server",
-		"namespace":         "stunner",
+		"generation":        int64(1),
+		"name":              "route",
+		"namespace":         "default",
 		"resourceVersion":   "67544699",
 		"uid":               "41c31a35-c7bc-4465-a1af-185ab4b00f90",
 	},
@@ -455,7 +453,7 @@ var testUDPRoute = map[string]any{
 						map[string]any{
 							"lastTransitionTime": "2024-08-09T07:10:06Z",
 							"message":            "parent accepts the route",
-							"observedGeneration": 1,
+							"observedGeneration": int64(1),
 							"reason":             "Accepted",
 							"status":             "True",
 							"type":               "Accepted",
@@ -463,7 +461,7 @@ var testUDPRoute = map[string]any{
 						map[string]any{
 							"lastTransitionTime": "2024-08-09T07:10:06Z",
 							"message":            "all backend references successfully resolved",
-							"observedGeneration": 1,
+							"observedGeneration": int64(1),
 							"reason":             "ResolvedRefs",
 							"status":             "True",
 							"type":               "ResolvedRefs",
@@ -481,7 +479,7 @@ var testUDPRoute = map[string]any{
 						map[string]any{
 							"lastTransitionTime": "2024-08-09T07:10:06Z",
 							"message":            "parent accepts the route",
-							"observedGeneration": 1,
+							"observedGeneration": int64(1),
 							"reason":             "Accepted",
 							"status":             "True",
 							"type":               "Accepted",
@@ -489,7 +487,7 @@ var testUDPRoute = map[string]any{
 						map[string]any{
 							"lastTransitionTime": "2024-08-09T07:10:06Z",
 							"message":            "all backend references successfully resolved",
-							"observedGeneration": 1,
+							"observedGeneration": int64(1),
 							"reason":             "ResolvedRefs",
 							"status":             "True",
 							"type":               "ResolvedRefs",
@@ -506,3 +504,102 @@ var testUDPRoute = map[string]any{
 		},
 	},
 }
+
+var _ = Describe("Pipelines", func() {
+	var gateway, route *object.Object
+	var eng *DefaultEngine
+	var routeArrachmentRule = `
+'@join':
+  '@any':
+    - '@or':
+        - "@eq": ["$$.allowedRoutes.namespaces.from", "All"]
+        - "@and":
+            - "@eq": ["$$.allowedRoutes.namespaces.from", "Same"]
+            - "@eq": ["$.gateway.metadata.namespace", "$.route.metadata.namespace"]
+        # - "@and":  IMPLEMENT LABEL SELECTORS!
+        #     - "@eq": ["$$.allowedRoutes.namespaces.from", "Selector"]
+        #     - "@and":
+        #       - "@eq": ["$$.allowedRoutes.namespaces.selector", "matchLabels"]
+        #       - "@in": ["$$.allowedRoutes.namespaces.selector.matchLabels",...
+    - $.gateway.spec.listeners
+'@aggregate':
+  - '@project':
+      metadata:
+        namespace: $.route.metadata.namespace
+        name:
+          "@concat":
+            - $.gateway.metadata.name
+            - "--"
+            - $.route.metadata.name`
+
+	BeforeEach(func() {
+		gateway = object.New("gateway").WithName("default", "gateway")
+		gateway.SetUnstructuredContent(testUDPGateway)
+		gateway = gateway.DeepCopy() // so we don't share stuff across tests
+		route = object.New("route").WithName("default", "route")
+		route.SetUnstructuredContent(testUDPRoute)
+		route = route.DeepCopy()
+		eng = NewDefaultEngine("view", []string{"gateway", "route"}, logger)
+	})
+
+	It("should implement the route attachment API with the All policy", func() {
+		var p Pipeline
+		err := yaml.Unmarshal([]byte(routeArrachmentRule), &p)
+		Expect(err).NotTo(HaveOccurred())
+
+		unstructured.SetNestedSlice(gateway.UnstructuredContent(),
+			[]any{map[string]any{
+				"allowedRoutes": map[string]any{
+					"namespaces": map[string]any{
+						"from": "All",
+					},
+				},
+				"name":     "udp-listener",
+				"port":     int64(3478),
+				"protocol": "TURN-UDP",
+			},
+			}, "spec", "listeners")
+		eng.add(gateway)
+		deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(deltas).To(HaveLen(1))
+		delta := deltas[0]
+		Expect(delta.IsUnchanged()).To(BeFalse())
+		Expect(delta.Object.GetName()).To(Equal("gateway--route"))
+		Expect(delta.Object.GetNamespace()).To(Equal("default"))
+
+		deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Deleted, Object: route})
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(deltas).To(HaveLen(1))
+		delta = deltas[0]
+		Expect(delta.IsUnchanged()).To(BeFalse())
+		Expect(delta.Type).To(Equal(cache.Deleted))
+		Expect(delta.Object.GetName()).To(Equal("gateway--route"))
+		Expect(delta.Object.GetNamespace()).To(Equal("default"))
+
+		route.SetNamespace("other")
+		deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(deltas).To(HaveLen(1))
+		delta = deltas[0]
+		Expect(delta.IsUnchanged()).To(BeFalse())
+		Expect(delta.Type).To(Equal(cache.Added))
+		Expect(delta.Object.GetName()).To(Equal("gateway--route"))
+		Expect(delta.Object.GetNamespace()).To(Equal("other"))
+	})
+
+	It("should implement the route attachment API with the Same policy", func() {
+		var p Pipeline
+		err := yaml.Unmarshal([]byte(routeArrachmentRule), &p)
+		Expect(err).NotTo(HaveOccurred())
+
+		eng.add(gateway)
+		route.SetNamespace("other")
+		deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(deltas).To(HaveLen(0))
+	})
+})

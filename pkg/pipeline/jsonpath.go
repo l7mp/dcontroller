@@ -7,19 +7,27 @@ import (
 	"github.com/ohler55/ojg/jp"
 )
 
-func (e *Expression) GetJSONPath(ctx expEvalCtx, key string) (any, error) {
+func (e *Expression) GetJSONPath(ctx evalCtx, key string) (any, error) {
 	if len(key) == 0 || key[0] != '$' {
 		return key, nil
 	}
 
-	ret, err := GetJSONPathExp(key, ctx.subject)
+	// $... is object
+	subject := ctx.object
+	// $$... is local subject (@map, @filter, etc.)
+	if len(key) >= 2 && key[0] == '$' && key[1] == '$' && ctx.subject != nil {
+		// remove first $
+		key = key[1:]
+		subject = ctx.subject
+	}
+	ret, err := GetJSONPathExp(key, subject)
 	if err != nil {
 		return nil, NewExpressionError(e.Op, e.Raw, err)
 	}
 	return ret, nil
 }
 
-func (e *Expression) SetJSONPath(ctx expEvalCtx, key string, value, data any) error {
+func (e *Expression) SetJSONPath(ctx evalCtx, key string, value, data any) error {
 	if len(key) == 0 {
 		return errors.New("empty key")
 	}

@@ -80,7 +80,7 @@ func (eng *DefaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured
 
 	switch e.Op {
 	case "@select":
-		res, err := e.Arg.Evaluate(expEvalCtx{subject: u, log: eng.log})
+		res, err := e.Arg.Evaluate(evalCtx{object: u, log: eng.log})
 		if err != nil {
 			return nil, err
 		}
@@ -103,7 +103,7 @@ func (eng *DefaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured
 		return v, nil
 
 	case "@project":
-		res, err := e.Arg.Evaluate(expEvalCtx{subject: u, log: eng.log})
+		res, err := e.Arg.Evaluate(evalCtx{object: u, log: eng.log})
 		if err != nil {
 			return nil, err
 		}
@@ -245,7 +245,7 @@ func (eng *DefaultEngine) evalJoin(j *Join, obj *object.Object) ([]*object.Objec
 		input["__id"] = strings.Join(ids, "--")
 
 		// evalutate conditional expression on the input
-		res, err := j.Expression.Evaluate(expEvalCtx{subject: input, log: eng.log})
+		res, err := j.Expression.Evaluate(evalCtx{object: input, log: eng.log})
 		if err != nil {
 			return nil, false, NewExpressionError(j.Expression.Op, j.Expression.Raw, err)
 		}

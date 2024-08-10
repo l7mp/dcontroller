@@ -15,9 +15,9 @@ import (
 
 type Unstructured = map[string]any
 
-type expEvalCtx struct {
-	subject Unstructured
-	log     logr.Logger
+type evalCtx struct {
+	object, subject any
+	log             logr.Logger
 }
 
 type Expression struct {
@@ -27,7 +27,7 @@ type Expression struct {
 	Raw     string
 }
 
-func (e *Expression) Evaluate(ctx expEvalCtx) (any, error) {
+func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 	if len(e.Op) == 0 {
 		return nil, NewInvalidArgumentsError(fmt.Sprintf("empty operator in expession %q", e.Raw))
 	}
@@ -206,6 +206,271 @@ func (e *Expression) Evaluate(ctx expEvalCtx) (any, error) {
 		return ret, nil
 	}
 
+	// list commands: must eval the arg themselves
+	if string(e.Op[0]) == "@" {
+		switch e.Op {
+		case "@filter":
+			args, err := asExpOrList(e.Arg)
+			if err != nil {
+				return nil, NewExpressionError(e.Op, e.Raw, err)
+
+			}
+
+			if len(args) != 2 {
+				return nil, NewExpressionError(e.Op, e.Raw,
+					errors.New("invalid arguments: expected 2 arguments"))
+			}
+
+			// conditional
+			cond := args[0]
+
+			// arguments
+			rawArg, err := args[1].Evaluate(ctx)
+			if err != nil {
+				return nil, errors.New("failed to evaluate arguments")
+			}
+
+			list, err := asList(rawArg)
+			if err != nil {
+				return nil, errors.New("invalid arguments: expected a list")
+			}
+
+			vs := []any{}
+			for _, input := range list {
+				res, err := cond.Evaluate(evalCtx{object: ctx.object, subject: input, log: ctx.log})
+				if err != nil {
+					return nil, err
+				}
+
+				b, err := asBool(res)
+				if err != nil {
+					return nil, NewExpressionError(e.Op, e.Raw,
+						fmt.Errorf("expected conditional expression to "+
+							"evaluate to boolean: %w", err))
+				}
+
+				if b {
+					vs = append(vs, input)
+				}
+			}
+
+			ctx.log.V(4).Info("eval ready", "expression", e.String(), "result", vs)
+
+			return vs, nil
+
+		case "@any": // @in: [exp, list]
+			args, err := asExpOrList(e.Arg)
+			if err != nil {
+				return nil, NewExpressionError(e.Op, e.Raw, err)
+
+			}
+
+			if len(args) != 2 {
+				return nil, NewExpressionError(e.Op, e.Raw,
+					errors.New("invalid arguments: expected 2 arguments"))
+			}
+
+			// conditional
+			exp := args[0]
+
+			// arguments
+			rawArg, err := args[1].Evaluate(ctx)
+			if err != nil {
+				return nil, errors.New("failed to evaluate arguments")
+			}
+
+			list, err := asList(rawArg)
+			if err != nil {
+				return nil, errors.New("invalid arguments: expected a list")
+			}
+
+			v := false
+			for _, input := range list {
+				res, err := exp.Evaluate(evalCtx{object: ctx.object, subject: input, log: ctx.log})
+				if err != nil {
+					return nil, err
+				}
+
+				b, err := asBool(res)
+				if err != nil {
+					return nil, NewExpressionError(e.Op, e.Raw,
+						fmt.Errorf("expected conditional expression to "+
+							"evaluate to boolean: %w", err))
+				}
+
+				if b {
+					v = true
+					break
+				}
+			}
+
+			ctx.log.V(4).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			return v, nil
+
+		case "@all": // @in: [exp, list]
+			args, err := asExpOrList(e.Arg)
+			if err != nil {
+				return nil, NewExpressionError(e.Op, e.Raw, err)
+
+			}
+
+			if len(args) != 2 {
+				return nil, NewExpressionError(e.Op, e.Raw,
+					errors.New("invalid arguments: expected 2 arguments"))
+			}
+
+			// conditional
+			exp := args[0]
+
+			// arguments
+			rawArg, err := args[1].Evaluate(ctx)
+			if err != nil {
+				return nil, errors.New("failed to evaluate arguments")
+			}
+
+			list, err := asList(rawArg)
+			if err != nil {
+				return nil, errors.New("invalid arguments: expected a list")
+			}
+
+			v := true
+			for _, input := range list {
+				res, err := exp.Evaluate(evalCtx{object: ctx.object, subject: input, log: ctx.log})
+				if err != nil {
+					return nil, err
+				}
+
+				b, err := asBool(res)
+				if err != nil {
+					return nil, NewExpressionError(e.Op, e.Raw,
+						fmt.Errorf("expected conditional expression to "+
+							"evaluate to boolean: %w", err))
+				}
+
+				if !b {
+					v = false
+					break
+				}
+			}
+
+			ctx.log.V(4).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			return v, nil
+
+		case "@none": // @in: [exp, list]
+			args, err := asExpOrList(e.Arg)
+			if err != nil {
+				return nil, NewExpressionError(e.Op, e.Raw, err)
+
+			}
+
+			if len(args) != 2 {
+				return nil, NewExpressionError(e.Op, e.Raw,
+					errors.New("invalid arguments: expected 2 arguments"))
+			}
+
+			// conditional
+			exp := args[0]
+
+			// arguments
+			rawArg, err := args[1].Evaluate(ctx)
+			if err != nil {
+				return nil, errors.New("failed to evaluate arguments")
+			}
+
+			list, err := asList(rawArg)
+			if err != nil {
+				return nil, errors.New("invalid arguments: expected a list")
+			}
+
+			v := true
+			for _, input := range list {
+				res, err := exp.Evaluate(evalCtx{object: ctx.object, subject: input, log: ctx.log})
+				if err != nil {
+					return nil, err
+				}
+
+				b, err := asBool(res)
+				if err != nil {
+					return nil, NewExpressionError(e.Op, e.Raw,
+						fmt.Errorf("expected conditional expression to "+
+							"evaluate to boolean: %w", err))
+				}
+
+				if b {
+					v = false
+					break
+				}
+			}
+
+			ctx.log.V(4).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			return v, nil
+
+		case "@map":
+			args, err := asExpOrList(e.Arg)
+			if err != nil {
+				return nil, NewExpressionError(e.Op, e.Raw, err)
+			}
+
+			// function
+			exp := args[0]
+
+			// arguments
+			rawArg, err := args[1].Evaluate(ctx)
+			if err != nil {
+				return nil, errors.New("failed to evaluate arguments")
+			}
+
+			list, err := asList(rawArg)
+			if err != nil {
+				return nil, errors.New("invalid arguments: expected a list")
+			}
+
+			vs := []any{}
+			for _, input := range list {
+				res, err := exp.Evaluate(evalCtx{object: ctx.object, subject: input, log: ctx.log})
+				if err != nil {
+					return nil, err
+				}
+
+				vs = append(vs, res)
+			}
+
+			ctx.log.V(4).Info("eval ready", "expression", e.String(), "result", vs)
+
+			return vs, nil
+
+			// case "@fold":
+			// 	args, err := asExpOrList(e.Arg)
+			// 	if err != nil {
+			// 		return nil, NewExpressionError(e.Op, e.Raw, err)
+			// 	}
+
+			// 	if len(args) == 2 {
+			// 		return nil, NewExpressionError(e.Op, e.Raw, errors.New("not enough arguments"))
+			// 	}
+
+			// 	var outputs []map[string]any
+			// 	for _, exp := range args {
+			// 		res, err := exp.Evaluate(eng)
+			// 		if err != nil {
+			// 			return nil, NewExpressionError(e.Op, e.Raw,
+			// 				fmt.Errorf("should evaluate to an object list: %s", err))
+			// 		}
+
+			// 		outputs, err = asObjectList(eng.view, res)
+			// 		if err != nil {
+			// 			return nil, err
+			// 		}
+
+			// 		eng.inputs = outputs
+			// 	}
+
+			// 	eng.log.V(4).Info("eval ready", "expression", e.String(), "result", outputs)
+
+			// 	return outputs, nil
+		}
+	}
+
 	// operators
 	// evaluate subexpression
 	if e.Arg == nil {
@@ -222,6 +487,11 @@ func (e *Expression) Evaluate(ctx expEvalCtx) (any, error) {
 		// unary bool
 		case "@isnil":
 			v := arg == nil
+			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
+			return v, nil
+
+		case "@exists":
+			v := arg != nil
 			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
 			return v, nil
 
