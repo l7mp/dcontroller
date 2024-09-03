@@ -17,7 +17,7 @@ import (
 var emptyView = []string{}
 
 var _ = Describe("Expressions", func() {
-	var eng, eng2, eng3 *DefaultEngine
+	var eng, eng2, eng3 Engine
 	var obj1, obj2 *object.Object
 
 	BeforeEach(func() {
@@ -30,7 +30,7 @@ var _ = Describe("Expressions", func() {
 					"x": []any{int64(1), int64(2), int64(3), int64(4), int64(5)},
 				},
 			})
-		eng.add(obj1)
+		eng.WithObjects(obj1)
 
 		eng2 = NewDefaultEngine("view", emptyView, logger)
 		obj2 = object.New("testview2").WithContent(
@@ -51,10 +51,10 @@ var _ = Describe("Expressions", func() {
 					},
 				},
 			})
-		eng2.add(obj2)
+		eng2.WithObjects(obj2)
 
 		eng3 = NewDefaultEngine("view", emptyView, logger)
-		eng3.add(obj1, obj2)
+		eng3.WithObjects(obj1, obj2)
 
 	})
 

@@ -32,27 +32,3 @@ func (a *Aggregation) Evaluate(eng Engine, delta cache.Delta) (cache.Delta, erro
 
 	return res, nil
 }
-
-// func (a *Aggregation) UnmarshalJSON(b []byte) error {
-// 	//map key @aggregate, value is a @list expr for the stages
-// 	av := map[string]Expression{}
-// 	if err := json.Unmarshal(b, &av); err != nil {
-// 		return NewUnmarshalError("aggregation",
-// 			fmt.Sprintf("%q: %s", string(b), err.Error()))
-// 	}
-
-// 	if _, ok := av["@aggregate"]; !ok || len(av) != 1 {
-// 		return NewUnmarshalError("aggregation",
-// 			fmt.Sprintf("expected a single @aggregate op in %q", string(b)))
-// 	}
-
-// 	ls, err := asExpOrList(av["@aggregate"])
-// 	if err != nil {
-// 		return NewUnmarshalError("aggregation",
-// 			fmt.Sprintf("invalid aggregation stage list in %q", av["@aggregate"].Raw))
-// 	}
-
-// 	*a = Aggregation{Op: "@aggregate", Expressions: ls}
-
-// 	return nil
-// }

@@ -32,7 +32,7 @@ func TestPipeline(t *testing.T) {
 
 var _ = Describe("Pipelines", func() {
 	var dep1, dep2, pod1, pod2, pod3, rs1, rs2 *object.Object
-	var eng *DefaultEngine
+	var eng Engine
 
 	BeforeEach(func() {
 		pod1 = object.New("pod").WithName("default", "pod1").
@@ -122,13 +122,13 @@ var _ = Describe("Pipelines", func() {
 			err := yaml.Unmarshal([]byte(jsonData), &p)
 			Expect(err).NotTo(HaveOccurred())
 
-			eng.add(dep1, dep2)
-			Expect(eng.views["dep"].List()).To(HaveLen(2))
-			Expect(eng.views).NotTo(HaveKey("pod"))
+			eng.WithObjects(dep1, dep2)
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).views).NotTo(HaveKey("pod"))
 
 			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(eng.views).To(HaveKey("pod"))
+			Expect(eng.(*defaultEngine).views).To(HaveKey("pod"))
 
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
@@ -194,7 +194,7 @@ var _ = Describe("Pipelines", func() {
 			err := yaml.Unmarshal([]byte(jsonData), &p)
 			Expect(err).NotTo(HaveOccurred())
 
-			eng.add(pod1, pod2, pod3, dep2, rs1, rs2)
+			eng.WithObjects(pod1, pod2, pod3, dep2, rs1, rs2)
 			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -262,7 +262,7 @@ var _ = Describe("Pipelines", func() {
 			err := yaml.Unmarshal([]byte(jsonData), &p)
 			Expect(err).NotTo(HaveOccurred())
 
-			eng.add(pod1, pod2, pod3, dep2, rs1, rs2)
+			eng.WithObjects(pod1, pod2, pod3, dep2, rs1, rs2)
 			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -507,7 +507,7 @@ var testUDPRoute = map[string]any{
 
 var _ = Describe("Pipelines", func() {
 	var gateway, route *object.Object
-	var eng *DefaultEngine
+	var eng Engine
 	var routeArrachmentRule = `
 '@join':
   '@any':
@@ -559,7 +559,7 @@ var _ = Describe("Pipelines", func() {
 					"protocol": "TURN-UDP",
 				},
 			}, "spec", "listeners")
-		eng.add(gateway)
+		eng.WithObjects(gateway)
 		deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -596,7 +596,7 @@ var _ = Describe("Pipelines", func() {
 		err := yaml.Unmarshal([]byte(routeArrachmentRule), &p)
 		Expect(err).NotTo(HaveOccurred())
 
-		eng.add(gateway)
+		eng.WithObjects(gateway)
 		route.SetNamespace("other")
 		deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})
 		Expect(err).NotTo(HaveOccurred())
@@ -629,7 +629,7 @@ var _ = Describe("Pipelines", func() {
 				"protocol": "TURN-UDP",
 			},
 			}, "spec", "listeners")
-		eng.add(gateway)
+		eng.WithObjects(gateway)
 
 		route.SetLabels(map[string]string{"app": "nginx"})
 		deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})

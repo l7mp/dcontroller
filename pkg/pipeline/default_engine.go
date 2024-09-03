@@ -16,15 +16,16 @@ import (
 
 var ObjectKey = toolscache.MetaObjectToName
 
-type DefaultEngine struct {
+// defaultEngine is the default implementation of the pipeline engine.
+type defaultEngine struct {
 	targetView string                  // the view to put the output objects into
-	baseviews  []string                // views (potentially more than one for joins) input is coming from
+	baseviews  []string                // the view to put the output objects into
 	views      map[string]*cache.Store // internal view cache
 	log        logr.Logger
 }
 
-func NewDefaultEngine(targetView string, baseviews []string, log logr.Logger) *DefaultEngine {
-	return &DefaultEngine{
+func NewDefaultEngine(targetView string, baseviews []string, log logr.Logger) Engine {
+	return &defaultEngine{
 		targetView: targetView,
 		baseviews:  baseviews,
 		views:      make(map[string]*cache.Store),
@@ -32,10 +33,18 @@ func NewDefaultEngine(targetView string, baseviews []string, log logr.Logger) *D
 	}
 }
 
-func (eng *DefaultEngine) Log() logr.Logger { return eng.log }
-func (eng *DefaultEngine) View() string     { return eng.targetView }
+func (eng *defaultEngine) Log() logr.Logger { return eng.log }
+func (eng *defaultEngine) View() string     { return eng.targetView }
 
-func (eng *DefaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta) (cache.Delta, error) {
+func (eng *defaultEngine) WithObjects(objs ...*object.Object) {
+	for _, o := range objs {
+		eng.initViewStore(o.GetKind())
+		eng.views[o.GetKind()].Add(o)
+	}
+	return
+}
+
+func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta) (cache.Delta, error) {
 	if delta.IsUnchanged() {
 		return delta, nil
 	}
@@ -72,7 +81,7 @@ func (eng *DefaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 	return d, nil
 }
 
-func (eng *DefaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured, error) {
+func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured, error) {
 	if e.Arg == nil {
 		return nil, NewAggregationError(e.String(),
 			fmt.Errorf("no expression found in aggregation stage %s", e.String()))
@@ -122,7 +131,31 @@ func (eng *DefaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured
 			errors.New("unknown aggregation stage"))
 	}
 }
-func (eng *DefaultEngine) EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error) {
+func (eng *defaultEngine) initViewStore(view string) {
+	if _, ok := eng.views[view]; !ok {
+		eng.views[view] = cache.NewStore()
+	}
+}
+
+func (eng *defaultEngine) procUpdate(delta cache.Delta) error {
+	view := delta.Object.GetKind()
+	eng.initViewStore(view)
+
+	switch delta.Type {
+	case cache.Added:
+		return eng.views[view].Add(delta.Object)
+	case cache.Replaced, cache.Updated:
+		return eng.views[view].Update(delta.Object)
+	case cache.Deleted:
+		return eng.views[view].Delete(delta.Object)
+	case cache.Sync:
+		// ignore
+	}
+
+	return nil
+}
+
+func (eng *defaultEngine) EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error) {
 	ds, err := eng.evaluateJoin(j, delta)
 	if err != nil {
 		return ds, err
@@ -139,7 +172,7 @@ func (eng *DefaultEngine) EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 	return ds, nil
 }
 
-func (eng *DefaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error) {
+func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error) {
 	eng.log.V(1).Info("join: processing event", "event-type", delta.Type, "object", delta.Object)
 
 	view := delta.Object.GetKind()
@@ -226,7 +259,7 @@ func (eng *DefaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 	return ds, nil
 }
 
-func (eng *DefaultEngine) evalJoin(j *Join, obj *object.Object) ([]*object.Object, error) {
+func (eng *defaultEngine) evalJoin(j *Join, obj *object.Object) ([]*object.Object, error) {
 	res, err := eng.product(obj, func(obj *object.Object, current []*object.Object) (*object.Object, bool, error) {
 		// temporary view name: Normalize will eventually recast the object into the target view
 		newObj := object.New("__tmp_join_view")
@@ -279,7 +312,7 @@ func (eng *DefaultEngine) evalJoin(j *Join, obj *object.Object) ([]*object.Objec
 // evalutates to true then it adds the combined object to the result set
 type joinEvalFunc = func(*object.Object, []*object.Object) (*object.Object, bool, error)
 
-func (eng *DefaultEngine) product(obj *object.Object, eval joinEvalFunc) ([]*object.Object, error) {
+func (eng *defaultEngine) product(obj *object.Object, eval joinEvalFunc) ([]*object.Object, error) {
 	if len(eng.baseviews) < 2 {
 		return nil, errors.New("at least two views required")
 	}
@@ -293,7 +326,7 @@ func (eng *DefaultEngine) product(obj *object.Object, eval joinEvalFunc) ([]*obj
 	return ret, nil
 }
 
-func (eng *DefaultEngine) recurseProd(obj *object.Object, current []*object.Object, ret *([]*object.Object), eval joinEvalFunc, depth int) error {
+func (eng *defaultEngine) recurseProd(obj *object.Object, current []*object.Object, ret *([]*object.Object), eval joinEvalFunc, depth int) error {
 	if depth == len(eng.baseviews) {
 		newObj, ok, err := eval(obj, current)
 		if err != nil {
@@ -335,39 +368,7 @@ func (eng *DefaultEngine) recurseProd(obj *object.Object, current []*object.Obje
 	return nil
 }
 
-func (eng *DefaultEngine) initViewStore(view string) {
-	if _, ok := eng.views[view]; !ok {
-		eng.views[view] = cache.NewStore()
-	}
-}
-
-func (eng *DefaultEngine) procUpdate(delta cache.Delta) error {
-	view := delta.Object.GetKind()
-	eng.initViewStore(view)
-
-	switch delta.Type {
-	case cache.Added:
-		return eng.views[view].Add(delta.Object)
-	case cache.Replaced, cache.Updated:
-		return eng.views[view].Update(delta.Object)
-	case cache.Deleted:
-		return eng.views[view].Delete(delta.Object)
-	case cache.Sync:
-		// ignore
-	}
-
-	return nil
-}
-
-// for testing
-func (eng *DefaultEngine) add(objs ...*object.Object) {
-	for _, o := range objs {
-		eng.initViewStore(o.GetKind())
-		eng.views[o.GetKind()].Add(o)
-	}
-	return
-}
-
+// helpers
 func diffDeltas(dels, adds []cache.Delta) ([]cache.Delta, []cache.Delta, []cache.Delta) {
 	a, m, d := []cache.Delta{}, []cache.Delta{}, []cache.Delta{}
 

@@ -13,7 +13,7 @@ import (
 
 var _ = Describe("Aggregations", func() {
 	var objs []*object.Object
-	var eng *DefaultEngine
+	var eng Engine
 
 	BeforeEach(func() {
 		objs = []*object.Object{

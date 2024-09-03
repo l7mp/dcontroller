@@ -14,7 +14,7 @@ import (
 
 var _ = Describe("Joins", func() {
 	var dep1, dep2, pod1, pod2, pod3, rs1, rs2 *object.Object
-	var eng *DefaultEngine
+	var eng Engine
 
 	BeforeEach(func() {
 		pod1 = object.New("pod").WithName("default", "pod1").
@@ -86,14 +86,14 @@ var _ = Describe("Joins", func() {
 			err := json.Unmarshal([]byte(jsonData), &j)
 			Expect(err).NotTo(HaveOccurred())
 
-			eng.add(dep1, dep2)
-			Expect(eng.views["dep"].List()).To(HaveLen(2))
-			Expect(eng.views).NotTo(HaveKey("pod"))
+			eng.WithObjects(dep1, dep2)
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).views).NotTo(HaveKey("pod"))
 
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(eng.views["dep"].List()).To(HaveLen(2))
-			Expect(eng.views["pod"].List()).To(HaveLen(1))
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(1))
 
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
@@ -108,7 +108,7 @@ var _ = Describe("Joins", func() {
 			err := json.Unmarshal([]byte(jsonData), &j)
 			Expect(err).NotTo(HaveOccurred())
 
-			eng.add(dep1, dep2)
+			eng.WithObjects(dep1, dep2)
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(2))
@@ -124,15 +124,15 @@ var _ = Describe("Joins", func() {
 			err := json.Unmarshal([]byte(jsonData), &j)
 			Expect(err).NotTo(HaveOccurred())
 
-			eng.add(pod1, pod2, pod3)
-			Expect(eng.views["pod"].List()).To(HaveLen(3))
-			Expect(eng.views).NotTo(HaveKey("dep"))
+			eng.WithObjects(pod1, pod2, pod3)
+			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).views).NotTo(HaveKey("dep"))
 
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.views["pod"].List()).To(HaveLen(3))
-			Expect(eng.views["dep"].List()).To(HaveLen(1))
+			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(1))
 
 			Expect(deltas).To(HaveLen(2))
 			Expect(deltas).To(ContainElement(objFieldEq(dep1.UnstructuredContent(), "dep")))
@@ -147,7 +147,7 @@ var _ = Describe("Joins", func() {
 			err := json.Unmarshal([]byte(jsonData), &j)
 			Expect(err).NotTo(HaveOccurred())
 
-			eng.add(pod1, pod2, pod3)
+			eng.WithObjects(pod1, pod2, pod3)
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(0))
@@ -159,7 +159,7 @@ var _ = Describe("Joins", func() {
 			err := json.Unmarshal([]byte(jsonData), &j)
 			Expect(err).NotTo(HaveOccurred())
 
-			eng.add(dep1, dep2, rs1, rs2)
+			eng.WithObjects(dep1, dep2, rs1, rs2)
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(1))
@@ -180,15 +180,15 @@ var _ = Describe("Joins", func() {
 			err := json.Unmarshal([]byte(jsonData), &j)
 			Expect(err).NotTo(HaveOccurred())
 
-			eng.add(dep1, dep2, pod3)
-			Expect(eng.views["pod"].List()).To(HaveLen(1))
-			Expect(eng.views["dep"].List()).To(HaveLen(2))
+			eng.WithObjects(dep1, dep2, pod3)
+			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(1))
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
 
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Deleted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.views["pod"].List()).To(HaveLen(0))
-			Expect(eng.views["dep"].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(0))
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
 
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
@@ -204,7 +204,7 @@ var _ = Describe("Joins", func() {
 			err := json.Unmarshal([]byte(jsonData), &j)
 			Expect(err).NotTo(HaveOccurred())
 
-			eng.add(dep1, dep2)
+			eng.WithObjects(dep1, dep2)
 			_, err = j.Evaluate(eng, cache.Delta{Type: cache.Deleted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -217,15 +217,15 @@ var _ = Describe("Joins", func() {
 			err := json.Unmarshal([]byte(jsonData), &j)
 			Expect(err).NotTo(HaveOccurred())
 
-			eng.add(dep1, dep2, pod1, pod2)
-			Expect(eng.views["pod"].List()).To(HaveLen(2))
-			Expect(eng.views["dep"].List()).To(HaveLen(2))
+			eng.WithObjects(dep1, dep2, pod1, pod2)
+			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
 
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.views["pod"].List()).To(HaveLen(3))
-			Expect(eng.views["dep"].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
 
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
@@ -239,8 +239,8 @@ var _ = Describe("Joins", func() {
 			deltas, err = j.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.views["pod"].List()).To(HaveLen(3))
-			Expect(eng.views["dep"].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
 
 			// should receive update pod3-dep1
 			Expect(deltas).To(HaveLen(1))
@@ -266,15 +266,15 @@ var _ = Describe("Joins", func() {
 			err := json.Unmarshal([]byte(jsonData), &j)
 			Expect(err).NotTo(HaveOccurred())
 
-			eng.add(dep1, dep2, pod1, pod2)
-			Expect(eng.views["pod"].List()).To(HaveLen(2))
-			Expect(eng.views["dep"].List()).To(HaveLen(2))
+			eng.WithObjects(dep1, dep2, pod1, pod2)
+			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
 
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.views["pod"].List()).To(HaveLen(3))
-			Expect(eng.views["dep"].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
 
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
@@ -289,8 +289,8 @@ var _ = Describe("Joins", func() {
 			deltas, err = j.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.views["pod"].List()).To(HaveLen(3))
-			Expect(eng.views["dep"].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
 
 			// should receive a delete for pod3-dep1 and an add for pod3-dep2
 			Expect(deltas).To(HaveLen(2))
@@ -322,9 +322,9 @@ var _ = Describe("Joins", func() {
 			err := json.Unmarshal([]byte(jsonData), &j)
 			Expect(err).NotTo(HaveOccurred())
 
-			eng.add(dep1, dep2, pod1, pod2, pod3)
-			Expect(eng.views["pod"].List()).To(HaveLen(3))
-			Expect(eng.views["dep"].List()).To(HaveLen(2))
+			eng.WithObjects(dep1, dep2, pod1, pod2, pod3)
+			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
 
 			// re-label pod
 			olddep1 := dep1.DeepCopy()
@@ -332,8 +332,8 @@ var _ = Describe("Joins", func() {
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.views["pod"].List()).To(HaveLen(3))
-			Expect(eng.views["dep"].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
 
 			// should remove dep1-pod1 and dep1-pod3 and add dep1-pod2
 			Expect(deltas).To(HaveLen(3))
