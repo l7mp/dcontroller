@@ -90,7 +90,7 @@ var _ = Describe("Joins", func() {
 			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
 			Expect(eng.(*defaultEngine).views).NotTo(HaveKey("pod"))
 
-			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
+			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
 			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(1))
@@ -109,7 +109,7 @@ var _ = Describe("Joins", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			eng.WithObjects(dep1, dep2)
-			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
+			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(2))
 			Expect(deltas).To(ContainElement(objFieldEq(dep1.UnstructuredContent(), "dep")))
@@ -128,7 +128,7 @@ var _ = Describe("Joins", func() {
 			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(3))
 			Expect(eng.(*defaultEngine).views).NotTo(HaveKey("dep"))
 
-			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: dep1})
+			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(3))
@@ -221,7 +221,7 @@ var _ = Describe("Joins", func() {
 			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(2))
 			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
 
-			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod3})
+			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(3))
@@ -236,7 +236,7 @@ var _ = Describe("Joins", func() {
 
 			// change the image in pod3
 			pod3.UnstructuredContent()["spec"].(Unstructured)["image"] = "newimage"
-			deltas, err = j.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: pod3})
+			deltas, err = j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(eng.(*defaultEngine).views["pod"].List()).To(HaveLen(3))

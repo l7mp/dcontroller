@@ -14,6 +14,7 @@ const (
 	Updated  = toolscache.Updated
 	Replaced = toolscache.Replaced
 	Sync     = toolscache.Sync
+	Upserted = "Upserted" // for events that are either an update/replace or an add
 )
 
 // NilDelta is a placeholder for a delta that means no change.

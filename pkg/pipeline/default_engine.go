@@ -49,7 +49,26 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 		return delta, nil
 	}
 
-	if err := eng.procUpdate(delta); err != nil {
+	view := delta.Object.GetKind()
+	eng.initViewStore(view)
+
+	// find out whether an upsert is an update/replace or an add
+	delta = eng.handleUpsertEvent(delta)
+
+	// update local view cache
+	var err error
+	switch delta.Type {
+	case cache.Added:
+		err = eng.views[view].Add(delta.Object)
+	case cache.Replaced, cache.Updated:
+		err = eng.views[view].Update(delta.Object)
+	case cache.Deleted:
+		err = eng.views[view].Delete(delta.Object)
+	case cache.Sync, cache.Upserted:
+		// ignore
+	}
+
+	if err != nil {
 		return cache.Delta{}, NewAggregationError(a.String(), err)
 	}
 
@@ -131,30 +150,6 @@ func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured
 			errors.New("unknown aggregation stage"))
 	}
 }
-func (eng *defaultEngine) initViewStore(view string) {
-	if _, ok := eng.views[view]; !ok {
-		eng.views[view] = cache.NewStore()
-	}
-}
-
-func (eng *defaultEngine) procUpdate(delta cache.Delta) error {
-	view := delta.Object.GetKind()
-	eng.initViewStore(view)
-
-	switch delta.Type {
-	case cache.Added:
-		return eng.views[view].Add(delta.Object)
-	case cache.Replaced, cache.Updated:
-		return eng.views[view].Update(delta.Object)
-	case cache.Deleted:
-		return eng.views[view].Delete(delta.Object)
-	case cache.Sync:
-		// ignore
-	}
-
-	return nil
-}
-
 func (eng *defaultEngine) EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error) {
 	ds, err := eng.evaluateJoin(j, delta)
 	if err != nil {
@@ -177,6 +172,9 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 
 	view := delta.Object.GetKind()
 	eng.initViewStore(view)
+
+	// find out whether an upsert is an update/replace or an add
+	delta = eng.handleUpsertEvent(delta)
 
 	ds := make([]cache.Delta, 0)
 	switch delta.Type {
@@ -366,6 +364,26 @@ func (eng *defaultEngine) recurseProd(obj *object.Object, current []*object.Obje
 	}
 
 	return nil
+}
+
+func (eng *defaultEngine) initViewStore(view string) {
+	if _, ok := eng.views[view]; !ok {
+		eng.views[view] = cache.NewStore()
+	}
+}
+
+// find out whether an upsert is an add or an update/replace
+func (eng *defaultEngine) handleUpsertEvent(delta cache.Delta) cache.Delta {
+	if delta.Type != cache.Upserted {
+		return delta
+	}
+
+	view := delta.Object.GetKind()
+	if _, exists, err := eng.views[view].Get(delta.Object); err != nil || !exists {
+		return cache.Delta{Type: cache.Added, Object: delta.Object}
+	}
+
+	return cache.Delta{Type: cache.Updated, Object: delta.Object}
 }
 
 // helpers

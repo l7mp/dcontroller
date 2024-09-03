@@ -44,7 +44,7 @@ var _ = Describe("Aggregations", func() {
 			err := json.Unmarshal([]byte(jsonData), &ag)
 			Expect(err).NotTo(HaveOccurred())
 
-			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[0]})
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res.IsUnchanged()).To(BeFalse())
 			Expect(res).To(Equal(cache.Delta{Type: cache.Added, Object: objs[0]}))
@@ -52,6 +52,11 @@ var _ = Describe("Aggregations", func() {
 			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[1]})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res.IsUnchanged()).To(BeTrue())
+
+			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res.Type).To(Equal(cache.Updated))
+			Expect(res.IsUnchanged()).To(BeFalse())
 		})
 
 		It("should evaluate a false select expression", func() {
@@ -60,11 +65,11 @@ var _ = Describe("Aggregations", func() {
 			err := json.Unmarshal([]byte(jsonData), &ag)
 			Expect(err).NotTo(HaveOccurred())
 
-			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[0]})
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res.IsUnchanged()).To(BeTrue())
 
-			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[1]})
+			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[1]})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res.IsUnchanged()).To(BeTrue())
 		})
@@ -75,12 +80,12 @@ var _ = Describe("Aggregations", func() {
 			err := json.Unmarshal([]byte(jsonData), &ag)
 			Expect(err).NotTo(HaveOccurred())
 
-			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[0]})
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res.IsUnchanged()).To(BeFalse())
 			Expect(res).To(Equal(cache.Delta{Type: cache.Added, Object: objs[0]}))
 
-			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[1]})
+			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[1]})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res.IsUnchanged()).To(BeFalse())
 			Expect(res).To(Equal(cache.Delta{Type: cache.Added, Object: objs[1]}))
@@ -92,7 +97,7 @@ var _ = Describe("Aggregations", func() {
 			err := json.Unmarshal([]byte(jsonData), &ag)
 			Expect(err).NotTo(HaveOccurred())
 
-			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[0]})
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res.IsUnchanged()).To(BeTrue())
 		})
