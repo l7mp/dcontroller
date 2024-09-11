@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("ObjectList", func() {
+var _ = Describe("ViewObjectList", func() {
 	It("should allow a raw object to be created", func() {
 		obj := NewViewObject("view").WithName("ns", "test")
 		list := &ViewObjectList{

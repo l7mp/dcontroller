@@ -1,7 +1,6 @@
 package object
 
 import (
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -133,14 +132,6 @@ func (in *ViewObject) DeepCopy() *ViewObject {
 	out := new(ViewObject)
 	in.DeepCopyInto(out)
 	return out
-}
-
-func (a *ViewObject) DeepEqual(b DeepComparable) bool {
-	bo, ok := b.(*ViewObject)
-	if !ok {
-		return false
-	}
-	return a.View == bo.View && equality.Semantic.DeepEqual(a, bo)
 }
 
 // func (a *ViewObject) DeepEqual(b *ViewObject) bool {

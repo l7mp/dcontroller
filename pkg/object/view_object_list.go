@@ -208,7 +208,7 @@ func (a *ViewObjectList) DeepEqual(b *ViewObjectList) bool {
 	}
 
 	for i := range a.Items {
-		if !a.Items[i].DeepEqual(&b.Items[i]) {
+		if !DeepEqual(&a.Items[i], &b.Items[i]) {
 			return false
 		}
 	}

@@ -1,6 +1,9 @@
 package object
 
-import "sigs.k8s.io/controller-runtime/pkg/client"
+import (
+	"k8s.io/apimachinery/pkg/api/equality"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
 
 type UnstructuredContent = map[string]any
 
@@ -13,11 +16,11 @@ type Unstructured interface {
 	SetUnstructuredContent(UnstructuredContent)
 }
 
-type DeepComparable interface {
-	DeepEqual(DeepComparable) bool
-}
-
 type Object interface {
 	client.Object
 	Unstructured
+}
+
+func DeepEqual(a, b Object) bool {
+	return equality.Semantic.DeepEqual(a, b)
 }

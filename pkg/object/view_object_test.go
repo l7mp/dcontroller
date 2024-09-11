@@ -17,9 +17,8 @@ var _ client.Object = &ViewObject{}
 var _ schema.ObjectKind = &ViewObject{}
 var _ metav1.ListInterface = &ViewObject{}
 var _ Unstructured = &ViewObject{}
-var _ DeepComparable = &ViewObject{}
 
-var _ = Describe("Object", func() {
+var _ = Describe("ViewObject", func() {
 	It("should be created without content", func() {
 		obj := NewViewObject("view")
 
