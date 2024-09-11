@@ -45,17 +45,17 @@ var _ = Describe("ViewObject", func() {
 		}))
 	})
 
-	It("should not let GVK to be updated", func() {
+	It("should let GVK to be updated", func() {
 		obj := NewViewObject("view")
 		Expect(obj).NotTo(BeNil())
 
 		obj.SetKind("dummy")
 		Expect(obj.GetAPIVersion()).To(Equal(apiv1.GroupVersion.String()))
-		Expect(obj.GetKind()).To(Equal("view"))
+		Expect(obj.GetKind()).To(Equal("dummy"))
 
 		obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "dummy-group", Version: "dummy-version", Kind: "dummy-kind"})
 		Expect(obj.GetAPIVersion()).To(Equal(apiv1.GroupVersion.String()))
-		Expect(obj.GetKind()).To(Equal("view"))
+		Expect(obj.GetKind()).To(Equal("dummy-kind"))
 	})
 
 	It("should allow to be created with given namespace/name", func() {

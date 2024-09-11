@@ -192,7 +192,7 @@ func (in *ViewObjectList) DeepCopyInto(out *ViewObjectList) {
 	out.Object = runtime.DeepCopyJSON(in.Object)
 	out.Items = make([]ViewObject, len(in.Items))
 	for i := range in.Items {
-		in.Items[i].DeepCopyInto(&out.Items[i])
+		DeepCopyInto(&in.Items[i], &out.Items[i])
 	}
 }
 

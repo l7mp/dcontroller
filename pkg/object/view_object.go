@@ -83,13 +83,14 @@ func (obj *ViewObject) GetKind() string {
 	return obj.View
 }
 
-func (obj *ViewObject) SetKind(_ string) {
-	obj.Unstructured.SetKind(obj.View)
+func (obj *ViewObject) SetKind(view string) {
+	obj.Unstructured.SetKind(view)
+	obj.View = view
 }
 
 func (obj *ViewObject) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	obj.SetAPIVersion(gvk.GroupVersion().String())
-	obj.SetKind(obj.View)
+	obj.SetKind(gvk.Kind)
 }
 
 func (obj *ViewObject) GroupVersionKind() schema.GroupVersionKind {
@@ -113,25 +114,6 @@ func (obj *ViewObject) SetUnstructuredContent(content map[string]any) {
 	gvk := obj.GroupVersionKind()
 	obj.Unstructured.SetUnstructuredContent(content)
 	obj.SetGroupVersionKind(gvk)
-}
-
-// deep* utils
-func (in *ViewObject) DeepCopyInto(out *ViewObject) {
-	if in == nil || out == nil {
-		return
-	}
-	*out = *in
-	out.Unstructured.Object = runtime.DeepCopyJSON(in.Unstructured.Object)
-	return
-}
-
-func (in *ViewObject) DeepCopy() *ViewObject {
-	if in == nil {
-		return nil
-	}
-	out := new(ViewObject)
-	in.DeepCopyInto(out)
-	return out
 }
 
 // func (a *ViewObject) DeepEqual(b *ViewObject) bool {

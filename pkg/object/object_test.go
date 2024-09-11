@@ -16,7 +16,7 @@ var _ Unstructured = &ViewObject{}
 var _ Object = &unstructured.Unstructured{}
 
 var _ = Describe("Object", func() {
-	It("deepequal", func() {
+	It("deepequal viewobject", func() {
 		obj1 := NewViewObject("view1")
 		obj2 := NewViewObject("view2")
 
@@ -46,4 +46,15 @@ var _ = Describe("Object", func() {
 		Expect(DeepEqual(obj1, obj1)).To(BeTrue())
 		Expect(DeepEqual(obj2, obj2)).To(BeTrue())
 	})
+
+	It("deepcopy viewobject", func() {
+		obj1 := NewViewObject("view1")
+		obj2 := NewViewObject("")
+		DeepCopyInto(obj1, obj2)
+		Expect(DeepEqual(obj1, obj2)).To(BeTrue())
+
+		obj3 := DeepCopy(obj1)
+		Expect(DeepEqual(obj1, obj3)).To(BeTrue())
+	})
+
 })
