@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func (obj *Object) String() string {
+func (obj *ViewObject) String() string {
 	// // copy
 	// ro := obj.DeepCopy()
 

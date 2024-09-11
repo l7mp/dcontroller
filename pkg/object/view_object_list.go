@@ -1,7 +1,7 @@
 package object
 
 import (
-	apiv1 "hsnlab/dcontroller-runtime/pkg/api/v1"
+	apiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -9,53 +9,53 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-var _ runtime.Unstructured = &ObjectList{}
+var _ runtime.Unstructured = &ViewObjectList{}
 
-// var _ metav1.ListInterface = &ObjectList{}
-var _ runtime.Object = &ObjectList{}
-var _ schema.ObjectKind = &ObjectList{}
+// var _ metav1.ListInterface = &ViewObjectList{}
+var _ runtime.Object = &ViewObjectList{}
+var _ schema.ObjectKind = &ViewObjectList{}
 
-// ObjectList allows lists of views to be manipulated generically.
-type ObjectList struct {
+// ViewObjectList allows lists of views to be manipulated generically.
+type ViewObjectList struct {
 	View string
 
 	Object map[string]interface{}
 
 	// Items is a list of unstructured objects.
-	Items []Object `json:"items"`
+	Items []ViewObject `json:"items"`
 }
 
-func NewList(view string) *ObjectList {
-	obj := ObjectList{View: view}
+func NewViewObjectList(view string) *ViewObjectList {
+	obj := ViewObjectList{View: view}
 	obj.SetGroupVersionKind(apiv1.NewGVK(view))
 	return &obj
 }
 
 // Implement schema.ObjectKind
-func (obj *ObjectList) GetObjectKind() schema.ObjectKind { return obj }
+func (obj *ViewObjectList) GetObjectKind() schema.ObjectKind { return obj }
 
-func (in *ObjectList) DeepCopyObject() runtime.Object {
+func (in *ViewObjectList) DeepCopyObject() runtime.Object {
 	return in.DeepCopy()
 }
 
 // Implement client.Object
-func (l *ObjectList) GetAPIVersion() string {
+func (l *ViewObjectList) GetAPIVersion() string {
 	return apiv1.GroupVersion.String()
 }
 
-func (l *ObjectList) SetAPIVersion(_ string) {
+func (l *ViewObjectList) SetAPIVersion(_ string) {
 	l.setNestedField(apiv1.GroupVersion.String(), "apiVersion")
 }
 
-func (l *ObjectList) GetKind() string {
+func (l *ViewObjectList) GetKind() string {
 	return l.View
 }
 
-func (l *ObjectList) SetKind(_ string) {
+func (l *ViewObjectList) SetKind(_ string) {
 	l.setNestedField(l.View, "kind")
 }
 
-func (l *ObjectList) GetResourceVersion() string {
+func (l *ViewObjectList) GetResourceVersion() string {
 	ret, ok, err := unstructured.NestedString(l.Object, "metadata", "resourceVersion")
 	if err != nil || !ok {
 		return ""
@@ -63,31 +63,31 @@ func (l *ObjectList) GetResourceVersion() string {
 	return ret
 }
 
-func (l *ObjectList) SetResourceVersion(version string) {
+func (l *ViewObjectList) SetResourceVersion(version string) {
 	l.setNestedField(version, "metadata", "resourceVersion")
 }
 
-func (l *ObjectList) GetSelfLink() string {
+func (l *ViewObjectList) GetSelfLink() string {
 	return l.getNestedString(l.Object, "metadata", "selfLink")
 }
 
-func (l *ObjectList) SetSelfLink(selfLink string) {
+func (l *ViewObjectList) SetSelfLink(selfLink string) {
 	l.setNestedField(selfLink, "metadata", "selfLink")
 }
 
-func (l *ObjectList) GetContinue() string {
+func (l *ViewObjectList) GetContinue() string {
 	return l.getNestedString(l.Object, "metadata", "continue")
 }
 
-func (l *ObjectList) SetContinue(c string) {
+func (l *ViewObjectList) SetContinue(c string) {
 	l.setNestedField(c, "metadata", "continue")
 }
 
-func (l *ObjectList) GetRemainingItemCount() *int64 {
+func (l *ViewObjectList) GetRemainingItemCount() *int64 {
 	return l.getNestedInt64Pointer(l.Object, "metadata", "remainingItemCount")
 }
 
-func (l *ObjectList) SetRemainingItemCount(c *int64) {
+func (l *ViewObjectList) SetRemainingItemCount(c *int64) {
 	if c == nil {
 		unstructured.RemoveNestedField(l.Object, "metadata", "remainingItemCount")
 	} else {
@@ -95,12 +95,12 @@ func (l *ObjectList) SetRemainingItemCount(c *int64) {
 	}
 }
 
-func (l *ObjectList) SetGroupVersionKind(gvk schema.GroupVersionKind) {
+func (l *ViewObjectList) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	l.SetAPIVersion(gvk.GroupVersion().String())
 	l.SetKind(l.View)
 }
 
-func (l *ObjectList) GroupVersionKind() schema.GroupVersionKind {
+func (l *ViewObjectList) GroupVersionKind() schema.GroupVersionKind {
 	gv, err := schema.ParseGroupVersion(l.GetAPIVersion())
 	if err != nil {
 		return schema.GroupVersionKind{}
@@ -110,9 +110,9 @@ func (l *ObjectList) GroupVersionKind() schema.GroupVersionKind {
 }
 
 // implement runtime.Unstructured
-func (l *ObjectList) IsList() bool { return true }
+func (l *ViewObjectList) IsList() bool { return true }
 
-func (l *ObjectList) EachListItem(fn func(runtime.Object) error) error {
+func (l *ViewObjectList) EachListItem(fn func(runtime.Object) error) error {
 	for i := range l.Items {
 		if err := fn(&l.Items[i]); err != nil {
 			return err
@@ -121,24 +121,24 @@ func (l *ObjectList) EachListItem(fn func(runtime.Object) error) error {
 	return nil
 }
 
-func (l *ObjectList) EachListItemWithAlloc(fn func(runtime.Object) error) error {
+func (l *ViewObjectList) EachListItemWithAlloc(fn func(runtime.Object) error) error {
 	for i := range l.Items {
-		if err := fn(New(l.Items[i].View).WithContent(l.Items[i].Object)); err != nil {
+		if err := fn(NewViewObject(l.Items[i].View).WithContent(l.Items[i].Object)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (l *ObjectList) NewEmptyInstance() runtime.Unstructured {
-	out := new(ObjectList)
+func (l *ViewObjectList) NewEmptyInstance() runtime.Unstructured {
+	out := new(ViewObjectList)
 	if l != nil {
 		out.SetGroupVersionKind(l.GroupVersionKind())
 	}
 	return out
 }
 
-func (l *ObjectList) UnstructuredContent() map[string]interface{} {
+func (l *ViewObjectList) UnstructuredContent() map[string]interface{} {
 	out := make(map[string]interface{}, len(l.Object)+1)
 
 	// shallow copy every property
@@ -154,7 +154,7 @@ func (l *ObjectList) UnstructuredContent() map[string]interface{} {
 	return out
 }
 
-func (l *ObjectList) SetUnstructuredContent(content map[string]interface{}) {
+func (l *ViewObjectList) SetUnstructuredContent(content map[string]interface{}) {
 	l.Object = content
 	if content == nil {
 		l.Items = nil
@@ -164,7 +164,7 @@ func (l *ObjectList) SetUnstructuredContent(content map[string]interface{}) {
 	if !ok || items == nil {
 		items = []interface{}{}
 	}
-	objectItems := make([]Object, 0, len(items))
+	objectItems := make([]ViewObject, 0, len(items))
 	newItems := make([]interface{}, 0, len(items))
 	for _, item := range items {
 		o, ok := item.(map[string]interface{})
@@ -175,7 +175,7 @@ func (l *ObjectList) SetUnstructuredContent(content map[string]interface{}) {
 		if err != nil || !ok {
 			continue
 		}
-		objectItems = append(objectItems, Object{View: v, Unstructured: unstructured.Unstructured{Object: o}})
+		objectItems = append(objectItems, ViewObject{View: v, Unstructured: unstructured.Unstructured{Object: o}})
 		newItems = append(newItems, o)
 	}
 	l.Items = objectItems
@@ -183,26 +183,26 @@ func (l *ObjectList) SetUnstructuredContent(content map[string]interface{}) {
 }
 
 // deep* utils
-func (in *ObjectList) DeepCopyInto(out *ObjectList) {
+func (in *ViewObjectList) DeepCopyInto(out *ViewObjectList) {
 	if in == nil || out == nil {
 		return
 	}
 
 	*out = *in
 	out.Object = runtime.DeepCopyJSON(in.Object)
-	out.Items = make([]Object, len(in.Items))
+	out.Items = make([]ViewObject, len(in.Items))
 	for i := range in.Items {
 		in.Items[i].DeepCopyInto(&out.Items[i])
 	}
 }
 
-func (in *ObjectList) DeepCopy() *ObjectList {
-	out := new(ObjectList)
+func (in *ViewObjectList) DeepCopy() *ViewObjectList {
+	out := new(ViewObjectList)
 	in.DeepCopyInto(out)
 	return out
 }
 
-func (a *ObjectList) DeepEqual(b *ObjectList) bool {
+func (a *ViewObjectList) DeepEqual(b *ViewObjectList) bool {
 	if a.View != b.View || !equality.Semantic.DeepEqual(a.Object, b.Object) || len(a.Items) != len(b.Items) {
 		return false
 	}
@@ -217,14 +217,14 @@ func (a *ObjectList) DeepEqual(b *ObjectList) bool {
 }
 
 // helpers
-func (l *ObjectList) setNestedField(value interface{}, fields ...string) {
+func (l *ViewObjectList) setNestedField(value interface{}, fields ...string) {
 	if l.Object == nil {
 		l.Object = make(map[string]interface{})
 	}
 	unstructured.SetNestedField(l.Object, value, fields...)
 }
 
-func (l *ObjectList) getNestedString(obj map[string]interface{}, fields ...string) string {
+func (l *ViewObjectList) getNestedString(obj map[string]interface{}, fields ...string) string {
 	val, found, err := unstructured.NestedString(obj, fields...)
 	if !found || err != nil {
 		return ""
@@ -232,7 +232,7 @@ func (l *ObjectList) getNestedString(obj map[string]interface{}, fields ...strin
 	return val
 }
 
-func (l *ObjectList) getNestedInt64Pointer(obj map[string]interface{}, fields ...string) *int64 {
+func (l *ViewObjectList) getNestedInt64Pointer(obj map[string]interface{}, fields ...string) *int64 {
 	val, found, err := unstructured.NestedInt64(obj, fields...)
 	if !found || err != nil {
 		return nil

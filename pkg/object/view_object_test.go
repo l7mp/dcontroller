@@ -5,22 +5,30 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1 "hsnlab/dcontroller-runtime/pkg/api/v1"
+	apiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
 )
+
+var _ client.Object = &ViewObject{}
+var _ schema.ObjectKind = &ViewObject{}
+var _ metav1.ListInterface = &ViewObject{}
+var _ Unstructured = &ViewObject{}
+var _ DeepComparable = &ViewObject{}
 
 var _ = Describe("Object", func() {
 	It("should be created without content", func() {
-		obj := New("view")
+		obj := NewViewObject("view")
 
 		Expect(obj).NotTo(BeNil())
 		Expect(obj.GetKind()).To(Equal("view"))
 	})
 
 	It("should implement metav1.Object", func() {
-		obj := New("view")
+		obj := NewViewObject("view")
 		Expect(obj).NotTo(BeNil())
 		obj.SetNamespace("ns")
 		obj.SetName("test-1")
@@ -29,7 +37,7 @@ var _ = Describe("Object", func() {
 		Expect(obj.GetNamespace()).To(Equal("ns"))
 		Expect(obj.GetName()).To(Equal("test-1"))
 		Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
-			"apiVersion": "dcontroller.github.io/v1alpha1",
+			"apiVersion": "view.dcontroller.github.io/v1alpha1",
 			"kind":       "view",
 			"metadata": map[string]any{
 				"name":      "test-1",
@@ -39,7 +47,7 @@ var _ = Describe("Object", func() {
 	})
 
 	It("should not let GVK to be updated", func() {
-		obj := New("view")
+		obj := NewViewObject("view")
 		Expect(obj).NotTo(BeNil())
 
 		obj.SetKind("dummy")
@@ -52,43 +60,43 @@ var _ = Describe("Object", func() {
 	})
 
 	It("should allow to be created with given namespace/name", func() {
-		obj := New("view").WithName("ns", "test-1")
+		obj := NewViewObject("view").WithName("ns", "test-1")
 		Expect(obj.GetNamespace()).To(Equal("ns"))
 		Expect(obj.GetName()).To(Equal("test-1"))
 	})
 
 	It("should implement UnstructuredContent() in runtime.Unstructured", func() {
-		obj := New("view")
+		obj := NewViewObject("view")
 
 		Expect(obj).NotTo(BeNil())
 		Expect(obj.GetKind()).To(Equal("view"))
 
 		Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
-			"apiVersion": "dcontroller.github.io/v1alpha1",
+			"apiVersion": "view.dcontroller.github.io/v1alpha1",
 			"kind":       "view",
 		}))
 	})
 
 	It("should implement SetUnstructuredContent() in runtime.Unstructured", func() {
-		obj := New("view")
+		obj := NewViewObject("view")
 
 		Expect(obj).NotTo(BeNil())
 		Expect(obj.GetKind()).To(Equal("view"))
 
 		obj.SetUnstructuredContent(map[string]any{
-			"apiVersion": "dcontroller.github.io/v1alpha1",
+			"apiVersion": "view.dcontroller.github.io/v1alpha1",
 			"kind":       "different-view",
 		})
 
 		// view is readonly once the object has been created
 		Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
-			"apiVersion": "dcontroller.github.io/v1alpha1",
+			"apiVersion": "view.dcontroller.github.io/v1alpha1",
 			"kind":       "view",
 		}))
 	})
 
 	It("should be created with content", func() {
-		obj := New("view").WithContent(map[string]any{"a": int64(1), "b": map[string]any{"c": int64(2)}})
+		obj := NewViewObject("view").WithContent(map[string]any{"a": int64(1), "b": map[string]any{"c": int64(2)}})
 		Expect(obj).NotTo(BeNil())
 		obj.SetNamespace("ns")
 		obj.SetName("test-1")
@@ -97,7 +105,7 @@ var _ = Describe("Object", func() {
 		Expect(obj.GetNamespace()).To(Equal("ns"))
 		Expect(obj.GetName()).To(Equal("test-1"))
 		Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
-			"apiVersion": "dcontroller.github.io/v1alpha1",
+			"apiVersion": "view.dcontroller.github.io/v1alpha1",
 			"kind":       "view",
 			"metadata": map[string]any{
 				"name":      "test-1",
@@ -109,7 +117,7 @@ var _ = Describe("Object", func() {
 	})
 
 	It("unstructured fields", func() {
-		obj := New("view")
+		obj := NewViewObject("view")
 		obj.SetUnstructuredContent(map[string]any{"a": int64(1)})
 
 		val, ok, err := unstructured.NestedInt64(obj.Object, "a")

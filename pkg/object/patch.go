@@ -6,7 +6,7 @@ import (
 )
 
 // Patch performs an in-place patch.
-func (obj *Object) Patch(m map[string]any) error {
+func (obj *ViewObject) Patch(m map[string]any) error {
 	res := patch(obj.Object, m)
 
 	m, ok := res.(map[string]any)

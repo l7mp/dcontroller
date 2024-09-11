@@ -14,16 +14,16 @@ func NewStore() *Store {
 	return &Store{Store: toolscache.NewStore(toolscache.MetaNamespaceKeyFunc)}
 }
 
-// Add adds the given object to the accumulator associated with the given object's key
+// Add adds the given object to the database associated with the given object's key
 func (s *Store) Add(obj *object.Object) error { return s.Store.Add(obj.DeepCopy()) }
 
-// Update updates the given object in the accumulator associated with the given object's key
+// Update updates the given object in the database associated with the given object's key
 func (s *Store) Update(obj *object.Object) error { return s.Store.Update(obj.DeepCopy()) }
 
-// Delete deletes the given object from the accumulator associated with the given object's key
+// Delete deletes the given object from the database associated with the given object's key
 func (s *Store) Delete(obj *object.Object) error { return s.Store.Delete(obj) }
 
-// List returns a list of all the currently non-empty accumulators
+// List returns a list of all the currently non-empty databases
 func (s *Store) List() []*object.Object {
 	res := s.Store.List()
 	ret := make([]*object.Object, len(res))
@@ -33,10 +33,10 @@ func (s *Store) List() []*object.Object {
 	return ret
 }
 
-// ListKeys returns a list of all the keys currently associated with non-empty accumulators
+// ListKeys returns a list of all the keys currently associated with non-empty databases
 func (s *Store) ListKeys() []string { return s.Store.ListKeys() }
 
-// Get returns the accumulator associated with the given object's key
+// Get returns the database associated with the given object's key
 func (s *Store) Get(obj *object.Object) (*object.Object, bool, error) {
 	item, exists, err := s.Store.Get(obj)
 	if err != nil || item == nil {
@@ -45,7 +45,7 @@ func (s *Store) Get(obj *object.Object) (*object.Object, bool, error) {
 	return item.(*object.Object).DeepCopy(), exists, err
 }
 
-// GetByKey returns the accumulator associated with the given key
+// GetByKey returns the database associated with the given key
 func (s *Store) GetByKey(key string) (*object.Object, bool, error) {
 	item, exists, err := s.Store.GetByKey(key)
 	if err != nil || item == nil {

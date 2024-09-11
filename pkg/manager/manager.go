@@ -1,8 +1,9 @@
 package manager
 
 import (
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
+	bmgr "sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"hsnlab/dcontroller-runtime/pkg/cache"
 )
@@ -10,27 +11,32 @@ import (
 // logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 type Manager struct {
-	manager.Manager
+	bmgr.Manager
 	ctrls map[string]controller.Controller // a controller per view
 	cache *cache.Cache                     // a cache per view
 	views map[string]string                // view store
+	fake  bool
 }
 
-// // New creates a new dmanager
-// func (m *Manager) New(config *rest.Config, options basemgr.Options) (*Manager, error) {
-// 	mgr, err := basemgr.New(config, options)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+// New creates a new dmanager
+func New(config *rest.Config, options bmgr.Options) (*Manager, error) {
+	mgr, err := bmgr.New(config, options)
+	if err != nil {
+		return nil, err
+	}
 
-// 	return &Manager{
-// 		base:   mgr,
-// 		ctrls:  make(map[string]controller.Controller),
-// 		caches: make(map[string]cache.Cache),
-// 		dep:    dag.New(),
-// 	}, nil
-// }
+	return &Manager{
+		Manager: mgr,
+		ctrls:   make(map[string]controller.Controller),
+		cache:   cache.New(),
+	}, nil
+}
 
 func (m *Manager) GetCache() *cache.Cache {
 	return m.cache
 }
+
+// comes from the manager
+// func (m *Manager) GetScheme() *runtime.Scheme {
+// 	return m.Manager.GetScheme()
+// }
