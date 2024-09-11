@@ -23,10 +23,10 @@ func (a *Aggregation) String() string {
 }
 
 // Evaluate processes an aggregation expression on the given delta.
-func (a *Aggregation) Evaluate(eng Engine, delta cache.Delta) (cache.Delta, error) {
+func (a *Aggregation) Evaluate(eng Engine, delta cache.Delta) ([]cache.Delta, error) {
 	res, err := eng.EvaluateAggregation(a, delta)
 	if err != nil {
-		return cache.Delta{}, NewAggregationError(a.String(),
+		return nil, NewAggregationError(a.String(),
 			fmt.Errorf("aggregation error: %w", err))
 	}
 

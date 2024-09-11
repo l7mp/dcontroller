@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"hsnlab/dcontroller-runtime/pkg/util"
 )
 
 func (obj *ViewObject) String() string {
@@ -29,10 +29,10 @@ func (obj *ViewObject) String() string {
 	return output
 }
 
-// DumpUnstructured convers an unstuctured object into a human-readable form.
-func DumpUnstructured(obj *unstructured.Unstructured) string {
+// DumpObject convers an unstuctured object into a human-readable form.
+func DumpObject(obj Object) string {
 	// copy
-	ro := obj.DeepCopy()
+	ro := DeepCopy(obj)
 
 	// strip useless stuff
 	as := ro.GetAnnotations()
@@ -42,12 +42,7 @@ func DumpUnstructured(obj *unstructured.Unstructured) string {
 	}
 	ro.SetManagedFields(nil)
 
-	// default dump
-	output := fmt.Sprintf("%#v", ro)
-
-	if json, err := json.Marshal(ro); err == nil {
-		output = string(json)
-	}
+	output := util.Stringify(ro)
 
 	return output
 }

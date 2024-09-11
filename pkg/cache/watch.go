@@ -64,7 +64,7 @@ func (c *Cache) watch(ctx context.Context, gvk schema.GroupVersionKind) (watch.I
 
 	// send initial list
 	for _, item := range indexer.List() {
-		event := watch.Event{Type: watch.Added, Object: item.(*object.Object).DeepCopy()}
+		event := watch.Event{Type: watch.Added, Object: object.DeepCopy(item.(object.Object))}
 		select {
 		case watcher.result <- event:
 			// Successfully sent the event to the watcher
@@ -97,7 +97,7 @@ func (c *Cache) notifyWatchers(gvk schema.GroupVersionKind, event watch.Event) {
 		for _, watcher := range watchers {
 			watcher.Lock()
 			if !watcher.stopped {
-				event.Object = event.Object.(*object.Object).DeepCopy()
+				event.Object = object.DeepCopy(event.Object.(object.Object))
 				select {
 				case watcher.result <- event:
 					// Successfully sent the event to the watcher

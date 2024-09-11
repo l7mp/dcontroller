@@ -2,40 +2,50 @@ package manager
 
 import (
 	"context"
+	"fmt"
 
-	"hsnlab/dcontroller-runtime/pkg/cache"
-
-	"sigs.k8s.io/controller-runtime/pkg/api"
+	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	viewapiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
+	"hsnlab/dcontroller-runtime/pkg/cache"
 )
 
-// special client.Reader: Get and List are wrapped so that if API group is dcontroller.github.io,
-// ask the view cache, otherwise fall back to the default manager client
+var errInvalidViewGroup = fmt.Errorf("invalid view group or version, expecting %s", viewapiv1.GroupVersion.String())
 
-type cclient struct {
-	client.Client
+type viewClient struct {
 	cacheClient cache.ReadOnlyClient
 }
 
-func NewClient(m *Manager) client.Client {
-	return &cclient{
-		Client:      m.Manager.GetClient(),
+// GetClient obtains a client to the local view cache. Use manager.Manager.GetClient() to obtain a
+// real Kubernetes API client.
+func (m *Manager) GetClient() cache.ReadOnlyClient {
+	return &viewClient{
 		cacheClient: m.cache.NewClient(),
 	}
 }
 
-func (c *cclient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+// client.Reader
+func (c *viewClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Group == api.GroupVersion.Group {
-		return c.cacheClient.Get(ctx, key, obj, opts...)
+	if gvk.Group != viewapiv1.GroupVersion.Group {
+		return errInvalidViewGroup
 	}
-	return c.Client.Get(ctx, key, obj, opts...)
+	return c.cacheClient.Get(ctx, key, obj, opts...)
 }
 
-func (c *cclient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+func (c *viewClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	gvk := list.GetObjectKind().GroupVersionKind()
-	if gvk.Group == api.GroupVersion.Group {
-		return c.cacheClient.List(ctx, list, opts...)
+	if gvk.Group != viewapiv1.GroupVersion.Group {
+		return errInvalidViewGroup
 	}
-	return c.Client.List(ctx, list, opts...)
+	return c.cacheClient.List(ctx, list, opts...)
+}
+
+func (c *viewClient) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
+	gvk := list.GetObjectKind().GroupVersionKind()
+	if gvk.Group != viewapiv1.GroupVersion.Group {
+		return nil, errInvalidViewGroup
+	}
+	return c.cacheClient.Watch(ctx, list, opts...)
 }

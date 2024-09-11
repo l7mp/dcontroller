@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/yaml"
 
+	viewapiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
 	"hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
@@ -31,54 +32,54 @@ func TestPipeline(t *testing.T) {
 }
 
 var _ = Describe("Pipelines", func() {
-	var dep1, dep2, pod1, pod2, pod3, rs1, rs2 *object.Object
+	var dep1, dep2, pod1, pod2, pod3, rs1, rs2 object.Object
 	var eng Engine
 
 	BeforeEach(func() {
-		pod1 = object.New("pod").WithName("default", "pod1").
+		pod1 = object.NewViewObject("pod").
 			WithContent(Unstructured{
 				"spec": Unstructured{
 					"image":  "image1",
 					"parent": "dep1",
 				},
-			})
+			}).WithName("default", "pod1")
 		pod1.SetLabels(map[string]string{"app": "app1"})
 
-		pod2 = object.New("pod").WithName("other", "pod2").
+		pod2 = object.NewViewObject("pod").
 			WithContent(Unstructured{
 				"spec": Unstructured{
 					"image":  "image2",
 					"parent": "dep1",
 				},
-			})
+			}).WithName("other", "pod2")
 		pod2.SetLabels(map[string]string{"app": "app2"})
 
-		pod3 = object.New("pod").WithName("default", "pod3").
+		pod3 = object.NewViewObject("pod").
 			WithContent(Unstructured{
 				"spec": Unstructured{
 					"image":  "image1",
 					"parent": "dep2",
 				},
-			})
+			}).WithName("default", "pod3")
 		pod3.SetLabels(map[string]string{"app": "app1"})
 
-		dep1 = object.New("dep").WithName("default", "dep1").
+		dep1 = object.NewViewObject("dep").
 			WithContent(Unstructured{
 				"spec": Unstructured{
 					"replicas": int64(3),
 				},
-			})
+			}).WithName("default", "dep1")
 		dep1.SetLabels(map[string]string{"app": "app1"})
 
-		dep2 = object.New("dep").WithName("default", "dep2").
+		dep2 = object.NewViewObject("dep").
 			WithContent(Unstructured{
 				"spec": Unstructured{
 					"replicas": int64(1),
 				},
-			})
+			}).WithName("default", "dep2")
 		dep2.SetLabels(map[string]string{"app": "app2"})
 
-		rs1 = object.New("rs").WithName("default", "rs1").
+		rs1 = object.NewViewObject("rs").
 			WithContent(Unstructured{
 				"spec": Unstructured{
 					"dep": "dep1",
@@ -86,10 +87,10 @@ var _ = Describe("Pipelines", func() {
 				"status": Unstructured{
 					"ready": int64(2),
 				},
-			})
+			}).WithName("default", "rs1")
 		rs1.SetLabels(map[string]string{"app": "app1"})
 
-		rs2 = object.New("rs").WithName("default", "rs2").
+		rs2 = object.NewViewObject("rs").
 			WithContent(Unstructured{
 				"spec": Unstructured{
 					"dep": "dep2",
@@ -97,10 +98,12 @@ var _ = Describe("Pipelines", func() {
 				"status": Unstructured{
 					"ready": int64(1),
 				},
-			})
+			}).WithName("default", "rs2")
 		rs2.SetLabels(map[string]string{"app": "app2"})
 
-		eng = NewDefaultEngine("view", []string{"pod", "dep", "rs"}, logger)
+		eng = NewDefaultEngine("view", []GVK{viewapiv1.GroupVersion.WithKind("pod"),
+			viewapiv1.GroupVersion.WithKind("dep"),
+			viewapiv1.GroupVersion.WithKind("rs")}, logger)
 	})
 
 	Describe("Evaluating pipeline expressions for Added events", func() {
@@ -123,12 +126,12 @@ var _ = Describe("Pipelines", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			eng.WithObjects(dep1, dep2)
-			Expect(eng.(*defaultEngine).views["dep"].List()).To(HaveLen(2))
-			Expect(eng.(*defaultEngine).views).NotTo(HaveKey("pod"))
+			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore).NotTo(HaveKey("pod"))
 
 			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(eng.(*defaultEngine).views).To(HaveKey("pod"))
+			Expect(eng.(*defaultEngine).baseViewStore).To(HaveKey(viewapiv1.GroupVersion.WithKind("pod")))
 
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
@@ -136,7 +139,7 @@ var _ = Describe("Pipelines", func() {
 			Expect(delta.Object.GetName()).To(Equal("dep1--pod1"))
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 			Expect(delta.Object.UnstructuredContent()).To(Equal(Unstructured{
-				"apiVersion": "dcontroller.github.io/v1alpha1",
+				"apiVersion": "view.dcontroller.github.io/v1alpha1",
 				"kind":       "view",
 				"metadata": Unstructured{
 					"name":      "dep1--pod1",
@@ -163,7 +166,7 @@ var _ = Describe("Pipelines", func() {
 			Expect(delta.Object.GetName()).To(Equal("pod1"))
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 			Expect(delta.Object.UnstructuredContent()).To(Equal(Unstructured{
-				"apiVersion": "dcontroller.github.io/v1alpha1",
+				"apiVersion": "view.dcontroller.github.io/v1alpha1",
 				"kind":       "view",
 				"metadata": Unstructured{
 					"name":      "pod1",
@@ -506,7 +509,7 @@ var testUDPRoute = map[string]any{
 }
 
 var _ = Describe("Pipelines", func() {
-	var gateway, route *object.Object
+	var gateway, route object.Object
 	var eng Engine
 	var routeArrachmentRule = `
 '@join':
@@ -532,13 +535,15 @@ var _ = Describe("Pipelines", func() {
             - $.route.metadata.name`
 
 	BeforeEach(func() {
-		gateway = object.New("gateway").WithName("default", "gateway")
+		gateway = object.NewViewObject("gateway").WithName("default", "gateway")
 		gateway.SetUnstructuredContent(testUDPGateway)
-		gateway = gateway.DeepCopy() // so we don't share stuff across tests
-		route = object.New("route").WithName("default", "route")
+		gateway = object.DeepCopy(gateway) // so we don't share stuff across tests
+		route = object.NewViewObject("route").WithName("default", "route")
 		route.SetUnstructuredContent(testUDPRoute)
-		route = route.DeepCopy()
-		eng = NewDefaultEngine("view", []string{"gateway", "route"}, logger)
+		route = object.DeepCopy(route)
+		eng = NewDefaultEngine("view", []GVK{
+			viewapiv1.GroupVersion.WithKind("gateway"),
+			viewapiv1.GroupVersion.WithKind("route")}, logger)
 	})
 
 	It("should implement the route attachment API with the All policy", func() {

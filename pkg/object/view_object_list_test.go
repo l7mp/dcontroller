@@ -67,7 +67,8 @@ var _ = Describe("ViewObjectList", func() {
 	})
 
 	It("should be created with content", func() {
-		obj := NewViewObject("view").WithName("ns", "test").WithContent(map[string]any{"a": int64(1)})
+		obj := NewViewObject("view").WithContent(map[string]any{"a": int64(1)}).WithName("ns", "test")
+		fmt.Printf("%#v\n", obj)
 		list := NewViewObjectList("view")
 		list.Items = append(list.Items, *obj)
 
@@ -76,7 +77,6 @@ var _ = Describe("ViewObjectList", func() {
 		Expect(items).To(HaveLen(1))
 
 		item := items[0].(map[string]any)
-		fmt.Printf("%#v\n", item)
 		val, found, err := unstructured.NestedString(item, "metadata", "namespace")
 		Expect(found).To(BeTrue())
 		Expect(err).NotTo(HaveOccurred())

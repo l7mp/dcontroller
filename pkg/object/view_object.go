@@ -24,8 +24,9 @@ func NewViewObject(view string) *ViewObject {
 }
 
 func NewFromUnstructured(u *unstructured.Unstructured) *ViewObject {
-	return NewViewObject(u.GetKind()).WithName(u.GetNamespace(), u.GetName()).
-		WithContent(u.UnstructuredContent())
+	return NewViewObject(u.GetKind()).
+		WithContent(u.UnstructuredContent()).
+		WithName(u.GetNamespace(), u.GetName())
 }
 
 func NewViewObjectFromNativeObject(view string, clientObj client.Object) (*ViewObject, error) {
@@ -47,19 +48,8 @@ func (obj *ViewObject) WithName(namespace, name string) *ViewObject {
 	return obj
 }
 
-func (obj *ViewObject) WithContent(m UnstructuredContent) *ViewObject {
-	namespace := obj.GetNamespace()
-	if ns, ok, err := unstructured.NestedString(m, "metadata", "namespace"); err == nil && ok {
-		namespace = ns
-	}
-	name := obj.GetName()
-	if n, ok, err := unstructured.NestedString(m, "metadata", "name"); err == nil && ok {
-		name = n
-	}
-	obj.SetUnstructuredContent(m)
-	obj.SetNamespace(namespace)
-	obj.SetName(name)
-
+func (obj *ViewObject) WithContent(content UnstructuredContent) *ViewObject {
+	obj.SetUnstructuredContent(runtime.DeepCopyJSON(content))
 	return obj
 }
 

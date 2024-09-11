@@ -51,8 +51,8 @@ func (l *ViewObjectList) GetKind() string {
 	return l.View
 }
 
-func (l *ViewObjectList) SetKind(_ string) {
-	l.setNestedField(l.View, "kind")
+func (l *ViewObjectList) SetKind(kind string) {
+	l.setNestedField(l.View, kind)
 }
 
 func (l *ViewObjectList) GetResourceVersion() string {

@@ -1,12 +1,14 @@
 package cache
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
@@ -17,6 +19,7 @@ type Cache struct {
 	watchers map[schema.GroupVersionKind][]*cacheWatcher
 }
 
+// new c
 func New() *Cache {
 	return &Cache{
 		caches:   make(map[schema.GroupVersionKind]cache.Indexer),
@@ -40,8 +43,9 @@ func (c *Cache) RegisterGVK(gvk schema.GroupVersionKind) error {
 	return nil
 }
 
-func (c *Cache) Upsert(obj *object.Object) error {
-	gvk := obj.GroupVersionKind()
+func (c *Cache) Upsert(obj object.Object) error {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+
 	c.mu.RLock()
 	indexer, exists := c.caches[gvk]
 	c.mu.RUnlock()
@@ -66,7 +70,7 @@ func (c *Cache) Upsert(obj *object.Object) error {
 	}
 
 	eventType := watch.Added
-	if exists && !obj.DeepEqual(oldObj.(*object.Object)) {
+	if exists && !object.DeepEqual(obj, oldObj.(object.Object)) {
 		eventType = watch.Modified
 	}
 
@@ -75,8 +79,9 @@ func (c *Cache) Upsert(obj *object.Object) error {
 	return nil
 }
 
-func (c *Cache) Delete(obj *object.Object) error {
-	gvk := obj.GroupVersionKind()
+func (c *Cache) Delete(obj object.Object) error {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+
 	c.mu.RLock()
 	indexer, exists := c.caches[gvk]
 	c.mu.RUnlock()
@@ -103,6 +108,37 @@ func (c *Cache) Delete(obj *object.Object) error {
 		return err
 	}
 
-	c.notifyWatchers(gvk, watch.Event{Type: watch.Deleted, Object: existingObj.(*object.Object)})
+	c.notifyWatchers(gvk, watch.Event{Type: watch.Deleted, Object: existingObj.(object.Object)})
 	return nil
 }
+
+// // fulfill cache.Cache
+// fulfill client.Reader
+func (c *Cache) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	return c.NewClient().Get(ctx, key, obj, opts...)
+}
+
+func (c *Cache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	return c.NewClient().List(ctx, list, opts...)
+}
+
+// // fulfill cache.Informer
+// func (c *Cache) GetInformer(ctx context.Context, obj client.Object, opts ...ctrlCache.InformerGetOption) (ctrlCache.Informer, error) {
+// 	gvk := obj.GetObjectKind().GroupVersionKind()
+// 	if gvk.Group != viewapiv1.GroupVersion.Group {
+// 		return nil, c.Cache.GetInformer(ctx, obj, opts...)
+// 	}
+
+// }
+// func (c *Cache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind, opts ...ctrlCache.InformerGetOption) (ctrlCache.Informer, error) {
+// }
+// func (c *Cache) RemoveInformer(ctx context.Context, obj client.Object) error {
+// }
+// func (c *Cache) Start(ctx context.Context) error {
+// }
+// func (c *Cache) WaitForCacheSync(ctx context.Context) bool {
+// }
+
+// // fulfill client.FieldIndexer
+// func (c *Cache) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
+// }

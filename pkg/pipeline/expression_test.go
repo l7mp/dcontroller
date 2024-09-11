@@ -14,26 +14,26 @@ import (
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
-var emptyView = []string{}
+var emptyView = []GVK{}
 
 var _ = Describe("Expressions", func() {
 	var eng, eng2, eng3 Engine
-	var obj1, obj2 *object.Object
+	var obj1, obj2 object.Object
 
 	BeforeEach(func() {
 		eng = NewDefaultEngine("view", emptyView, logger)
-		obj1 = object.New("testview1").WithName("default", "name").WithContent(
+		obj1 = object.NewViewObject("testview1").WithContent(
 			Unstructured{
 				"spec": Unstructured{
 					"a": int64(1),
 					"b": Unstructured{"c": int64(2)},
 					"x": []any{int64(1), int64(2), int64(3), int64(4), int64(5)},
 				},
-			})
+			}).WithName("default", "name")
 		eng.WithObjects(obj1)
 
 		eng2 = NewDefaultEngine("view", emptyView, logger)
-		obj2 = object.New("testview2").WithContent(
+		obj2 = object.NewViewObject("testview2").WithContent(
 			Unstructured{
 				"metadata": Unstructured{
 					"namespace": "default2",
@@ -159,7 +159,7 @@ var _ = Describe("Expressions", func() {
 				},
 			}
 
-			obj, err := object.FromNativeObject("Service", input)
+			obj, err := object.NewViewObjectFromNativeObject("Service", input)
 			Expect(err).NotTo(HaveOccurred())
 
 			res, err := GetJSONPathExp(`$.metadata.name`, obj.UnstructuredContent())
@@ -198,7 +198,7 @@ var _ = Describe("Expressions", func() {
 		})
 
 		It("should evaluate an escaped JSONPath expression on Kubernetes object", func() {
-			obj, err := object.FromNativeObject("Service", &corev1.Service{
+			obj, err := object.NewViewObjectFromNativeObject("Service", &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: "testnamespace",
 					Name:      "testservice-ok",
@@ -307,7 +307,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(res).To(Equal(Unstructured{
-				"apiVersion": "dcontroller.github.io/v1alpha1",
+				"apiVersion": "view.dcontroller.github.io/v1alpha1",
 				"kind":       "testview1",
 				"metadata": Unstructured{
 					"name":      "name",
@@ -961,7 +961,7 @@ var _ = Describe("Expressions", func() {
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
 
-			obj := obj1.DeepCopy()
+			obj := object.DeepCopy(obj1)
 			obj.SetLabels(map[string]string{"app": "nginx"})
 			ctx := evalCtx{object: obj.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)
@@ -987,7 +987,7 @@ var _ = Describe("Expressions", func() {
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
 
-			obj := obj1.DeepCopy()
+			obj := object.DeepCopy(obj1)
 			obj.SetLabels(map[string]string{"app": "nginx"})
 			ctx := evalCtx{object: obj.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)
@@ -1013,7 +1013,7 @@ var _ = Describe("Expressions", func() {
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
 
-			obj := obj1.DeepCopy()
+			obj := object.DeepCopy(obj1)
 			obj.SetLabels(map[string]string{"app": "nginx"})
 			ctx := evalCtx{object: obj.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)
@@ -1039,7 +1039,7 @@ var _ = Describe("Expressions", func() {
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
 
-			obj := obj1.DeepCopy()
+			obj := object.DeepCopy(obj1)
 			obj.SetLabels(map[string]string{"app": "nginx", "env": "production", "version": "v2"})
 			ctx := evalCtx{object: obj.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)

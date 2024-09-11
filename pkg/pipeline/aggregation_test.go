@@ -6,33 +6,37 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/yaml"
 
 	"hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
 var _ = Describe("Aggregations", func() {
-	var objs []*object.Object
+	var objs []object.Object
 	var eng Engine
 
 	BeforeEach(func() {
-		objs = []*object.Object{
-			object.New("view").WithName("default", "name").
+		objs = []object.Object{
+			object.NewViewObject("view").
 				WithContent(Unstructured{
 					"spec": Unstructured{
 						"a": int64(1),
 						"b": Unstructured{"c": int64(2)},
 					},
 					"c": "c",
-				}),
-			object.New("view").WithName("default", "name2").
+				}).
+				WithName("default", "name"),
+			object.NewViewObject("view").
 				WithContent(Unstructured{
 					"spec": Unstructured{
 						"a": int64(2),
 						"b": Unstructured{"c": int64(3)},
 					},
 					"d": "d",
-				}),
+				}).
+				WithName("default", "name2"),
 		}
 		eng = NewDefaultEngine("view", emptyView, logger)
 	})
@@ -46,17 +50,20 @@ var _ = Describe("Aggregations", func() {
 
 			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res.IsUnchanged()).To(BeFalse())
-			Expect(res).To(Equal(cache.Delta{Type: cache.Added, Object: objs[0]}))
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added, Object: objs[0]}))
 
 			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[1]})
+			Expect(res).To(HaveLen(1))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res.IsUnchanged()).To(BeTrue())
+			Expect(res[0].IsUnchanged()).To(BeTrue())
 
 			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res.Type).To(Equal(cache.Updated))
-			Expect(res.IsUnchanged()).To(BeFalse())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Updated))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
 		})
 
 		It("should evaluate a false select expression", func() {
@@ -67,11 +74,13 @@ var _ = Describe("Aggregations", func() {
 
 			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res.IsUnchanged()).To(BeTrue())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeTrue())
 
 			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[1]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res.IsUnchanged()).To(BeTrue())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeTrue())
 		})
 
 		It("should evaluate an inverted false select expression", func() {
@@ -82,13 +91,15 @@ var _ = Describe("Aggregations", func() {
 
 			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res.IsUnchanged()).To(BeFalse())
-			Expect(res).To(Equal(cache.Delta{Type: cache.Added, Object: objs[0]}))
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added, Object: objs[0]}))
 
 			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[1]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res.IsUnchanged()).To(BeFalse())
-			Expect(res).To(Equal(cache.Delta{Type: cache.Added, Object: objs[1]}))
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added, Object: objs[1]}))
 		})
 
 		It("should not err for a select expression referring to a nonexistent field", func() {
@@ -99,7 +110,8 @@ var _ = Describe("Aggregations", func() {
 
 			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res.IsUnchanged()).To(BeTrue())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeTrue())
 		})
 	})
 
@@ -134,12 +146,12 @@ var _ = Describe("Aggregations", func() {
 
 			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
-
-			Expect(res.Type).To(Equal(cache.Updated))
-			Expect(res.Object).To(Equal(&object.Object{
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Added))
+			Expect(res[0].Object).To(Equal(&object.ViewObject{
 				Unstructured: unstructured.Unstructured{
 					Object: Unstructured{
-						"apiVersion": "dcontroller.github.io/v1alpha1",
+						"apiVersion": "view.dcontroller.github.io/v1alpha1",
 						"kind":       "view",
 						"metadata": Unstructured{
 							"name": "name",
@@ -158,9 +170,12 @@ var _ = Describe("Aggregations", func() {
 
 			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Added))
 
-			Expect(res.Type).To(Equal(cache.Updated))
-			raw, ok := res.Object.Object["metadata"]
+			obj, ok := res[0].Object.(*object.ViewObject)
+			Expect(ok).To(BeTrue())
+			raw, ok := obj.Object["metadata"]
 			Expect(ok).To(BeTrue())
 			meta, ok := raw.(Unstructured)
 			Expect(ok).To(BeTrue())
@@ -177,12 +192,61 @@ var _ = Describe("Aggregations", func() {
 			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
 
-			raw, ok := res.Object.Object["metadata"]
+			Expect(res).To(HaveLen(1))
+			obj, ok := res[0].Object.(*object.ViewObject)
+			Expect(ok).To(BeTrue())
+			raw, ok := obj.Object["metadata"]
 			Expect(ok).To(BeTrue())
 			meta, ok := raw.(Unstructured)
 			Expect(ok).To(BeTrue())
 			Expect(meta["namespace"]).To(Equal("default"))
 			Expect(meta["name"]).To(Equal("name"))
+		})
+
+		It("should evaluate a projection expression that alters the name", func() {
+			jsonData := `
+'@aggregate':
+  - '@project':
+      metadata:
+        name:
+          '@concat':
+            - $.metadata.name
+            - ':'
+            - $.c
+        namespace: $.metadata.namespace`
+			var ag Aggregation
+			err := yaml.Unmarshal([]byte(jsonData), &ag)
+			Expect(err).NotTo(HaveOccurred())
+
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Added))
+			obj := res[0].Object
+			Expect(obj.GetNamespace()).To(Equal("default"))
+			Expect(obj.GetName()).To(Equal("name:c"))
+
+			newObj := object.DeepCopy(objs[0])
+			Expect(unstructured.SetNestedField(newObj.UnstructuredContent(), "d", "c")).
+				NotTo(HaveOccurred())
+			val, ok, err := unstructured.NestedFieldNoCopy(newObj.UnstructuredContent(), "c")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(val).To(Equal("d"))
+
+			// this should remove name:c and add name:d
+			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: newObj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(2))
+			Expect(res[0].Type).To(Equal(cache.Deleted))
+			obj = res[0].Object
+			Expect(obj.GetNamespace()).To(Equal("default"))
+			Expect(obj.GetName()).To(Equal("name:c"))
+			Expect(res[1].Type).To(Equal(cache.Added))
+			obj = res[1].Object
+			Expect(obj.GetNamespace()).To(Equal("default"))
+			Expect(obj.GetName()).To(Equal("name:d"))
+
 		})
 
 		It("should err for a projection that drops .metadata.name", func() {
@@ -202,6 +266,147 @@ var _ = Describe("Aggregations", func() {
 
 			_, err = ag.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: objs[0]})
 			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Describe("Evaluating aggregations on native Unstructured objects", func() {
+		It("should evaluate a simple projection expression", func() {
+			jsonData := `{"@aggregate":[{"@project":{"metadata":"$.metadata"}}]}`
+			var ag Aggregation
+			err := json.Unmarshal([]byte(jsonData), &ag)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ag.Expressions).To(HaveLen(1))
+
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "testgroup", Version: "v1", Kind: "testkind"})
+			obj.SetName("test-name")
+			obj.SetNamespace("test-ns")
+
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Added))
+			Expect(res[0].Object).To(Equal(&object.ViewObject{
+				Unstructured: unstructured.Unstructured{
+					Object: Unstructured{
+						"apiVersion": "view.dcontroller.github.io/v1alpha1",
+						"kind":       "view",
+						"metadata": Unstructured{
+							"namespace": "test-ns",
+							"name":      "test-name",
+						},
+					},
+				},
+				View: "view", // comes from engine.View()
+			}))
+		})
+
+		It("should evaluate true select expression", func() {
+			jsonData := `{"@aggregate":[{"@select":{"@eq":["$.spec.b",1]}}]}`
+			var ag Aggregation
+			err := json.Unmarshal([]byte(jsonData), &ag)
+			Expect(err).NotTo(HaveOccurred())
+
+			gvk := schema.GroupVersionKind{Group: "testgroup", Version: "v1", Kind: "testkind"}
+
+			// Add object
+			obj := &unstructured.Unstructured{}
+			obj.SetUnstructuredContent(map[string]any{"spec": map[string]any{"b": int64(1)}})
+			obj.SetGroupVersionKind(gvk)
+			obj.SetName("test-name")
+			obj.SetNamespace("test-ns")
+			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			_ = obj.UnstructuredContent()
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added,
+				Object: object.NewViewObject("view").WithContent(obj.UnstructuredContent())}))
+
+			Expect(eng.(*defaultEngine).baseViewStore).To(HaveKey(gvk))
+			store := eng.(*defaultEngine).baseViewStore[gvk]
+			Expect(store.List()).To(HaveLen(1))
+			x, ok, err := store.Get(obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(x).To(Equal(obj))
+
+			// Update will remove the object from the view
+			oldObj := object.DeepCopy(obj)
+			obj.SetUnstructuredContent(map[string]any{"spec": map[string]any{"b": int64(2)}})
+			obj.SetGroupVersionKind(gvk)
+			obj.SetName("test-name") // the previous call removes namespace/name
+			obj.SetNamespace("test-ns")
+			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Deleted,
+				Object: object.NewViewObject("view").WithContent(oldObj.UnstructuredContent())}))
+
+			Expect(store.List()).To(HaveLen(1)) // contains the changed base object
+			x, ok, err = store.Get(obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(x).To(Equal(obj))
+
+			// re-introduce object into the view
+			obj.SetUnstructuredContent(map[string]any{"spec": map[string]any{"b": int64(1)}})
+			obj.SetGroupVersionKind(gvk)
+			obj.SetName("test-name") // the previous call removes namespace/name
+			obj.SetNamespace("test-ns")
+			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(res).To(HaveLen(1))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added,
+				Object: object.NewViewObject("view").WithContent(obj.UnstructuredContent())}))
+
+			Expect(store.List()).To(HaveLen(1))
+			x, ok, err = store.Get(obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(x).To(Equal(obj))
+
+			// add another object into the view
+			obj2 := &unstructured.Unstructured{}
+			obj2.SetUnstructuredContent(map[string]any{"spec": map[string]any{"b": int64(1)}})
+			obj2.SetGroupVersionKind(gvk)
+			obj2.SetName("test-name-2") // the previous call removes namespace/name
+			obj2.SetNamespace("test-ns")
+			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: obj2})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added,
+				Object: object.NewViewObject("view").WithContent(obj2.UnstructuredContent())}))
+
+			Expect(store.List()).To(HaveLen(2))
+			x, ok, err = store.Get(obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(x).To(Equal(obj))
+			x, ok, err = store.Get(obj2)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(x).To(Equal(obj2))
+
+			// remove first object
+			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Deleted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Deleted,
+				Object: object.NewViewObject("view").WithContent(obj.UnstructuredContent())}))
+
+			// doesn't really change anything
+			obj.SetUnstructuredContent(map[string]any{"spec": map[string]any{"b": int64(3)}})
+			obj.SetName("test-name") // the previous call removes namespace/name
+			obj.SetNamespace("test-ns")
+			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeTrue())
 		})
 	})
 })

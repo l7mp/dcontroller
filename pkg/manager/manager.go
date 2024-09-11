@@ -10,6 +10,9 @@ import (
 
 // logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+// Manager is a wrapper around the controller-runtime Manager. It implements similar calls as the
+// wrapped manager, but the calls operate on the view cache, not the Kubernetes API server. In
+// order to obtain the real manager, use manager.Manager.
 type Manager struct {
 	bmgr.Manager
 	ctrls map[string]controller.Controller // a controller per view
@@ -32,11 +35,8 @@ func New(config *rest.Config, options bmgr.Options) (*Manager, error) {
 	}, nil
 }
 
+// GetCache returns the view cache. Use manager.Manager.GetCache() to obtain the cache of the
+// controller runtime manager.
 func (m *Manager) GetCache() *cache.Cache {
 	return m.cache
 }
-
-// comes from the manager
-// func (m *Manager) GetScheme() *runtime.Scheme {
-// 	return m.Manager.GetScheme()
-// }

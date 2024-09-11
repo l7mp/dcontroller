@@ -9,13 +9,16 @@ import (
 // Pipeline is an optional join followed by an aggregation.
 type Pipeline struct {
 	*Join
-	Aggregation
+	*Aggregation
 }
 
 func (p *Pipeline) String() string {
-	ss := p.Aggregation.String()
+	ss := ""
 	if p.Join != nil {
-		ss = p.Join.String() + "," + ss
+		ss = p.Join.String()
+	}
+	if p.Aggregation != nil {
+		ss = ss + "," + p.Aggregation.String()
 	}
 	return fmt.Sprintf("pipeline:[%s]", ss)
 }
@@ -38,11 +41,11 @@ func (p *Pipeline) Evaluate(eng Engine, delta cache.Delta) ([]cache.Delta, error
 	// process the aggregation on each of the deltas
 	res := []cache.Delta{}
 	for _, d := range deltas {
-		da, err := eng.EvaluateAggregation(&p.Aggregation, d)
+		ds, err := eng.EvaluateAggregation(p.Aggregation, d)
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, da)
+		res = append(res, ds...)
 	}
 
 	// the aggregation may collapse objects that come out as different (delete+add) from the

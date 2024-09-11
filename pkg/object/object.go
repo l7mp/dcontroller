@@ -1,9 +1,8 @@
 package object
 
 import (
-	"fmt"
-
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -34,19 +33,43 @@ func DeepCopyInto(in, out Object) {
 		return
 	}
 	out.SetUnstructuredContent(runtime.DeepCopyJSON(in.UnstructuredContent()))
-	// get view right in out
-	fmt.Printf("---------%#v\n", in.GetObjectKind().GroupVersionKind())
-
 	out.GetObjectKind().SetGroupVersionKind(in.GetObjectKind().GroupVersionKind())
-	fmt.Printf("---------%#v\n", out.GetObjectKind().GroupVersionKind())
 	return
 }
 
-func DeepCopy(in *ViewObject) Object {
+func DeepCopy(in Object) Object {
 	if in == nil {
 		return nil
 	}
-	out := new(ViewObject)
-	DeepCopyInto(in, out)
-	return out
+
+	switch in.(type) {
+	case *ViewObject:
+		out := new(ViewObject)
+		DeepCopyInto(in.(*ViewObject), out)
+		return out
+	case *unstructured.Unstructured:
+		out := new(unstructured.Unstructured)
+		DeepCopyInto(in.(*unstructured.Unstructured), out)
+		return out
+	}
+
+	return nil
+}
+
+type ObjectList interface {
+	client.ObjectList
+}
+
+func AppendToListItem(list ObjectList, obj Object) {
+	lu, okl := list.(*unstructured.UnstructuredList)
+	if ou, oko := obj.(*unstructured.Unstructured); okl && oko {
+		lu.Items = append(lu.Items, *ou)
+		return
+	}
+
+	lv, okl := list.(*ViewObjectList)
+	if ov, oko := obj.(*ViewObject); okl && oko {
+		lv.Items = append(lv.Items, *ov)
+		return
+	}
 }

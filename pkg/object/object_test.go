@@ -13,7 +13,13 @@ var _ client.Object = &ViewObject{}
 var _ schema.ObjectKind = &ViewObject{}
 var _ metav1.ListInterface = &ViewObject{}
 var _ Unstructured = &ViewObject{}
+
+var _ Object = &ViewObject{}
 var _ Object = &unstructured.Unstructured{}
+
+var _ client.ObjectList = &ViewObjectList{}
+var _ ObjectList = &ViewObjectList{}
+var _ ObjectList = &unstructured.UnstructuredList{}
 
 var _ = Describe("Object", func() {
 	It("deepequal viewobject", func() {
@@ -50,6 +56,20 @@ var _ = Describe("Object", func() {
 	It("deepcopy viewobject", func() {
 		obj1 := NewViewObject("view1")
 		obj2 := NewViewObject("")
+		DeepCopyInto(obj1, obj2)
+		Expect(DeepEqual(obj1, obj2)).To(BeTrue())
+
+		obj3 := DeepCopy(obj1)
+		Expect(DeepEqual(obj1, obj3)).To(BeTrue())
+	})
+
+	It("deepcopy unstructured", func() {
+		obj1 := &unstructured.Unstructured{}
+		obj1.SetUnstructuredContent(map[string]any{"spec": "x", "status": int64(12)})
+		obj1.SetGroupVersionKind(schema.GroupVersionKind{Group: "testgroup", Version: "v1", Kind: "testkind"})
+		obj1.SetNamespace("test-ns")
+		obj1.SetName("test")
+		obj2 := &unstructured.Unstructured{}
 		DeepCopyInto(obj1, obj2)
 		Expect(DeepEqual(obj1, obj2)).To(BeTrue())
 

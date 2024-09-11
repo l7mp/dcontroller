@@ -18,86 +18,180 @@ var ObjectKey = toolscache.MetaObjectToName
 
 // defaultEngine is the default implementation of the pipeline engine.
 type defaultEngine struct {
-	targetView string                  // the view to put the output objects into
-	baseviews  []string                // the view to put the output objects into
-	views      map[string]*cache.Store // internal view cache
-	log        logr.Logger
+	targetView    string               // the views/objects to work on
+	baseviews     []GVK                // the view to put the output objects into
+	baseViewStore map[GVK]*cache.Store // internal view cache
+	log           logr.Logger
 }
 
-func NewDefaultEngine(targetView string, baseviews []string, log logr.Logger) Engine {
+func NewDefaultEngine(targetView string, baseviews []GVK, log logr.Logger) Engine {
 	return &defaultEngine{
-		targetView: targetView,
-		baseviews:  baseviews,
-		views:      make(map[string]*cache.Store),
-		log:        log,
+		targetView:    targetView,
+		baseviews:     baseviews,
+		baseViewStore: make(map[GVK]*cache.Store),
+		log:           log,
 	}
 }
 
 func (eng *defaultEngine) Log() logr.Logger { return eng.log }
 func (eng *defaultEngine) View() string     { return eng.targetView }
 
-func (eng *defaultEngine) WithObjects(objs ...*object.Object) {
+func (eng *defaultEngine) WithObjects(objs ...object.Object) {
 	for _, o := range objs {
-		eng.initViewStore(o.GetKind())
-		eng.views[o.GetKind()].Add(o)
+		gvk := o.GetObjectKind().GroupVersionKind()
+		eng.initViewStore(gvk)
+		eng.baseViewStore[gvk].Add(o)
 	}
 	return
 }
 
-func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta) (cache.Delta, error) {
+func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta) ([]cache.Delta, error) {
 	if delta.IsUnchanged() {
-		return delta, nil
+		return []cache.Delta{delta}, nil
 	}
 
-	view := delta.Object.GetKind()
-	eng.initViewStore(view)
+	gvk := delta.Object.GetObjectKind().GroupVersionKind()
+	eng.initViewStore(gvk)
 
 	// find out whether an upsert is an update/replace or an add
 	delta = eng.handleUpsertEvent(delta)
 
 	// update local view cache
-	var err error
+	var ds []cache.Delta
 	switch delta.Type {
 	case cache.Added:
-		err = eng.views[view].Add(delta.Object)
-	case cache.Replaced, cache.Updated:
-		err = eng.views[view].Update(delta.Object)
+		eng.log.V(1).Info("aggregation: add using new object", "object", delta.Object)
+
+		o, err := eng.evalAggregation(a, object.DeepCopy(delta.Object))
+		if err != nil {
+			return nil, NewAggregationError(a.String(),
+				fmt.Errorf("processing event %q: could not evaluate aggregation for new object %s: %w",
+					delta.Type, ObjectKey(delta.Object), err))
+		}
+
+		eng.Log().Info("$$$$$$$$$$$$$$$$$$$$$")
+		eng.Log().Info(fmt.Sprintf("%#v", eng.baseViewStore[gvk].List()))
+
+		if err := eng.baseViewStore[gvk].Add(delta.Object); err != nil {
+			return nil, NewAggregationError(a.String(),
+				fmt.Errorf("processing event %q: could not add object %s to store: %w",
+					delta.Type, ObjectKey(delta.Object), err))
+		}
+
+		eng.Log().Info(fmt.Sprintf("%#v", eng.baseViewStore[gvk].List()))
+		eng.Log().Info("$$$$$$$$$$$$$$$$$$$$$")
+		ds = []cache.Delta{{Type: cache.Added, Object: o}}
+
+	case cache.Updated, cache.Replaced:
+		eng.log.V(1).Info("aggregate: replacing event with a Delete followed by an Add",
+			"event-type", delta.Type, "object", delta.Object)
+
+		delDeltas, err := eng.EvaluateAggregation(a, cache.Delta{Type: cache.Deleted, Object: delta.Object})
+		if err != nil {
+			return nil, NewAggregationError(a.String(), err)
+		}
+		delDelta := cache.NilDelta
+		if len(delDeltas) == 1 {
+			delDelta = delDeltas[0]
+		}
+
+		addDeltas, err := eng.EvaluateAggregation(a, cache.Delta{Type: cache.Added, Object: delta.Object})
+		if err != nil {
+			return nil, NewAggregationError(a.String(), err)
+		}
+		addDelta := cache.NilDelta
+		if len(addDeltas) == 1 {
+			addDelta = addDeltas[0]
+		}
+
+		// consolidate: objects both in the deleted and added cache are updated
+		if delDelta.IsUnchanged() && addDelta.IsUnchanged() {
+			// nothing happened: object wasn't in the view and it it still isn't
+			ds = []cache.Delta{{Type: cache.Updated, Object: nil}}
+		} else if delDelta.IsUnchanged() && !addDelta.IsUnchanged() {
+			// object added into the view and it it still isn't
+			ds = []cache.Delta{addDelta}
+		} else if !delDelta.IsUnchanged() && addDelta.IsUnchanged() {
+			// object removed from the view
+			ds = []cache.Delta{delDelta}
+		} else if ObjectKey(delDelta.Object) == ObjectKey(addDelta.Object) {
+			// object updated
+			ds = []cache.Delta{{Type: cache.Updated, Object: addDelta.Object}}
+		} else {
+			// aggregation affects the name and the name has changed!
+			ds = []cache.Delta{delDelta, addDelta}
+		}
+
 	case cache.Deleted:
-		err = eng.views[view].Delete(delta.Object)
-	case cache.Sync, cache.Upserted:
-		// ignore
+		old, ok, err := eng.baseViewStore[gvk].GetByKey(ObjectKey(delta.Object).String())
+		if err != nil {
+			return nil, NewAggregationError(a.String(), err)
+		}
+		if !ok {
+			eng.log.V(1).Info("aggregation: ignoring delete event for an unknown object",
+				"event-type", delta.Type, "object", ObjectKey(delta.Object))
+			return nil, nil
+		}
+
+		eng.log.V(1).Info("aggregation: delete using existing object", "object", old)
+
+		o, err := eng.evalAggregation(a, object.DeepCopy(old))
+		if err != nil {
+			return nil, NewAggregationError(a.String(),
+				fmt.Errorf("processing event %q: could not evaluate aggregation for deleted object %s: %w",
+					delta.Type, ObjectKey(delta.Object), err))
+		}
+
+		eng.Log().Info("@@@@@@@@@@@@@@@@@2")
+		eng.Log().Info(fmt.Sprintf("%#v", eng.baseViewStore[gvk].List()))
+
+		if err := eng.baseViewStore[gvk].Delete(old); err != nil {
+			return nil, NewAggregationError(a.String(),
+				fmt.Errorf("procesing event %q: could not delete object %s from store: %w",
+					delta.Type, ObjectKey(delta.Object), err))
+		}
+
+		eng.Log().Info(fmt.Sprintf("%#v", eng.baseViewStore[gvk].List()))
+		eng.Log().Info("@@@@@@@@@@@@@@@@@2")
+
+		ds = []cache.Delta{{Type: cache.Deleted, Object: o}}
+
+	default:
+		eng.log.V(1).Info("aggregate: ignoring event", "event-type", delta.Type)
+
+		return []cache.Delta{}, nil
 	}
 
-	if err != nil {
-		return cache.Delta{}, NewAggregationError(a.String(), err)
-	}
+	eng.log.V(1).Info("aggregation: ready", "event-type", delta.Type, "result", util.Stringify(ds))
 
-	content := delta.Object.UnstructuredContent()
+	return ds, nil
+}
+
+func (eng *defaultEngine) evalAggregation(a *Aggregation, obj object.Object) (object.Object, error) {
+	content := obj.UnstructuredContent()
 	for _, s := range a.Expressions {
 		res, err := eng.evalStage(&s, content)
 		if err != nil {
-			return cache.Delta{}, NewAggregationError(a.String(), err)
+			return nil, err
 		}
 
 		content = res
 
 		if content == nil {
 			// @select shortcuts the iteration
-			return cache.NilDelta, nil
+			return nil, nil
 		}
 
 	}
 
 	obj, err := Normalize(eng, content)
 	if err != nil {
-		return cache.Delta{}, NewAggregationError(a.String(), err)
+		return nil, err
 	}
 
-	d := cache.Delta{Object: obj, Type: delta.Type}
+	eng.Log().V(4).Info("eval ready", "aggregation", a.String(), "result", obj)
 
-	eng.Log().V(4).Info("eval ready", "aggregation", a.String(), "result", d)
-
-	return d, nil
+	return obj, nil
 }
 
 func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured, error) {
@@ -156,22 +250,14 @@ func (eng *defaultEngine) EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 		return ds, err
 	}
 
-	// clean up __id (must do outside the main join routine because evaluateJoin calls itself
-	// on Updates)
-	for _, d := range ds {
-		if d.Object != nil {
-			delete(d.Object.UnstructuredContent(), "__id")
-		}
-	}
-
 	return ds, nil
 }
 
 func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error) {
-	eng.log.V(1).Info("join: processing event", "event-type", delta.Type, "object", delta.Object)
+	eng.log.V(1).Info("join: processing event", "event-type", delta.Type, "object", ObjectKey(delta.Object))
 
-	view := delta.Object.GetKind()
-	eng.initViewStore(view)
+	gvk := delta.Object.GetObjectKind().GroupVersionKind()
+	eng.initViewStore(gvk)
 
 	// find out whether an upsert is an update/replace or an add
 	delta = eng.handleUpsertEvent(delta)
@@ -186,7 +272,7 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 					delta.Type, ObjectKey(delta.Object), err))
 		}
 
-		if err := eng.views[view].Add(delta.Object); err != nil {
+		if err := eng.baseViewStore[gvk].Add(delta.Object); err != nil {
 			return nil, NewJoinError(j.String(),
 				fmt.Errorf("processing event %q: could not add object %s to store: %w",
 					delta.Type, ObjectKey(delta.Object), err))
@@ -217,7 +303,7 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 		ds = append(ds, a...)
 
 	case cache.Deleted:
-		old, ok, err := eng.views[view].GetByKey(ObjectKey(delta.Object).String())
+		old, ok, err := eng.baseViewStore[gvk].GetByKey(ObjectKey(delta.Object).String())
 		if err != nil {
 			return nil, NewJoinError(j.String(), err)
 		}
@@ -236,7 +322,7 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 					delta.Type, ObjectKey(delta.Object), err))
 		}
 
-		if err := eng.views[view].Delete(old); err != nil {
+		if err := eng.baseViewStore[gvk].Delete(old); err != nil {
 			return nil, NewJoinError(j.String(),
 				fmt.Errorf("procesing event %q: could not delete object %s from store: %w",
 					delta.Type, ObjectKey(delta.Object), err))
@@ -257,23 +343,26 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 	return ds, nil
 }
 
-func (eng *defaultEngine) evalJoin(j *Join, obj *object.Object) ([]*object.Object, error) {
-	res, err := eng.product(obj, func(obj *object.Object, current []*object.Object) (*object.Object, bool, error) {
+func (eng *defaultEngine) evalJoin(j *Join, obj object.Object) ([]object.Object, error) {
+	res, err := eng.product(obj, func(obj object.Object, current []object.Object) (object.Object, bool, error) {
 		// temporary view name: Normalize will eventually recast the object into the target view
-		newObj := object.New("__tmp_join_view")
+		newObj := object.NewViewObject("__tmp_join_view")
 		input := newObj.UnstructuredContent()
 		ids := []string{}
 		for _, v := range current {
 			if v == nil {
 				continue
 			}
-			input[v.GetKind()] = v.UnstructuredContent()
-			ids = append(ids, fmt.Sprintf("%s:%s:%s", v.GetKind(), v.GetNamespace(), v.GetName()))
+			// this may break when working on native K8s objects in different groups
+			// that have the same kind (don't do join on native objects!)
+			kind := v.GetObjectKind().GroupVersionKind().Kind
+			input[kind] = v.UnstructuredContent()
+			ids = append(ids, fmt.Sprintf("%s:%s:%s", kind, v.GetNamespace(), v.GetName()))
 		}
 
 		// set id: this is needed so that we can disambiguate objects in diffDeltas
 		slices.Sort(ids)
-		input["__id"] = strings.Join(ids, "--")
+		input["metadata"] = map[string]any{"name": strings.Join(ids, "--")}
 
 		// evalutate conditional expression on the input
 		res, err := j.Expression.Evaluate(evalCtx{object: input, log: eng.log})
@@ -308,14 +397,14 @@ func (eng *defaultEngine) evalJoin(j *Join, obj *object.Object) ([]*object.Objec
 // product takes an object and a condition expression, generates the Cartesian product of the
 // object stored in all the baseviews, applies the expression to each combination, and if it
 // evalutates to true then it adds the combined object to the result set
-type joinEvalFunc = func(*object.Object, []*object.Object) (*object.Object, bool, error)
+type joinEvalFunc = func(object.Object, []object.Object) (object.Object, bool, error)
 
-func (eng *defaultEngine) product(obj *object.Object, eval joinEvalFunc) ([]*object.Object, error) {
+func (eng *defaultEngine) product(obj object.Object, eval joinEvalFunc) ([]object.Object, error) {
 	if len(eng.baseviews) < 2 {
 		return nil, errors.New("at least two views required")
 	}
 
-	current, ret := []*object.Object{}, []*object.Object{}
+	current, ret := []object.Object{}, []object.Object{}
 	err := eng.recurseProd(obj, current, &ret, eval, 0) // pass slice ref: append reallocates it!
 	if err != nil {
 		return nil, err
@@ -324,7 +413,7 @@ func (eng *defaultEngine) product(obj *object.Object, eval joinEvalFunc) ([]*obj
 	return ret, nil
 }
 
-func (eng *defaultEngine) recurseProd(obj *object.Object, current []*object.Object, ret *([]*object.Object), eval joinEvalFunc, depth int) error {
+func (eng *defaultEngine) recurseProd(obj object.Object, current []object.Object, ret *([]object.Object), eval joinEvalFunc, depth int) error {
 	if depth == len(eng.baseviews) {
 		newObj, ok, err := eval(obj, current)
 		if err != nil {
@@ -337,24 +426,25 @@ func (eng *defaultEngine) recurseProd(obj *object.Object, current []*object.Obje
 	}
 
 	// skip object's view
-	if obj.GetKind() == eng.baseviews[depth] {
-		next := make([]*object.Object, len(current))
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if gvk == eng.baseviews[depth] {
+		next := make([]object.Object, len(current))
 		copy(next, current)
 		next = append(next, obj)
 		return eng.recurseProd(obj, next, ret, eval, depth+1)
 	}
 
-	store, ok := eng.views[eng.baseviews[depth]]
+	store, ok := eng.baseViewStore[eng.baseviews[depth]]
 	if !ok {
 		// no element seen yet: go on with an empty object
-		next := make([]*object.Object, len(current))
+		next := make([]object.Object, len(current))
 		copy(next, current)
 		next = append(next, nil)
 		return eng.recurseProd(obj, next, ret, eval, depth+1)
 	}
 
 	for _, o := range store.List() {
-		next := make([]*object.Object, len(current))
+		next := make([]object.Object, len(current))
 		copy(next, current)
 		next = append(next, o)
 		err := eng.recurseProd(obj, next, ret, eval, depth+1)
@@ -366,9 +456,10 @@ func (eng *defaultEngine) recurseProd(obj *object.Object, current []*object.Obje
 	return nil
 }
 
-func (eng *defaultEngine) initViewStore(view string) {
-	if _, ok := eng.views[view]; !ok {
-		eng.views[view] = cache.NewStore()
+func (eng *defaultEngine) initViewStore(gvk GVK) {
+	if _, ok := eng.baseViewStore[gvk]; !ok {
+		eng.Log().Info("REINIT!!!!!!!!!!!!!!!!!!!!!!!!1")
+		eng.baseViewStore[gvk] = cache.NewStore()
 	}
 }
 
@@ -378,8 +469,8 @@ func (eng *defaultEngine) handleUpsertEvent(delta cache.Delta) cache.Delta {
 		return delta
 	}
 
-	view := delta.Object.GetKind()
-	if _, exists, err := eng.views[view].Get(delta.Object); err != nil || !exists {
+	gvk := delta.Object.GetObjectKind().GroupVersionKind()
+	if _, exists, err := eng.baseViewStore[gvk].Get(delta.Object); err != nil || !exists {
 		return cache.Delta{Type: cache.Added, Object: delta.Object}
 	}
 
@@ -409,11 +500,11 @@ func diffDeltas(dels, adds []cache.Delta) ([]cache.Delta, []cache.Delta, []cache
 
 func containsDelta(ds []cache.Delta, delta cache.Delta) bool {
 	return slices.ContainsFunc(ds, func(n cache.Delta) bool {
-		id1, ok1 := delta.Object.UnstructuredContent()["__id"]
-		id2, ok2 := n.Object.UnstructuredContent()["__id"]
-		if !ok1 || !ok2 {
+		if delta.Object == nil || n.Object == nil {
 			return false
 		}
-		return id1 == id2
+		return delta.Object.GetObjectKind().GroupVersionKind() ==
+			n.Object.GetObjectKind().GroupVersionKind() &&
+			delta.Object.GetName() == n.Object.GetName()
 	})
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -31,9 +32,9 @@ func (c *cacheClient) Get(ctx context.Context, key client.ObjectKey, obj client.
 		return apierrors.NewInternalError(errors.New("invalid cache"))
 	}
 
-	o, ok := obj.(*object.Object)
+	o, ok := obj.(object.Object)
 	if !ok {
-		return apierrors.NewBadRequest("obj must be *object.Object")
+		return apierrors.NewBadRequest("obj must be object.Object")
 	}
 
 	return c.Cache.get(key, o)
@@ -47,7 +48,7 @@ func (c *cacheClient) List(ctx context.Context, list client.ObjectList, opts ...
 		return apierrors.NewInternalError(errors.New("invalid cache"))
 	}
 
-	l, ok := list.(*object.ObjectList)
+	l, ok := list.(object.ObjectList)
 	if !ok {
 		return apierrors.NewBadRequest("list must be *object.ObjectList")
 	}
@@ -62,16 +63,16 @@ func (c *cacheClient) Watch(ctx context.Context, list client.ObjectList, opts ..
 		return nil, apierrors.NewInternalError(errors.New("invalid cache"))
 	}
 
-	l, ok := list.(*object.ObjectList)
+	l, ok := list.(object.ObjectList)
 	if !ok {
 		return nil, apierrors.NewBadRequest("list must be *object.ObjectList")
 	}
 
-	return c.Cache.watch(ctx, l.GroupVersionKind())
+	return c.Cache.watch(ctx, l.GetObjectKind().GroupVersionKind())
 }
 
-func (c *Cache) get(key client.ObjectKey, obj *object.Object) error {
-	gvk := obj.GroupVersionKind()
+func (c *Cache) get(key client.ObjectKey, obj object.Object) error {
+	gvk := obj.GetObjectKind().GroupVersionKind()
 
 	c.mu.RLock()
 	indexer, exists := c.caches[gvk]
@@ -87,17 +88,20 @@ func (c *Cache) get(key client.ObjectKey, obj *object.Object) error {
 	}
 
 	if !exists {
-		return apierrors.NewNotFound(obj.GroupResource(), key.String())
+		return apierrors.NewNotFound(schema.GroupResource{
+			Group:    obj.GetObjectKind().GroupVersionKind().Group,
+			Resource: obj.GetObjectKind().GroupVersionKind().Kind,
+		}, key.String())
 	}
 
-	item.(*object.Object).DeepCopyInto(obj)
+	object.DeepCopyInto(item.(object.Object), obj)
 
 	return nil
 }
 
 // TODO: implement ListOptions
-func (c *Cache) list(list *object.ObjectList) error {
-	gvk := list.GroupVersionKind()
+func (c *Cache) list(list object.ObjectList) error {
+	gvk := list.GetObjectKind().GroupVersionKind()
 
 	c.mu.RLock()
 	indexer, exists := c.caches[gvk]
@@ -107,9 +111,8 @@ func (c *Cache) list(list *object.ObjectList) error {
 		return apierrors.NewBadRequest("GVK not registered")
 	}
 
-	list.Items = make([]object.Object, len(indexer.ListKeys()))
-	for i, item := range indexer.List() {
-		item.(*object.Object).DeepCopyInto(&list.Items[i])
+	for _, item := range indexer.List() {
+		object.AppendToListItem(list, item.(object.Object))
 	}
 	return nil
 }

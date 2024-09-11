@@ -4,26 +4,30 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
+type GVK = schema.GroupVersionKind
+
 type Engine interface {
 	// EvaluateAggregation evaluates an aggregation pipeline.
-	EvaluateAggregation(a *Aggregation, delta cache.Delta) (cache.Delta, error)
+	EvaluateAggregation(a *Aggregation, delta cache.Delta) ([]cache.Delta, error)
 	// View returns the target view of the engine.
 	View() string
 	// WithObjects sets some base objects in the cache for testing.
-	WithObjects(objects ...*object.Object)
+	WithObjects(objects ...object.Object)
 	// Log returns a logger.
 	Log() logr.Logger
 	// EvaluateJoin evaluates a join expression.
 	EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error)
 }
 
-func Normalize(eng Engine, content Unstructured) (*object.Object, error) {
-	obj := object.New(eng.View())
+func Normalize(eng Engine, content Unstructured) (object.Object, error) {
+	// Normalize always produces Views!
+	obj := object.NewViewObject(eng.View())
 
 	// metadata: must exist
 	meta, ok := content["metadata"]
