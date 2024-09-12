@@ -7,12 +7,28 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/watch"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	apiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
+
+var (
+	loglevel = -10
+	logger   = zap.New(zap.UseFlagOptions(&zap.Options{
+		Development:     true,
+		DestWriter:      GinkgoWriter,
+		StacktraceLevel: zapcore.Level(3),
+		TimeEncoder:     zapcore.RFC3339NanoTimeEncoder,
+		Level:           zapcore.Level(loglevel),
+	}))
+)
+
+var _ cache.Cache = &ViewCache{}
 
 const (
 	timeout  = time.Second * 1
@@ -24,43 +40,40 @@ func TestCache(t *testing.T) {
 	RunSpecs(t, "Cache")
 }
 
-var _ = Describe("Cache", func() {
+var _ = Describe("ViewCache", func() {
 	var (
-		cache *Cache
-		ctx   context.Context
+		cache  *ViewCache
+		ctx    context.Context
+		cancel context.CancelFunc
 	)
 
 	BeforeEach(func() {
-		cache = New()
-		ctx = context.Background()
+		cache = New(logger)
+		ctx, cancel = context.WithCancel(context.Background())
+	})
+
+	AfterEach(func() {
+		cancel()
 	})
 
 	Describe("Registering views", func() {
 		It("should allow a view to be registered", func() {
-			err := cache.RegisterGVK(apiv1.NewGVK("view"))
+			err := cache.RegisterCacheForGVK(apiv1.NewGVK("view"))
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 
 	Describe("Get operation", func() {
-		It("should allow a client to be created", func() {
-			client := cache.NewClient()
-			Expect(client).NotTo(BeNil())
-		})
-
 		It("should retrieve an added object", func() {
 			obj := object.NewViewObject("view").
 				WithContent(map[string]any{"a": int64(1)}).
 				WithName("ns", "test-1")
 
-			err := cache.RegisterGVK(apiv1.NewGVK("view"))
-			Expect(err).NotTo(HaveOccurred())
-
-			err = cache.Upsert(obj)
+			err := cache.Add(obj)
 			Expect(err).NotTo(HaveOccurred())
 
 			retrieved := object.DeepCopy(obj)
-			err = cache.NewClient().Get(ctx, client.ObjectKeyFromObject(retrieved), retrieved)
+			err = cache.Get(ctx, client.ObjectKeyFromObject(retrieved), retrieved)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(object.DeepEqual(retrieved, obj)).To(BeTrue())
 		})
@@ -68,10 +81,7 @@ var _ = Describe("Cache", func() {
 		It("should return an error for non-existent object", func() {
 			obj := object.NewViewObject("view").WithName("", "non-existent")
 
-			err := cache.RegisterGVK(apiv1.NewGVK("view"))
-			Expect(err).NotTo(HaveOccurred())
-
-			err = cache.NewClient().Get(ctx, client.ObjectKeyFromObject(obj), obj)
+			err := cache.Get(ctx, client.ObjectKeyFromObject(obj), obj)
 			Expect(err).To(HaveOccurred())
 		})
 	})
@@ -84,16 +94,13 @@ var _ = Describe("Cache", func() {
 				object.NewViewObject("view").WithContent(map[string]any{"c": int64(3)}).WithName("ns3", "test-3"),
 			}
 
-			err := cache.RegisterGVK(apiv1.NewGVK("view"))
-			Expect(err).NotTo(HaveOccurred())
-
 			for _, obj := range objects {
-				err := cache.Upsert(obj)
+				err := cache.Add(obj)
 				Expect(err).NotTo(HaveOccurred())
 			}
 
 			list := object.NewViewObjectList("view")
-			err = cache.NewClient().List(ctx, list)
+			err := cache.List(ctx, list)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.Items).To(HaveLen(3))
 			Expect(object.DeepEqual(&list.Items[0], objects[0])).NotTo(BeNil())
@@ -103,11 +110,7 @@ var _ = Describe("Cache", func() {
 
 		It("should return an empty list when cache is empty", func() {
 			list := object.NewViewObjectList("view")
-
-			err := cache.RegisterGVK(apiv1.NewGVK("view"))
-			Expect(err).NotTo(HaveOccurred())
-
-			err = cache.NewClient().List(ctx, list)
+			err := cache.List(ctx, list)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.Items).To(BeEmpty())
 		})
@@ -115,15 +118,12 @@ var _ = Describe("Cache", func() {
 
 	Describe("Watch operation", func() {
 		It("should notify of existing objects", func() {
-			err := cache.RegisterGVK(apiv1.NewGVK("view"))
-			Expect(err).NotTo(HaveOccurred())
-
 			obj := object.NewViewObject("view").
 				WithContent(map[string]any{"data": "watch-data"}).
 				WithName("ns", "test-watch")
-			cache.Upsert(obj)
+			cache.Add(obj)
 
-			watcher, err := cache.NewClient().Watch(ctx, object.NewViewObjectList("view"))
+			watcher, err := cache.Watch(ctx, object.NewViewObjectList("view"))
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok := tryWatch(watcher, interval)
@@ -133,10 +133,7 @@ var _ = Describe("Cache", func() {
 		})
 
 		It("should notify of added objects", func() {
-			err := cache.RegisterGVK(apiv1.NewGVK("view"))
-			Expect(err).NotTo(HaveOccurred())
-
-			watcher, err := cache.NewClient().Watch(ctx, object.NewViewObjectList("view"))
+			watcher, err := cache.Watch(ctx, object.NewViewObjectList("view"))
 			Expect(err).NotTo(HaveOccurred())
 
 			obj := object.NewViewObject("view").
@@ -144,7 +141,7 @@ var _ = Describe("Cache", func() {
 				WithName("ns", "test-watch")
 			go func() {
 				time.Sleep(25 * time.Millisecond)
-				cache.Upsert(obj)
+				cache.Add(obj)
 			}()
 
 			event, ok := tryWatch(watcher, interval)
@@ -154,23 +151,20 @@ var _ = Describe("Cache", func() {
 		})
 
 		It("should notify of updated objects", func() {
-			err := cache.RegisterGVK(apiv1.NewGVK("view"))
-			Expect(err).NotTo(HaveOccurred())
-
-			watcher, err := cache.NewClient().Watch(ctx, object.NewViewObjectList("view"))
+			watcher, err := cache.Watch(ctx, object.NewViewObjectList("view"))
 			Expect(err).NotTo(HaveOccurred())
 
 			obj := object.NewViewObject("view").
 				WithContent(map[string]any{"data": "original data"}).
 				WithName("ns", "test-update")
-			cache.Upsert(obj)
+			cache.Add(obj)
 
 			updatedObj := object.NewViewObject("view").
 				WithContent(map[string]any{"data": "updated data"}).
 				WithName("ns", "test-update")
 			go func() {
 				time.Sleep(25 * time.Millisecond)
-				cache.Upsert(updatedObj)
+				cache.Update(updatedObj)
 			}()
 
 			event, ok := tryWatch(watcher, interval)
@@ -185,16 +179,13 @@ var _ = Describe("Cache", func() {
 		})
 
 		It("should notify of deleted objects", func() {
-			err := cache.RegisterGVK(apiv1.NewGVK("view"))
-			Expect(err).NotTo(HaveOccurred())
-
-			watcher, err := cache.NewClient().Watch(ctx, object.NewViewObjectList("view"))
+			watcher, err := cache.Watch(ctx, object.NewViewObjectList("view"))
 			Expect(err).NotTo(HaveOccurred())
 
 			obj := object.NewViewObject("view").
 				WithContent(map[string]any{"data": "original data"}).
 				WithName("ns", "test-delete")
-			cache.Upsert(obj)
+			cache.Add(obj)
 
 			go func() {
 				time.Sleep(25 * time.Millisecond)
