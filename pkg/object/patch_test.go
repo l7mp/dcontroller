@@ -91,7 +91,7 @@ var _ = Describe("Object patching", func() {
 		It("should patch nil with map", func() {
 			obj := NewViewObject("view").WithContent(map[string]any{})
 			patch := map[string]any{"a": int64(1), "b": map[string]any{"c": int64(2)}}
-			err := obj.Patch(patch)
+			err := Patch(obj, patch)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
 				"apiVersion": "view.dcontroller.github.io/v1alpha1",
@@ -104,7 +104,7 @@ var _ = Describe("Object patching", func() {
 		It("should patch a literal with map", func() {
 			obj := NewViewObject("view")
 			patch := map[string]any{"a": int64(1), "b": map[string]any{"c": int64(2)}}
-			err := obj.Patch(patch)
+			err := Patch(obj, patch)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
 				"apiVersion": "view.dcontroller.github.io/v1alpha1",
@@ -117,7 +117,7 @@ var _ = Describe("Object patching", func() {
 		It("should patch a map with map", func() {
 			obj := NewViewObject("view").WithContent(map[string]any{"a": "x", "d": 1.1, "e": []any{int64(10), int64(20)}})
 			patch := map[string]any{"a": []any{int64(10), int64(2), int64(3)}, "b": map[string]any{"c": int64(2), "e": "y"}}
-			err := obj.Patch(patch)
+			err := Patch(obj, patch)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
 				"apiVersion": "view.dcontroller.github.io/v1alpha1",

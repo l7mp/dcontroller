@@ -6,12 +6,12 @@ import (
 )
 
 // Patch performs an in-place patch.
-func (obj *ViewObject) Patch(m map[string]any) error {
-	res := patch(obj.Object, m)
+func Patch(obj Object, m map[string]any) error {
+	res := patch(obj.UnstructuredContent(), m)
 
 	m, ok := res.(map[string]any)
 	if !ok {
-		fmt.Errorf("patch result: expected map[string]any but obtained %#v", res)
+		return fmt.Errorf("patch result: expected map[string]any but obtained %#v", res)
 	}
 
 	obj.SetUnstructuredContent(m)
@@ -28,7 +28,6 @@ func patch(o, m any) any {
 		return deepCopy(m)
 	}
 
-	// scalars
 	switch m.(type) {
 	case bool, int64, float64, string:
 		return m
