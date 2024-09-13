@@ -4,6 +4,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	viewapiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
 )
@@ -11,11 +12,25 @@ import (
 type Object = *unstructured.Unstructured
 type ObjectList = *unstructured.UnstructuredList
 
-func NewObject(view string) Object {
+func NewViewObject(view string) Object {
 	obj := &unstructured.Unstructured{}
 	obj.SetUnstructuredContent(map[string]any{})
 	obj.SetGroupVersionKind(viewapiv1.NewGVK(view))
 	return obj
+}
+
+func NewViewObjectFromNativeObject(view string, clientObj client.Object) (Object, error) {
+	unstructuredObj := &unstructured.Unstructured{}
+	var err error
+	unstructuredObj.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(clientObj)
+	if err != nil {
+		return nil, err
+	}
+
+	obj := NewViewObject(view)
+	SetName(obj, clientObj.GetNamespace(), clientObj.GetName())
+	SetContent(obj, unstructuredObj.UnstructuredContent())
+	return obj, nil
 }
 
 // SetName is a shortcut to SetNamespace(ns) followed by SetNamespace(name).
@@ -54,4 +69,23 @@ func DeepCopy(in Object) Object {
 	out := new(unstructured.Unstructured)
 	DeepCopyInto(in, out)
 	return out
+}
+
+func NewViewObjectList(view string) ObjectList {
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(viewapiv1.NewGVK(view))
+	return list
+}
+
+func AppendToListItem(list client.ObjectList, obj client.Object) {
+	listu, ok := list.(ObjectList)
+	if !ok {
+		return
+	}
+	u, ok := obj.(Object)
+	if !ok {
+		return
+	}
+
+	listu.Items = append(listu.Items, *DeepCopy(u))
 }

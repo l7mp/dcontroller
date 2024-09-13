@@ -43,9 +43,9 @@ var _ = Describe("ViewCache", func() {
 
 	Describe("Get operation", func() {
 		It("should retrieve an added object", func() {
-			obj := object.NewViewObject("view").
-				WithContent(map[string]any{"a": int64(1)}).
-				WithName("ns", "test-1")
+			obj := object.NewViewObject("view")
+			object.SetContent(obj, map[string]any{"a": int64(1)})
+			object.SetName(obj, "ns", "test-1")
 
 			err := cache.Add(obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -57,7 +57,8 @@ var _ = Describe("ViewCache", func() {
 		})
 
 		It("should return an error for non-existent object", func() {
-			obj := object.NewViewObject("view").WithName("", "non-existent")
+			obj := object.NewViewObject("view")
+			object.SetName(obj, "", "non-existent")
 
 			err := cache.Get(ctx, client.ObjectKeyFromObject(obj), obj)
 			Expect(err).To(HaveOccurred())
@@ -66,11 +67,13 @@ var _ = Describe("ViewCache", func() {
 
 	Describe("List operation", func() {
 		It("should list all added objects", func() {
-			objects := []object.Object{
-				object.NewViewObject("view").WithContent(map[string]any{"a": int64(1)}).WithName("ns1", "test-1"),
-				object.NewViewObject("view").WithContent(map[string]any{"b": int64(2)}).WithName("ns2", "test-2"),
-				object.NewViewObject("view").WithContent(map[string]any{"c": int64(3)}).WithName("ns3", "test-3"),
-			}
+			objects := []object.Object{object.NewViewObject("view"), object.NewViewObject("view"), object.NewViewObject("view")}
+			object.SetName(objects[0], "ns1", "test-1")
+			object.SetName(objects[1], "ns2", "test-2")
+			object.SetName(objects[2], "ns3", "test-3")
+			object.SetContent(objects[0], map[string]any{"a": int64(1)})
+			object.SetContent(objects[1], map[string]any{"b": int64(2)})
+			object.SetContent(objects[2], map[string]any{"c": int64(3)})
 
 			for _, obj := range objects {
 				err := cache.Add(obj)
@@ -81,9 +84,9 @@ var _ = Describe("ViewCache", func() {
 			err := cache.List(ctx, list)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.Items).To(HaveLen(3))
-			Expect(list.Items).To(ContainElement(objects[0]))
-			Expect(list.Items).To(ContainElement(objects[1]))
-			Expect(list.Items).To(ContainElement(objects[2]))
+			Expect(list.Items).To(ContainElement(*objects[0]))
+			Expect(list.Items).To(ContainElement(*objects[1]))
+			Expect(list.Items).To(ContainElement(*objects[2]))
 		})
 
 		It("should return an empty list when cache is empty", func() {
@@ -96,9 +99,9 @@ var _ = Describe("ViewCache", func() {
 
 	Describe("Watch operation", func() {
 		It("should notify of existing objects", func() {
-			obj := object.NewViewObject("view").
-				WithContent(map[string]any{"data": "watch-data"}).
-				WithName("ns", "test-watch")
+			obj := object.NewViewObject("view")
+			object.SetContent(obj, map[string]any{"data": "watch-data"})
+			object.SetName(obj, "ns", "test-watch")
 			cache.Add(obj)
 
 			watcher, err := cache.Watch(ctx, object.NewViewObjectList("view"))
@@ -114,9 +117,9 @@ var _ = Describe("ViewCache", func() {
 			watcher, err := cache.Watch(ctx, object.NewViewObjectList("view"))
 			Expect(err).NotTo(HaveOccurred())
 
-			obj := object.NewViewObject("view").
-				WithContent(map[string]any{"data": "watch-data"}).
-				WithName("ns", "test-watch")
+			obj := object.NewViewObject("view")
+			object.SetContent(obj, map[string]any{"data": "watch-data"})
+			object.SetName(obj, "ns", "test-watch")
 			go func() {
 				time.Sleep(25 * time.Millisecond)
 				cache.Add(obj)
@@ -132,14 +135,14 @@ var _ = Describe("ViewCache", func() {
 			watcher, err := cache.Watch(ctx, object.NewViewObjectList("view"))
 			Expect(err).NotTo(HaveOccurred())
 
-			obj := object.NewViewObject("view").
-				WithContent(map[string]any{"data": "original data"}).
-				WithName("ns", "test-update")
+			obj := object.NewViewObject("view")
+			object.SetContent(obj, map[string]any{"data": "original data"})
+			object.SetName(obj, "ns", "test-update")
 			cache.Add(obj)
 
-			updatedObj := object.NewViewObject("view").
-				WithContent(map[string]any{"data": "updated data"}).
-				WithName("ns", "test-update")
+			updatedObj := object.NewViewObject("view")
+			object.SetContent(updatedObj, map[string]any{"data": "updated data"})
+			object.SetName(updatedObj, "ns", "test-update")
 			go func() {
 				time.Sleep(25 * time.Millisecond)
 				cache.Update(updatedObj)
@@ -148,11 +151,13 @@ var _ = Describe("ViewCache", func() {
 			event, ok := tryWatch(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Added))
+			Expect(obj).To(Equal(event.Object.(object.Object)))
 			Expect(object.DeepEqual(obj, event.Object.(object.Object))).To(BeTrue())
 
 			event, ok = tryWatch(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Modified))
+			Expect(updatedObj).To(Equal(event.Object.(object.Object)))
 			Expect(object.DeepEqual(updatedObj, event.Object.(object.Object))).To(BeTrue())
 		})
 
@@ -160,9 +165,9 @@ var _ = Describe("ViewCache", func() {
 			watcher, err := cache.Watch(ctx, object.NewViewObjectList("view"))
 			Expect(err).NotTo(HaveOccurred())
 
-			obj := object.NewViewObject("view").
-				WithContent(map[string]any{"data": "original data"}).
-				WithName("ns", "test-delete")
+			obj := object.NewViewObject("view")
+			object.SetContent(obj, map[string]any{"data": "original data"})
+			object.SetName(obj, "ns", "test-delete")
 			cache.Add(obj)
 
 			go func() {

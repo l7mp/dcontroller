@@ -81,9 +81,9 @@ var _ = Describe("CompositeCache", func() {
 
 	Describe("Get operation", func() {
 		It("should retrieve an added view object", func() {
-			obj := object.NewViewObject("view").
-				WithContent(map[string]any{"a": int64(1)}).
-				WithName("ns", "test-1")
+			obj := object.NewViewObject("view")
+			object.SetContent(obj, map[string]any{"a": int64(1)})
+			object.SetName(obj, "ns", "test-1")
 
 			err := cache.GetViewCache().Add(obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -121,7 +121,8 @@ var _ = Describe("CompositeCache", func() {
 		})
 
 		It("should return an error for non-existent object", func() {
-			obj := object.NewViewObject("view").WithName("", "non-existent")
+			obj := object.NewViewObject("view")
+			object.SetName(obj, "", "non-existent")
 			err := cache.Get(ctx, client.ObjectKeyFromObject(obj), obj)
 			Expect(err).To(HaveOccurred())
 			err = cache.Get(ctx, client.ObjectKeyFromObject(pod), pod)
@@ -131,11 +132,13 @@ var _ = Describe("CompositeCache", func() {
 
 	Describe("List operation", func() {
 		It("should list all added view objects", func() {
-			objects := []object.Object{
-				object.NewViewObject("view").WithContent(map[string]any{"a": int64(1)}).WithName("ns1", "test-1"),
-				object.NewViewObject("view").WithContent(map[string]any{"b": int64(2)}).WithName("ns2", "test-2"),
-				object.NewViewObject("view").WithContent(map[string]any{"c": int64(3)}).WithName("ns3", "test-3"),
-			}
+			objects := []object.Object{object.NewViewObject("view"), object.NewViewObject("view"), object.NewViewObject("view")}
+			object.SetName(objects[0], "ns1", "test-1")
+			object.SetName(objects[1], "ns2", "test-2")
+			object.SetName(objects[2], "ns3", "test-3")
+			object.SetContent(objects[0], map[string]any{"a": int64(1)})
+			object.SetContent(objects[1], map[string]any{"b": int64(2)})
+			object.SetContent(objects[2], map[string]any{"c": int64(3)})
 
 			for _, obj := range objects {
 				err := cache.GetViewCache().Add(obj)

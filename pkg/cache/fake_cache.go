@@ -124,7 +124,8 @@ func (c *FakeRuntimeCache) Get(ctx context.Context, key client.ObjectKey, obj cl
 
 func (c *FakeRuntimeCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	if c.Store != nil {
-		object.AppendToListItem(list, object.DeepCopy(c.Store))
+		// append deep-copies
+		object.AppendToListItem(list, c.Store)
 	}
 	return nil
 }

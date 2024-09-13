@@ -17,7 +17,10 @@ var _ = Describe("Store", func() {
 
 	BeforeEach(func() {
 		store = NewStore()
-		obj1 = object.NewViewObject("view").WithContent(map[string]any{"a": "x"}).WithName("ns", "name")
+		obj1 = object.NewViewObject("view")
+		object.SetContent(obj1, map[string]any{"a": "x"})
+		object.SetName(obj1, "ns", "name")
+
 		obj2 = &unstructured.Unstructured{}
 		obj2.SetUnstructuredContent(map[string]any{"a": "y"})
 		obj2.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{Group: "testgroup", Version: "v1", Kind: "testkind"})
@@ -45,7 +48,8 @@ var _ = Describe("Store", func() {
 		})
 
 		It("should return an error for non-existent object", func() {
-			obj := object.NewViewObject("view").WithName("", "non-existent")
+			obj := object.NewViewObject("view")
+			object.SetName(obj, "", "non-existent")
 			_, ok, err := store.Get(obj)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ok).To(BeFalse())
@@ -54,11 +58,13 @@ var _ = Describe("Store", func() {
 
 	Describe("List operation", func() {
 		It("should list all added objects", func() {
-			objects := []object.Object{
-				object.NewViewObject("view").WithContent(map[string]any{"a": int64(1)}).WithName("ns1", "test-1"),
-				object.NewViewObject("view").WithContent(map[string]any{"b": int64(2)}).WithName("ns2", "test-2"),
-				object.NewViewObject("view").WithContent(map[string]any{"c": int64(3)}).WithName("ns3", "test-3"),
-			}
+			objects := []object.Object{object.NewViewObject("view"), object.NewViewObject("view"), object.NewViewObject("view")}
+			object.SetName(objects[0], "ns1", "test-1")
+			object.SetName(objects[1], "ns2", "test-2")
+			object.SetName(objects[2], "ns3", "test-3")
+			object.SetContent(objects[0], map[string]any{"a": int64(1)})
+			object.SetContent(objects[1], map[string]any{"b": int64(2)})
+			object.SetContent(objects[2], map[string]any{"c": int64(3)})
 
 			for _, obj := range objects {
 				err := store.Add(obj)

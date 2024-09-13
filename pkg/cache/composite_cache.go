@@ -5,7 +5,6 @@ package cache
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -118,8 +117,6 @@ func (cc *CompositeCache) IndexField(ctx context.Context, obj client.Object, fie
 
 func (cc *CompositeCache) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-
-	fmt.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$get", "gvk", gvk, "key", key)
 
 	cc.log.V(3).Info("get", "gvk", gvk, "key", key)
 
