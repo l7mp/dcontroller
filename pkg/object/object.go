@@ -4,24 +4,33 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	viewapiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
 )
 
-type UnstructuredContent = map[string]any
+type Object = *unstructured.Unstructured
+type ObjectList = *unstructured.UnstructuredList
 
-type Unstructured interface {
-	// UnstructuredContent returns a non-nil map with this object's contents. Values may be
-	// []any, map[string]any, or any primitive type. Contents are typically serialized to and
-	// from JSON. SetUnstructuredContent should be used to mutate the contents.
-	UnstructuredContent() UnstructuredContent
-	// SetUnstructuredContent updates the object content to match the provided map.
-	SetUnstructuredContent(UnstructuredContent)
+func NewObject(view string) Object {
+	obj := &unstructured.Unstructured{}
+	obj.SetUnstructuredContent(map[string]any{})
+	obj.SetGroupVersionKind(viewapiv1.NewGVK(view))
+	return obj
 }
 
-// Object is a general resource, can be either an unstructured.Unstructured or a ViewObject.
-type Object interface {
-	client.Object
-	Unstructured
+// SetName is a shortcut to SetNamespace(ns) followed by SetNamespace(name).
+func SetName(obj Object, ns, name string) {
+	obj.SetNamespace(ns)
+	obj.SetName(name)
+}
+
+// SetContent is similar to SetUnstructuredContent but it preserves the GVK, the name and the namespace.
+func SetContent(obj Object, content map[string]any) {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	ns, name := obj.GetNamespace(), obj.GetName()
+	obj.SetUnstructuredContent(content)
+	obj.GetObjectKind().SetGroupVersionKind(gvk)
+	SetName(obj, ns, name)
 }
 
 func DeepEqual(a, b Object) bool {
@@ -42,34 +51,7 @@ func DeepCopy(in Object) Object {
 		return nil
 	}
 
-	switch in.(type) {
-	case *ViewObject:
-		out := new(ViewObject)
-		DeepCopyInto(in.(*ViewObject), out)
-		return out
-	case *unstructured.Unstructured:
-		out := new(unstructured.Unstructured)
-		DeepCopyInto(in.(*unstructured.Unstructured), out)
-		return out
-	}
-
-	return nil
-}
-
-type ObjectList interface {
-	client.ObjectList
-}
-
-func AppendToListItem(list ObjectList, obj Object) {
-	lu, okl := list.(*unstructured.UnstructuredList)
-	if ou, oko := obj.(*unstructured.Unstructured); okl && oko {
-		lu.Items = append(lu.Items, *ou)
-		return
-	}
-
-	lv, okl := list.(*ViewObjectList)
-	if ov, oko := obj.(*ViewObject); okl && oko {
-		lv.Items = append(lv.Items, *ov)
-		return
-	}
+	out := new(unstructured.Unstructured)
+	DeepCopyInto(in, out)
+	return out
 }

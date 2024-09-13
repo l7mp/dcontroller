@@ -89,12 +89,12 @@ var _ = Describe("Object patching", func() {
 
 	Describe("Object patching", func() {
 		It("should patch nil with map", func() {
-			obj := NewViewObject("view").WithContent(map[string]any{})
+			obj := NewObject("view")
 			patch := map[string]any{"a": int64(1), "b": map[string]any{"c": int64(2)}}
 			err := Patch(obj, patch)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
-				"apiVersion": "view.dcontroller.github.io/v1alpha1",
+				"apiVersion": "view.dcontroller.io/v1alpha1",
 				"kind":       "view",
 				"a":          int64(1),
 				"b":          map[string]any{"c": int64(2)},
@@ -102,12 +102,12 @@ var _ = Describe("Object patching", func() {
 		})
 
 		It("should patch a literal with map", func() {
-			obj := NewViewObject("view")
+			obj := NewObject("view")
 			patch := map[string]any{"a": int64(1), "b": map[string]any{"c": int64(2)}}
 			err := Patch(obj, patch)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
-				"apiVersion": "view.dcontroller.github.io/v1alpha1",
+				"apiVersion": "view.dcontroller.io/v1alpha1",
 				"kind":       "view",
 				"a":          int64(1),
 				"b":          map[string]any{"c": int64(2)},
@@ -115,12 +115,13 @@ var _ = Describe("Object patching", func() {
 		})
 
 		It("should patch a map with map", func() {
-			obj := NewViewObject("view").WithContent(map[string]any{"a": "x", "d": 1.1, "e": []any{int64(10), int64(20)}})
+			obj := NewObject("view")
+			SetContent(obj, map[string]any{"a": "x", "d": 1.1, "e": []any{int64(10), int64(20)}})
 			patch := map[string]any{"a": []any{int64(10), int64(2), int64(3)}, "b": map[string]any{"c": int64(2), "e": "y"}}
 			err := Patch(obj, patch)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
-				"apiVersion": "view.dcontroller.github.io/v1alpha1",
+				"apiVersion": "view.dcontroller.io/v1alpha1",
 				"kind":       "view",
 				"a":          []any{int64(10), int64(2), int64(3)},
 				"b":          map[string]any{"c": int64(2), "e": "y"},
