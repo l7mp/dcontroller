@@ -44,8 +44,8 @@ func New(config *rest.Config, options Options) (*Manager, error) {
 
 		// override the client created by the base manager with the manager's custom split client
 		if options.NewClient == nil {
-			// make sure unstructured objects are served throught the cache (the default is to
-			// obtain these directly from the API server)
+			// make sure unstructured objects are served through the cache (the default
+			// is to obtain them directly from the API server)
 			options.Client.Cache.Unstructured = true
 			// this, apparently, only affects the Writer of the split client!
 			options.NewClient = NewCompositeClient

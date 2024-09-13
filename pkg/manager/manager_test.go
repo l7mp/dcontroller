@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -14,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -21,6 +23,11 @@ import (
 
 	ccache "hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/object"
+)
+
+const (
+	timeout  = time.Second * 1
+	interval = time.Millisecond * 50
 )
 
 var (
@@ -42,6 +49,8 @@ var (
 			RestartPolicy: corev1.RestartPolicyOnFailure,
 		},
 	}
+	fakeRuntimeCache  *ccache.FakeRuntimeCache
+	fakeRuntimeClient client.WithWatch
 )
 
 func TestManager(t *testing.T) {
@@ -50,8 +59,7 @@ func TestManager(t *testing.T) {
 }
 
 func newFakeManager(ctx context.Context) (manager.Manager, error) {
-	fakeRuntimeClient := fake.NewClientBuilder().WithRuntimeObjects(podn).Build()
-	fakeRuntimeCache := ccache.NewFakeRuntimeCache(nil)
+	fakeRuntimeCache = ccache.NewFakeRuntimeCache(nil)
 
 	cache, err := ccache.NewCompositeCache(nil, ccache.Options{
 		DefaultCache: fakeRuntimeCache,
@@ -61,6 +69,7 @@ func newFakeManager(ctx context.Context) (manager.Manager, error) {
 		return nil, err
 	}
 
+	fakeRuntimeClient = fake.NewClientBuilder().WithRuntimeObjects().Build()
 	fakeRuntimeManager := NewFakeManager(cache, &compositeClient{
 		Client:         fakeRuntimeClient,
 		compositeCache: cache,
@@ -126,10 +135,12 @@ var _ = Describe("Startup", func() {
 			mgr, err := newFakeManager(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
+			// pod added
+			err = fakeRuntimeCache.Upsert(pod)
+
 			cache := mgr.GetCache()
 			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
 
-			// pod is already added
 			obj := &unstructured.Unstructured{}
 			obj.GetObjectKind().SetGroupVersionKind(pod.GetObjectKind().GroupVersionKind())
 			err = cache.Get(ctx, client.ObjectKeyFromObject(pod), obj)
@@ -153,26 +164,32 @@ var _ = Describe("Startup", func() {
 			ccache := cache.(*ccache.CompositeCache)
 
 			obj := object.NewViewObject("view")
-			// must be added via the view-cache: the default clientAdd would go to the fake client
+			object.SetName(obj, "test-ns", "test-obj")
+			object.SetContent(obj, map[string]any{"x": "y"})
+
+			// must be added via the view-cache: the default client.Add would go to the fake client
 			err = ccache.GetViewCache().Add(obj)
 			Expect(err).NotTo(HaveOccurred())
 
 			retrieved := object.DeepCopy(obj)
 			err = cache.Get(ctx, client.ObjectKeyFromObject(retrieved), retrieved)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(retrieved).To(Equal(obj))
 			Expect(object.DeepEqual(retrieved, obj)).To(BeTrue())
 		})
 	})
 
 	Describe("Client operation", func() {
-		FIt("should retrieve a native object", func() {
+		It("should retrieve a native object", func() {
 			mgr, err := newFakeManager(ctx)
 			Expect(err).NotTo(HaveOccurred())
+
+			// pod added
+			err = fakeRuntimeCache.Upsert(pod)
 
 			c := mgr.GetClient()
 			Expect(c).NotTo(BeNil())
 
-			// pod is already added
 			obj := &unstructured.Unstructured{}
 			obj.SetGroupVersionKind(schema.GroupVersionKind{
 				Group:   "",
@@ -182,7 +199,7 @@ var _ = Describe("Startup", func() {
 			err = c.Get(ctx, client.ObjectKeyFromObject(pod), obj)
 			Expect(err).NotTo(HaveOccurred())
 			// the returned object somehow obtains a resource-version: remove it
-			unstructured.RemoveNestedField(obj.Object, "metadata", "resourceVersion")
+			//unstructured.RemoveNestedField(obj.Object, "metadata", "resourceVersion")
 			Expect(obj).To(Equal(pod))
 			Expect(reflect.DeepEqual(pod, obj)).To(BeTrue())
 		})
@@ -191,9 +208,9 @@ var _ = Describe("Startup", func() {
 			mgr, err := newFakeManager(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			obj := object.NewViewObject("view").
-				WithContent(map[string]any{"a": int64(1)}).
-				WithName("ns", "test-1")
+			obj := object.NewViewObject("view")
+			object.SetContent(obj, map[string]any{"a": int64(1)})
+			object.SetName(obj, "ns", "test-1")
 
 			cache := mgr.GetCache()
 			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
@@ -210,5 +227,51 @@ var _ = Describe("Startup", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(object.DeepEqual(retrieved, obj)).To(BeTrue())
 		})
+
+		It("should write and retrieve a native object", func() {
+			mgr, err := newFakeManager(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			list := &unstructured.UnstructuredList{}
+			list.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			})
+
+			// must watch: get would go through the cache
+			watcher, err := fakeRuntimeClient.Watch(ctx, list)
+			Expect(err).NotTo(HaveOccurred())
+
+			c := mgr.GetClient()
+			Expect(c).NotTo(BeNil())
+
+			Expect(c.Create(ctx, pod)).NotTo(HaveOccurred())
+
+			event, ok := tryWatch(watcher, interval)
+			Expect(ok).To(BeTrue())
+			Expect(event.Type).To(Equal(watch.Added))
+			// no way to deep-equal: fakeclient adds lots of defaults
+			Expect(event.Object.GetObjectKind().GroupVersionKind()).To(Equal(schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			}))
+			// make a Get so that we get a full object (event.Object is only a runtime.Object)
+			u, ok := event.Object.(*corev1.Pod)
+			Expect(ok).To(BeTrue())
+			Expect(u).NotTo(BeNil())
+			Expect(u.GetName()).To(Equal("testpod"))
+			Expect(u.GetNamespace()).To(Equal("testns"))
+		})
 	})
 })
+
+func tryWatch(watcher watch.Interface, d time.Duration) (watch.Event, bool) {
+	select {
+	case event := <-watcher.ResultChan():
+		return event, true
+	case <-time.After(d):
+		return watch.Event{}, false
+	}
+}

@@ -46,7 +46,7 @@ func (c *compositeClient) setCache(cache ctrlCache.Cache) error {
 
 func (c *compositeClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Group != viewapiv1.GroupVersion.Group {
+	if gvk.Group == viewapiv1.GroupVersion.Group {
 		if c.compositeCache == nil {
 			return errors.New("cache is not set")
 		}
@@ -62,7 +62,7 @@ func (c *compositeClient) Create(ctx context.Context, obj client.Object, opts ..
 
 func (c *compositeClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Group != viewapiv1.GroupVersion.Group {
+	if gvk.Group == viewapiv1.GroupVersion.Group {
 		if c.compositeCache == nil {
 			return errors.New("cache is not set")
 		}
@@ -78,7 +78,7 @@ func (c *compositeClient) Delete(ctx context.Context, obj client.Object, opts ..
 
 func (c *compositeClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Group != viewapiv1.GroupVersion.Group {
+	if gvk.Group == viewapiv1.GroupVersion.Group {
 		if c.compositeCache == nil {
 			return errors.New("cache is not set")
 		}
@@ -94,7 +94,7 @@ func (c *compositeClient) Update(ctx context.Context, obj client.Object, opts ..
 
 func (c *compositeClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Group != viewapiv1.GroupVersion.Group {
+	if gvk.Group == viewapiv1.GroupVersion.Group {
 		if c.compositeCache == nil {
 			return errors.New("cache is not set")
 		}
@@ -113,7 +113,7 @@ func (c *compositeClient) Patch(ctx context.Context, obj client.Object, patch cl
 		}
 
 		p := map[string]any{}
-		if err := json.Unmarshal(j, p); err != nil {
+		if err := json.Unmarshal(j, &p); err != nil {
 			return fmt.Errorf("cannot parse JSON patch: %w", err)
 		}
 
