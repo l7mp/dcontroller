@@ -9,17 +9,19 @@ import (
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	toolscache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
 const DefaultWatchChannelBuffer = 256
+
+var _ cache.Cache = &ViewCache{}
 
 type ViewCache struct {
 	mu           sync.RWMutex
@@ -29,7 +31,11 @@ type ViewCache struct {
 	logger, log  logr.Logger
 }
 
-func New(logger logr.Logger) *ViewCache {
+func NewViewCache(opts Options) *ViewCache {
+	logger := *opts.Logger
+	if opts.Logger == nil {
+		logger = log.Log
+	}
 	c := &ViewCache{
 		caches:    make(map[schema.GroupVersionKind]toolscache.Indexer),
 		informers: make(map[schema.GroupVersionKind]*ViewCacheInformer),
@@ -40,7 +46,7 @@ func New(logger logr.Logger) *ViewCache {
 }
 
 // cache handlers
-func (c *ViewCache) RegisterCacheForGVK(gvk schema.GroupVersionKind) error {
+func (c *ViewCache) RegisterCacheForKind(gvk schema.GroupVersionKind) error {
 	c.log.V(1).Info("registering cache for new GVK", "gvk", gvk)
 
 	c.mu.Lock()
@@ -60,13 +66,13 @@ func (c *ViewCache) RegisterCacheForGVK(gvk schema.GroupVersionKind) error {
 	return nil
 }
 
-func (c *ViewCache) GetCacheForGVK(gvk schema.GroupVersionKind) (toolscache.Indexer, error) {
+func (c *ViewCache) GetCacheForKind(gvk schema.GroupVersionKind) (toolscache.Indexer, error) {
 	c.mu.RLock()
 	indexer, exists := c.caches[gvk]
 	c.mu.RUnlock()
 
 	if !exists {
-		if err := c.RegisterCacheForGVK(gvk); err != nil {
+		if err := c.RegisterCacheForKind(gvk); err != nil {
 			return nil, err
 		}
 		c.mu.RLock()
@@ -75,27 +81,19 @@ func (c *ViewCache) GetCacheForGVK(gvk schema.GroupVersionKind) (toolscache.Inde
 	}
 
 	if !exists {
-		return nil, fmt.Errorf("cache list for GVK %s", gvk)
+		return nil, fmt.Errorf("could not create cache for GVK %s", gvk)
 	}
 
 	return indexer, nil
 }
 
 // informer handlers
-func (c *ViewCache) RegisterInformerForGVK(gvk schema.GroupVersionKind) error {
+func (c *ViewCache) RegisterInformerForKind(gvk schema.GroupVersionKind) error {
 	c.log.V(1).Info("registering informer for new GVK", "gvk", gvk)
 
-	c.mu.Lock()
-	cache, exists := c.caches[gvk]
-	c.mu.Unlock()
-
-	if !exists || cache == nil {
-		if err := c.RegisterCacheForGVK(gvk); err != nil {
-			return err
-		}
-		c.mu.Lock()
-		cache, _ = c.caches[gvk]
-		c.mu.Unlock()
+	cache, err := c.GetCacheForKind(gvk)
+	if err != nil {
+		return err
 	}
 
 	c.mu.Lock()
@@ -111,11 +109,6 @@ func (c *ViewCache) RegisterInformerForGVK(gvk schema.GroupVersionKind) error {
 	return nil
 }
 
-func (c *ViewCache) GetInformer(ctx context.Context, obj client.Object, opts ...cache.InformerGetOption) (cache.Informer, error) {
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	return c.GetInformerForKind(ctx, gvk, opts...)
-}
-
 func (c *ViewCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind, _ ...cache.InformerGetOption) (cache.Informer, error) {
 	c.mu.RLock()
 	informer, exists := c.informers[gvk]
@@ -125,7 +118,7 @@ func (c *ViewCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVers
 		return informer, nil
 	}
 
-	err := c.RegisterInformerForGVK(gvk)
+	err := c.RegisterInformerForKind(gvk)
 	if err != nil {
 		return nil, fmt.Errorf("could not create informer for GVK %s: %w", gvk, err)
 	}
@@ -139,6 +132,11 @@ func (c *ViewCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVers
 	}
 
 	return informer, nil
+}
+
+func (c *ViewCache) GetInformer(ctx context.Context, obj client.Object, opts ...cache.InformerGetOption) (cache.Informer, error) {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	return c.GetInformerForKind(ctx, gvk, opts...)
 }
 
 func (c *ViewCache) RemoveInformer(ctx context.Context, obj client.Object) error {
@@ -155,14 +153,16 @@ func (c *ViewCache) RemoveInformer(ctx context.Context, obj client.Object) error
 	return nil
 }
 
-// functions to add/update/delete objects in the cache(s)
-func (c *ViewCache) Add(obj client.Object) error {
+// Add can manually insert objects into the cache.
+func (c *ViewCache) Add(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	cache, err := c.GetCacheForGVK(gvk)
+	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {
 		return err
 	}
 
+	// cache does not apply deepcopy to stored objects
+	obj = object.DeepCopy(obj)
 	if err := cache.Add(obj); err != nil {
 		return err
 	}
@@ -171,18 +171,21 @@ func (c *ViewCache) Add(obj client.Object) error {
 	if err != nil {
 		return err
 	}
-	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Added, obj)
+	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Added, obj, false)
 
 	return nil
 }
 
-func (c *ViewCache) Update(obj client.Object) error {
+// Update can manually modify objects in the cache.
+func (c *ViewCache) Update(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	cache, err := c.GetCacheForGVK(gvk)
+	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {
 		return err
 	}
 
+	// cache does not apply deepcopy to stored objects
+	obj = object.DeepCopy(obj)
 	if err := cache.Update(obj); err != nil {
 		return err
 	}
@@ -191,14 +194,15 @@ func (c *ViewCache) Update(obj client.Object) error {
 	if err != nil {
 		return err
 	}
-	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Updated, obj)
+	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Updated, obj, false)
 
 	return nil
 }
 
-func (c *ViewCache) Delete(obj client.Object) error {
+// Delete can manually remove objects from the cache.
+func (c *ViewCache) Delete(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	cache, err := c.GetCacheForGVK(gvk)
+	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {
 		return err
 	}
@@ -211,7 +215,7 @@ func (c *ViewCache) Delete(obj client.Object) error {
 	if err != nil {
 		return err
 	}
-	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Deleted, obj)
+	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Deleted, obj, false)
 
 	return nil
 }
@@ -227,19 +231,18 @@ func (c *ViewCache) IndexField(ctx context.Context, obj client.Object, field str
 func (c *ViewCache) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	target, ok := obj.(object.Object)
 	if !ok {
-		return errors.New("invalid argument: call with an object.Object, not a generic client.Object")
+		return apierrors.NewBadRequest("must be called with an object.Object")
 	}
 
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	c.mu.RLock()
-	indexer, exists := c.caches[gvk]
-	c.mu.RUnlock()
-
-	if !exists {
-		return apierrors.NewBadRequest("GVK not registered")
+	cache, err := c.GetCacheForKind(gvk)
+	if err != nil {
+		return apierrors.NewBadRequest("invalid GVK")
 	}
 
-	item, exists, err := indexer.GetByKey(key.String())
+	c.logger.V(2).Info("get", "gvk", gvk, "key", key)
+
+	item, exists, err := cache.GetByKey(key.String())
 	if err != nil {
 		return err
 	}
@@ -258,20 +261,20 @@ func (c *ViewCache) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 
 func (c *ViewCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	gvk := list.GetObjectKind().GroupVersionKind()
-
-	c.mu.RLock()
-	indexer, exists := c.caches[gvk]
-	c.mu.RUnlock()
-
-	if !exists {
-		// no problem, kist leave list empty
-		return nil
+	cache, err := c.GetCacheForKind(gvk)
+	if err != nil {
+		return apierrors.NewBadRequest("invalid GVK")
 	}
 
-	for _, item := range indexer.List() {
+	c.logger.V(2).Info("get", "gvk", gvk)
+
+	for _, item := range cache.List() {
 		target, ok := item.(object.Object)
 		if !ok {
-			return errors.New("invalid argument: cache must store only object.Objects, not generic client.Objects")
+			return apierrors.NewConflict(
+				schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind},
+				client.ObjectKeyFromObject(item.(client.Object)).String(),
+				errors.New("cache must store object.Objects only"))
 		}
 		object.AppendToListItem(list, object.DeepCopy(target))
 	}
@@ -297,13 +300,13 @@ func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...c
 	}
 
 	handler := toolscache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			watcher.sendEvent(watch.Added, obj)
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			watcher.sendEvent(watch.Modified, newObj)
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			watcher.sendEvent(watch.Deleted, obj)
 		},
 	}
@@ -323,13 +326,20 @@ func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...c
 	}()
 
 	// send initial list
-	cache, err := c.GetCacheForGVK(gvk)
+	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, item := range cache.List() {
-		informer.(*ViewCacheInformer).TriggerEvent(toolscache.Added, item.(client.Object))
+		obj, ok := item.(object.Object)
+		if !ok {
+			return nil, apierrors.NewConflict(
+				schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind},
+				client.ObjectKeyFromObject(item.(client.Object)).String(),
+				errors.New("cache must store object.Objects only"))
+		}
+		informer.(*ViewCacheInformer).TriggerEvent(toolscache.Added, obj, true)
 	}
 
 	return watcher, nil
@@ -366,7 +376,13 @@ type ViewCacheWatcher struct {
 	logger    logr.Logger
 }
 
-func (w *ViewCacheWatcher) sendEvent(eventType watch.EventType, obj interface{}) {
+func (w *ViewCacheWatcher) sendEvent(eventType watch.EventType, o any) {
+	obj, ok := o.(object.Object)
+	if !ok {
+		w.logger.Info("refusing send object that is not an object.Object")
+		return
+	}
+
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
@@ -374,7 +390,7 @@ func (w *ViewCacheWatcher) sendEvent(eventType watch.EventType, obj interface{})
 		return
 	}
 
-	event := watch.Event{Type: eventType, Object: obj.(runtime.Object)}
+	event := watch.Event{Type: eventType, Object: obj}
 	select {
 	case w.eventChan <- event:
 	case <-time.After(time.Second):

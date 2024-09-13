@@ -11,6 +11,8 @@ import (
 	toolscache "k8s.io/client-go/tools/cache"
 )
 
+var _ toolscache.SharedIndexInformer = &ViewCacheInformer{}
+
 type ViewCacheInformer struct {
 	indexer        toolscache.Indexer
 	handlers       map[int64]handlerEntry
@@ -75,7 +77,9 @@ func (c *ViewCacheInformer) RemoveEventHandler(registration toolscache.ResourceE
 	return fmt.Errorf("unknown registration type")
 }
 
-func (c *ViewCacheInformer) TriggerEvent(eventType toolscache.DeltaType, obj interface{}) {
+// TriggerEvent will send an event on obj of eventType to all registered handlers. Set
+// isInitialList to true if event is an Added as a part of the initial object list.
+func (c *ViewCacheInformer) TriggerEvent(eventType toolscache.DeltaType, obj object.Object, isInitialList bool) {
 	if len(c.handlers) == 0 {
 		return
 	}
@@ -83,49 +87,47 @@ func (c *ViewCacheInformer) TriggerEvent(eventType toolscache.DeltaType, obj int
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	objCopy, ok := obj.(object.Object)
-	if !ok {
-		c.logger.Info("trigger event expects an object.Object")
-		return
-	}
+	c.logger.V(2).Info("trigger-event", "event", eventType, "object", object.DumpObject(obj))
 
-	c.logger.V(2).Info("trigger-event", "event", eventType, "object", object.DumpObject(objCopy))
-
-	objCopy = object.DeepCopy(objCopy)
 	if c.transform != nil {
-		var err error
-		obj, err = c.transform(objCopy)
+		obj = object.DeepCopy(obj)
+
+		item, err := c.transform(obj)
 		if err != nil {
 			c.logger.Error(err, "Failed to transform object")
 			return
 		}
-		objCopy, ok = obj.(object.Object)
+
+		var ok bool
+		obj, ok = item.(object.Object)
 		if !ok {
 			c.logger.Info("transform must produce an object.Object")
 			return
 		}
 
-		c.logger.V(3).Info("trigger-event: transformer ready", "object", object.DumpObject(objCopy))
+		c.logger.V(3).Info("trigger-event: transformer ready", "object", object.DumpObject(obj))
 	}
 
 	events := 0
 	for _, handler := range c.handlers {
+
 		c.logger.V(3).Info("trigger-event: sending event to informer",
-			"object", object.DumpObject(objCopy), "handler-id", handler.id)
+			"object", object.DumpObject(obj), "handler-id", handler.id)
+
 		switch eventType {
 		case toolscache.Added:
-			handler.OnAdd(object.DeepCopy(objCopy), false)
+			handler.OnAdd(object.DeepCopy(obj), false)
 			events++
 		case toolscache.Updated:
-			handler.OnUpdate(nil, object.DeepCopy(objCopy))
+			handler.OnUpdate(nil, object.DeepCopy(obj))
 			events++
 		case toolscache.Deleted:
-			handler.OnDelete(object.DeepCopy(objCopy))
+			handler.OnDelete(object.DeepCopy(obj))
 			events++
 		}
 	}
 
-	c.logger.V(3).Info("trigger-event: ready", "event", eventType, "object", object.DumpObject(objCopy),
+	c.logger.V(3).Info("trigger-event: ready", "event", eventType, "object", object.DumpObject(obj),
 		"events-sent", events)
 }
 

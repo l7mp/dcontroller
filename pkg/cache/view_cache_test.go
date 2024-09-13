@@ -2,43 +2,21 @@ package cache
 
 import (
 	"context"
-	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/watch"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	apiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
-var (
-	loglevel = -10
-	logger   = zap.New(zap.UseFlagOptions(&zap.Options{
-		Development:     true,
-		DestWriter:      GinkgoWriter,
-		StacktraceLevel: zapcore.Level(3),
-		TimeEncoder:     zapcore.RFC3339NanoTimeEncoder,
-		Level:           zapcore.Level(loglevel),
-	}))
-)
-
-var _ cache.Cache = &ViewCache{}
-
 const (
 	timeout  = time.Second * 1
 	interval = time.Millisecond * 50
 )
-
-func TestCache(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Cache")
-}
 
 var _ = Describe("ViewCache", func() {
 	var (
@@ -48,7 +26,7 @@ var _ = Describe("ViewCache", func() {
 	)
 
 	BeforeEach(func() {
-		cache = New(logger)
+		cache = NewViewCache(Options{Logger: &logger})
 		ctx, cancel = context.WithCancel(context.Background())
 	})
 
@@ -58,7 +36,7 @@ var _ = Describe("ViewCache", func() {
 
 	Describe("Registering views", func() {
 		It("should allow a view to be registered", func() {
-			err := cache.RegisterCacheForGVK(apiv1.NewGVK("view"))
+			err := cache.RegisterCacheForKind(apiv1.NewGVK("view"))
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
@@ -103,9 +81,9 @@ var _ = Describe("ViewCache", func() {
 			err := cache.List(ctx, list)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.Items).To(HaveLen(3))
-			Expect(object.DeepEqual(&list.Items[0], objects[0])).NotTo(BeNil())
-			Expect(object.DeepEqual(&list.Items[1], objects[1])).NotTo(BeNil())
-			Expect(object.DeepEqual(&list.Items[2], objects[2])).NotTo(BeNil())
+			Expect(object.DeepEqual(&list.Items[0], objects[0])).NotTo(BeFalse())
+			Expect(object.DeepEqual(&list.Items[1], objects[1])).NotTo(BeFalse())
+			Expect(object.DeepEqual(&list.Items[2], objects[2])).NotTo(BeFalse())
 		})
 
 		It("should return an empty list when cache is empty", func() {
