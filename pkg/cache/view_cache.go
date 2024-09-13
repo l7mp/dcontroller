@@ -156,6 +156,9 @@ func (c *ViewCache) RemoveInformer(ctx context.Context, obj client.Object) error
 // Add can manually insert objects into the cache.
 func (c *ViewCache) Add(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
+
+	c.log.V(2).Info("add: adding object to view cache", "gvk", gvk, "key", client.ObjectKeyFromObject(obj))
+
 	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {
 		return err
@@ -179,6 +182,9 @@ func (c *ViewCache) Add(obj object.Object) error {
 // Update can manually modify objects in the cache.
 func (c *ViewCache) Update(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
+
+	c.log.V(2).Info("update: updating object in view cache", "gvk", gvk, "key", client.ObjectKeyFromObject(obj))
+
 	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {
 		return err
@@ -202,6 +208,9 @@ func (c *ViewCache) Update(obj object.Object) error {
 // Delete can manually remove objects from the cache.
 func (c *ViewCache) Delete(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
+
+	c.log.V(2).Info("delete: removing object from view cache", "gvk", gvk, "key", client.ObjectKeyFromObject(obj))
+
 	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {
 		return err
@@ -240,7 +249,7 @@ func (c *ViewCache) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		return apierrors.NewBadRequest("invalid GVK")
 	}
 
-	c.logger.V(2).Info("get", "gvk", gvk, "key", key)
+	c.log.V(2).Info("get", "gvk", gvk, "key", key)
 
 	item, exists, err := cache.GetByKey(key.String())
 	if err != nil {
@@ -266,7 +275,7 @@ func (c *ViewCache) List(ctx context.Context, list client.ObjectList, opts ...cl
 		return apierrors.NewBadRequest("invalid GVK")
 	}
 
-	c.logger.V(2).Info("get", "gvk", gvk)
+	c.log.V(2).Info("get", "gvk", gvk)
 
 	for _, item := range cache.List() {
 		target, ok := item.(object.Object)
@@ -286,7 +295,7 @@ func (c *ViewCache) List(ctx context.Context, list client.ObjectList, opts ...cl
 func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
 	gvk := list.GetObjectKind().GroupVersionKind()
 
-	c.logger.V(2).Info("watch: adding watch", "gvk", gvk)
+	c.log.V(2).Info("watch: adding watch", "gvk", gvk)
 
 	informer, err := c.GetInformerForKind(ctx, gvk)
 	if err != nil {
@@ -319,7 +328,7 @@ func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...c
 	go func() {
 		<-ctx.Done()
 
-		c.logger.V(4).Info("stopping watcher", "gvk", gvk)
+		c.log.V(4).Info("stopping watcher", "gvk", gvk)
 
 		informer.RemoveEventHandler(handlerReg)
 		watcher.Stop()

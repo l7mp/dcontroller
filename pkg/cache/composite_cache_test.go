@@ -48,7 +48,7 @@ func TestCache(t *testing.T) {
 var _ = Describe("CompositeCache", func() {
 	var (
 		cache     *CompositeCache
-		fakeCache *fakeInformers
+		fakeCache *FakeRuntimeCache
 		ctx       context.Context
 		cancel    context.CancelFunc
 	)
@@ -58,7 +58,7 @@ var _ = Describe("CompositeCache", func() {
 		pod.SetUnstructuredContent(content)
 		// this is needed: for some unknown reason the converter does not work on the GVK
 		pod.GetObjectKind().SetGroupVersionKind(podn.GetObjectKind().GroupVersionKind())
-		fakeCache = newFakeInformers(scheme.Scheme)
+		fakeCache = NewFakeRuntimeCache(scheme.Scheme)
 		cache, _ = NewCompositeCache(nil, Options{
 			DefaultCache: fakeCache,
 			Logger:       &logger,
@@ -86,6 +86,19 @@ var _ = Describe("CompositeCache", func() {
 				WithName("ns", "test-1")
 
 			err := cache.GetViewCache().Add(obj)
+			Expect(err).NotTo(HaveOccurred())
+
+			retrieved := object.DeepCopy(obj)
+			err = cache.Get(ctx, client.ObjectKeyFromObject(retrieved), retrieved)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(object.DeepEqual(retrieved, obj)).To(BeTrue())
+		})
+
+		It("should retrieve an added view object that is created from a real resource", func() {
+			obj, err := object.NewViewObjectFromNativeObject("view", pod)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = cache.GetViewCache().Add(obj)
 			Expect(err).NotTo(HaveOccurred())
 
 			retrieved := object.DeepCopy(obj)

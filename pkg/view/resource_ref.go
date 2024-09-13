@@ -1,40 +1,44 @@
 package view
 
-import (
-	"fmt"
+// import (
+// 	"fmt"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
+// 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+// 	"k8s.io/apimachinery/pkg/runtime/schema"
+// 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	viewapiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
-	"hsnlab/dcontroller-runtime/pkg/manager"
-)
+// 	viewapiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
+// 	"hsnlab/dcontroller-runtime/pkg/manager"
+// )
 
-type ResourceRef struct {
-	ApiGroup string `json:"apiGroup"`
-	Kind     string `json:"kind"`
-	// Options are additional config for watching the resource, like predicates, etc.
-	Options []ResourceRefOption `json:"options"`
-}
+// type Predicate = predicate.TypedPredicate[*unstructured.Unstructured]
 
-type ResourceRefOption struct{}
+// type ResourceRef struct {
+// 	Group string `json:"apiGroup"`
+// 	Kind  string `json:"kind"`
+// 	// Options are additional config for watching the resource, like predicates, etc.
+// 	Options []ResourceRefOption `json:"options"`
+// }
 
-// GetGVKByGroupKind returns a full GVK for a Group and a Kind. The function is smart enough to
-// handle view references.
-func GetGVKByGroupKind(m manager.Manager, gr schema.GroupKind) (schema.GroupVersionKind, error) {
-	if gr.Group == viewapiv1.GroupVersion.Group {
-		return schema.GroupVersionKind{
-			Group:   viewapiv1.GroupVersion.Group,
-			Kind:    gr.Kind,
-			Version: viewapiv1.GroupVersion.Version,
-		}, nil
-	}
+// type ResourceRefOption struct{}
 
-	// standarg Kubernetes object
-	mapper := m.GetRESTMapper()
-	gvk, err := mapper.KindFor(schema.GroupVersionResource{Group: gr.Group, Resource: gr.Kind})
-	if err != nil {
-		return schema.GroupVersionKind{}, fmt.Errorf("error finding GVK: %w", err)
-	}
+// // GetGVKByGroupKind returns a full GVK for a Group and a Kind. The function is smart enough to
+// // handle view references.
+// func GetGVKByGroupKind(m *manager.Manager, gr schema.GroupKind) (schema.GroupVersionKind, error) {
+// 	if gr.Group == viewapiv1.GroupVersion.Group {
+// 		return schema.GroupVersionKind{
+// 			Group:   viewapiv1.GroupVersion.Group,
+// 			Kind:    gr.Kind,
+// 			Version: viewapiv1.GroupVersion.Version,
+// 		}, nil
+// 	}
 
-	return gvk, nil
-}
+// 	// standarg Kubernetes object
+// 	mapper := m.GetRESTMapper()
+// 	gvk, err := mapper.KindFor(schema.GroupVersionResource{Group: gr.Group, Resource: gr.Kind})
+// 	if err != nil {
+// 		return schema.GroupVersionKind{}, fmt.Errorf("error finding GVK: %w", err)
+// 	}
+
+// 	return gvk, nil
+// }

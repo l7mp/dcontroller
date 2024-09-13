@@ -81,9 +81,9 @@ var _ = Describe("ViewCache", func() {
 			err := cache.List(ctx, list)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.Items).To(HaveLen(3))
-			Expect(object.DeepEqual(&list.Items[0], objects[0])).NotTo(BeFalse())
-			Expect(object.DeepEqual(&list.Items[1], objects[1])).NotTo(BeFalse())
-			Expect(object.DeepEqual(&list.Items[2], objects[2])).NotTo(BeFalse())
+			Expect(list.Items).To(ContainElement(objects[0]))
+			Expect(list.Items).To(ContainElement(objects[1]))
+			Expect(list.Items).To(ContainElement(objects[2]))
 		})
 
 		It("should return an empty list when cache is empty", func() {

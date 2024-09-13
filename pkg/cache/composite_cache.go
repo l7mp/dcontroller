@@ -5,12 +5,14 @@ package cache
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	viewapiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
 )
@@ -21,6 +23,7 @@ var _ cache.Cache = &CompositeCache{}
 type CompositeCache struct {
 	defaultCache cache.Cache
 	viewCache    *ViewCache
+	log          logr.Logger
 }
 
 // Options are generic caching options
@@ -42,9 +45,15 @@ func NewCompositeCache(config *rest.Config, opts Options) (*CompositeCache, erro
 		defaultCache = dc
 	}
 
+	logger := *opts.Logger
+	if opts.Logger == nil {
+		logger = log.Log
+	}
+
 	return &CompositeCache{
 		defaultCache: defaultCache,
 		viewCache:    NewViewCache(opts),
+		log:          logger.WithName("compositecache"),
 	}, nil
 }
 
@@ -58,6 +67,9 @@ func (cc *CompositeCache) GetViewCache() *ViewCache {
 
 func (cc *CompositeCache) GetInformer(ctx context.Context, obj client.Object, opts ...cache.InformerGetOption) (cache.Informer, error) {
 	gvk := obj.GetObjectKind().GroupVersionKind()
+
+	cc.log.V(3).Info("get-informer", "gvk", gvk)
+
 	if gvk.Group == viewapiv1.GroupVersion.Group {
 		return cc.viewCache.GetInformer(ctx, obj)
 	}
@@ -65,6 +77,8 @@ func (cc *CompositeCache) GetInformer(ctx context.Context, obj client.Object, op
 }
 
 func (cc *CompositeCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind, opts ...cache.InformerGetOption) (cache.Informer, error) {
+	cc.log.V(3).Info("get-informer-for-kind", "gvk", gvk)
+
 	if gvk.Group == viewapiv1.GroupVersion.Group {
 		return cc.viewCache.GetInformerForKind(ctx, gvk)
 	}
@@ -73,6 +87,9 @@ func (cc *CompositeCache) GetInformerForKind(ctx context.Context, gvk schema.Gro
 
 func (cc *CompositeCache) RemoveInformer(ctx context.Context, obj client.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
+
+	cc.log.V(3).Info("get-informer-for-kind", "gvk", gvk)
+
 	if gvk.Group == viewapiv1.GroupVersion.Group {
 		return cc.viewCache.RemoveInformer(ctx, obj)
 	}
@@ -80,6 +97,7 @@ func (cc *CompositeCache) RemoveInformer(ctx context.Context, obj client.Object)
 }
 
 func (cc *CompositeCache) Start(ctx context.Context) error {
+	cc.log.V(3).Info("starting")
 	if err := cc.viewCache.Start(ctx); err != nil {
 		return err
 	}
@@ -100,6 +118,11 @@ func (cc *CompositeCache) IndexField(ctx context.Context, obj client.Object, fie
 
 func (cc *CompositeCache) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
+
+	fmt.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$get", "gvk", gvk, "key", key)
+
+	cc.log.V(3).Info("get", "gvk", gvk, "key", key)
+
 	if gvk.Group == viewapiv1.GroupVersion.Group {
 		return cc.viewCache.Get(ctx, key, obj, opts...)
 	}
@@ -108,6 +131,9 @@ func (cc *CompositeCache) Get(ctx context.Context, key client.ObjectKey, obj cli
 
 func (cc *CompositeCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	gvk := list.GetObjectKind().GroupVersionKind()
+
+	cc.log.V(3).Info("list", "gvk", gvk)
+
 	if gvk.Group == viewapiv1.GroupVersion.Group {
 		return cc.viewCache.List(ctx, list, opts...)
 	}

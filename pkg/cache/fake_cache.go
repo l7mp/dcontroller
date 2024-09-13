@@ -18,11 +18,11 @@ import (
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
-var _ cache.Cache = &fakeInformers{}
+var _ cache.Cache = &FakeRuntimeCache{}
 
-// fakeInformers is a fake implementation of Informers. Client can store only a single object.
+// FakeRuntimeCache is a fake implementation of Informers. Client can store only a single object.
 // Source: sigs.k8s.io/controller-runtime/pkg/cache/informertest/fake_cache.go.
-type fakeInformers struct {
+type FakeRuntimeCache struct {
 	InformersByGVK map[schema.GroupVersionKind]toolscache.SharedIndexInformer
 	Scheme         *runtime.Scheme
 	Error          error
@@ -30,19 +30,19 @@ type fakeInformers struct {
 	Store          object.Object
 }
 
-func newFakeInformers(s *runtime.Scheme) *fakeInformers {
+func NewFakeRuntimeCache(s *runtime.Scheme) *FakeRuntimeCache {
 	if s == nil {
 		s = scheme.Scheme
 	}
 
-	return &fakeInformers{
+	return &FakeRuntimeCache{
 		InformersByGVK: map[schema.GroupVersionKind]toolscache.SharedIndexInformer{},
 		Scheme:         s,
 	}
 }
 
 // GetInformerForKind implements Informers.
-func (c *fakeInformers) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind, opts ...cache.InformerGetOption) (cache.Informer, error) {
+func (c *FakeRuntimeCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind, opts ...cache.InformerGetOption) (cache.Informer, error) {
 	obj, err := c.Scheme.New(gvk)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func (c *fakeInformers) GetInformerForKind(ctx context.Context, gvk schema.Group
 }
 
 // GetInformer implements Informers.
-func (c *fakeInformers) GetInformer(ctx context.Context, obj client.Object, opts ...cache.InformerGetOption) (cache.Informer, error) {
+func (c *FakeRuntimeCache) GetInformer(ctx context.Context, obj client.Object, opts ...cache.InformerGetOption) (cache.Informer, error) {
 	if c.Scheme == nil {
 		c.Scheme = scheme.Scheme
 	}
@@ -64,7 +64,7 @@ func (c *fakeInformers) GetInformer(ctx context.Context, obj client.Object, opts
 }
 
 // RemoveInformer implements Informers.
-func (c *fakeInformers) RemoveInformer(ctx context.Context, obj client.Object) error {
+func (c *FakeRuntimeCache) RemoveInformer(ctx context.Context, obj client.Object) error {
 	if c.Scheme == nil {
 		c.Scheme = scheme.Scheme
 	}
@@ -78,14 +78,14 @@ func (c *fakeInformers) RemoveInformer(ctx context.Context, obj client.Object) e
 }
 
 // WaitForCacheSync implements Informers.
-func (c *fakeInformers) WaitForCacheSync(ctx context.Context) bool {
+func (c *FakeRuntimeCache) WaitForCacheSync(ctx context.Context) bool {
 	if c.Synced == nil {
 		return true
 	}
 	return *c.Synced
 }
 
-func (c *fakeInformers) informerFor(gvk schema.GroupVersionKind, _ runtime.Object) (toolscache.SharedIndexInformer, error) {
+func (c *FakeRuntimeCache) informerFor(gvk schema.GroupVersionKind, _ runtime.Object) (toolscache.SharedIndexInformer, error) {
 	if c.Error != nil {
 		return nil, c.Error
 	}
@@ -102,16 +102,16 @@ func (c *fakeInformers) informerFor(gvk schema.GroupVersionKind, _ runtime.Objec
 }
 
 // Start implements Informers.
-func (c *fakeInformers) Start(ctx context.Context) error {
+func (c *FakeRuntimeCache) Start(ctx context.Context) error {
 	return c.Error
 }
 
 // IndexField implements Cache.
-func (c *fakeInformers) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
+func (c *FakeRuntimeCache) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
 	return nil
 }
 
-func (c *fakeInformers) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (c *FakeRuntimeCache) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	if c.Store != nil {
 		object.DeepCopyInto(c.Store, obj.(object.Object))
 		return nil
@@ -122,19 +122,19 @@ func (c *fakeInformers) Get(ctx context.Context, key client.ObjectKey, obj clien
 	}, key.String())
 }
 
-func (c *fakeInformers) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+func (c *FakeRuntimeCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	if c.Store != nil {
 		object.AppendToListItem(list, object.DeepCopy(c.Store))
 	}
 	return nil
 }
 
-func (c *fakeInformers) Upsert(obj object.Object) error {
+func (c *FakeRuntimeCache) Upsert(obj object.Object) error {
 	c.Store = object.DeepCopy(obj)
 	return nil
 }
 
-func (c *fakeInformers) Delete(_ object.Object) error {
+func (c *FakeRuntimeCache) Delete(_ object.Object) error {
 	c.Store = nil
 	return nil
 }
