@@ -22,35 +22,36 @@ var _ = Describe("Expressions", func() {
 
 	BeforeEach(func() {
 		eng = NewDefaultEngine("view", emptyView, logger)
-		obj1 = object.NewViewObject("testview1").WithContent(
-			Unstructured{
-				"spec": Unstructured{
-					"a": int64(1),
-					"b": Unstructured{"c": int64(2)},
-					"x": []any{int64(1), int64(2), int64(3), int64(4), int64(5)},
-				},
-			}).WithName("default", "name")
+		obj1 = object.NewViewObject("testview1")
+		object.SetContent(obj1, Unstructured{
+			"spec": Unstructured{
+				"a": int64(1),
+				"b": Unstructured{"c": int64(2)},
+				"x": []any{int64(1), int64(2), int64(3), int64(4), int64(5)},
+			},
+		})
+		object.SetName(obj1, "default", "name")
 		eng.WithObjects(obj1)
 
 		eng2 = NewDefaultEngine("view", emptyView, logger)
-		obj2 = object.NewViewObject("testview2").WithContent(
-			Unstructured{
-				"metadata": Unstructured{
-					"namespace": "default2",
-					"name":      "name",
+		obj2 = object.NewViewObject("testview2")
+		object.SetContent(obj2, Unstructured{
+			"metadata": Unstructured{
+				"namespace": "default2",
+				"name":      "name",
+			},
+			"spec": []any{
+				Unstructured{
+					"name": "name1",
+					"a":    int64(1),
+					"b":    Unstructured{"c": int64(2)},
+				}, Unstructured{
+					"name": "name2",
+					"a":    int64(2),
+					"b":    Unstructured{"d": int64(3)},
 				},
-				"spec": []any{
-					Unstructured{
-						"name": "name1",
-						"a":    int64(1),
-						"b":    Unstructured{"c": int64(2)},
-					}, Unstructured{
-						"name": "name2",
-						"a":    int64(2),
-						"b":    Unstructured{"d": int64(3)},
-					},
-				},
-			})
+			},
+		})
 		eng2.WithObjects(obj2)
 
 		eng3 = NewDefaultEngine("view", emptyView, logger)
@@ -307,7 +308,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(res).To(Equal(Unstructured{
-				"apiVersion": "view.dcontroller.github.io/v1alpha1",
+				"apiVersion": "view.dcontroller.io/v1alpha1",
 				"kind":       "testview1",
 				"metadata": Unstructured{
 					"name":      "name",

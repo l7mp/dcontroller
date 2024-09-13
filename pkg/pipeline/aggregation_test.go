@@ -18,26 +18,23 @@ var _ = Describe("Aggregations", func() {
 	var eng Engine
 
 	BeforeEach(func() {
-		objs = []object.Object{
-			object.NewViewObject("view").
-				WithContent(Unstructured{
-					"spec": Unstructured{
-						"a": int64(1),
-						"b": Unstructured{"c": int64(2)},
-					},
-					"c": "c",
-				}).
-				WithName("default", "name"),
-			object.NewViewObject("view").
-				WithContent(Unstructured{
-					"spec": Unstructured{
-						"a": int64(2),
-						"b": Unstructured{"c": int64(3)},
-					},
-					"d": "d",
-				}).
-				WithName("default", "name2"),
-		}
+		objs = []object.Object{object.NewViewObject("view"), object.NewViewObject("view")}
+		object.SetContent(objs[0], Unstructured{
+			"spec": Unstructured{
+				"a": int64(1),
+				"b": Unstructured{"c": int64(2)},
+			},
+			"c": "c",
+		})
+		object.SetName(objs[0], "default", "name")
+		object.SetContent(objs[1], Unstructured{
+			"spec": Unstructured{
+				"a": int64(2),
+				"b": Unstructured{"c": int64(3)},
+			},
+			"d": "d",
+		})
+		object.SetName(objs[1], "default", "name2")
 		eng = NewDefaultEngine("view", emptyView, logger)
 	})
 
@@ -148,17 +145,14 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].Type).To(Equal(cache.Added))
-			Expect(res[0].Object).To(Equal(&object.ViewObject{
-				Unstructured: unstructured.Unstructured{
-					Object: Unstructured{
-						"apiVersion": "view.dcontroller.github.io/v1alpha1",
-						"kind":       "view",
-						"metadata": Unstructured{
-							"name": "name",
-						},
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: Unstructured{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": Unstructured{
+						"name": "name",
 					},
 				},
-				View: "view",
 			}))
 		})
 
@@ -173,8 +167,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].Type).To(Equal(cache.Added))
 
-			obj, ok := res[0].Object.(*object.ViewObject)
-			Expect(ok).To(BeTrue())
+			obj := res[0].Object
 			raw, ok := obj.Object["metadata"]
 			Expect(ok).To(BeTrue())
 			meta, ok := raw.(Unstructured)
@@ -193,8 +186,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(res).To(HaveLen(1))
-			obj, ok := res[0].Object.(*object.ViewObject)
-			Expect(ok).To(BeTrue())
+			obj := res[0].Object
 			raw, ok := obj.Object["metadata"]
 			Expect(ok).To(BeTrue())
 			meta, ok := raw.(Unstructured)
@@ -286,18 +278,15 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].Type).To(Equal(cache.Added))
-			Expect(res[0].Object).To(Equal(&object.ViewObject{
-				Unstructured: unstructured.Unstructured{
-					Object: Unstructured{
-						"apiVersion": "view.dcontroller.github.io/v1alpha1",
-						"kind":       "view",
-						"metadata": Unstructured{
-							"namespace": "test-ns",
-							"name":      "test-name",
-						},
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: Unstructured{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": Unstructured{
+						"namespace": "test-ns",
+						"name":      "test-name",
 					},
 				},
-				View: "view", // comes from engine.View()
 			}))
 		})
 
@@ -315,13 +304,15 @@ var _ = Describe("Aggregations", func() {
 			obj.SetGroupVersionKind(gvk)
 			obj.SetName("test-name")
 			obj.SetNamespace("test-ns")
+
 			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: obj})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].IsUnchanged()).To(BeFalse())
-			_ = obj.UnstructuredContent()
-			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added,
-				Object: object.NewViewObject("view").WithContent(obj.UnstructuredContent())}))
+			resObj := object.NewViewObject("view")
+			object.SetContent(resObj, obj.UnstructuredContent())
+			object.SetName(resObj, "test-ns", "test-name")
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added, Object: resObj}))
 
 			Expect(eng.(*defaultEngine).baseViewStore).To(HaveKey(gvk))
 			store := eng.(*defaultEngine).baseViewStore[gvk]
@@ -341,8 +332,10 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].IsUnchanged()).To(BeFalse())
-			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Deleted,
-				Object: object.NewViewObject("view").WithContent(oldObj.UnstructuredContent())}))
+			resObj = object.NewViewObject("view")
+			object.SetContent(resObj, oldObj.UnstructuredContent())
+			object.SetName(resObj, "test-ns", "test-name")
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Deleted, Object: resObj}))
 
 			Expect(store.List()).To(HaveLen(1)) // contains the changed base object
 			x, ok, err = store.Get(obj)
@@ -359,8 +352,10 @@ var _ = Describe("Aggregations", func() {
 			Expect(res).To(HaveLen(1))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res[0].IsUnchanged()).To(BeFalse())
-			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added,
-				Object: object.NewViewObject("view").WithContent(obj.UnstructuredContent())}))
+			resObj = object.NewViewObject("view")
+			object.SetContent(resObj, obj.UnstructuredContent())
+			object.SetName(resObj, "test-ns", "test-name")
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added, Object: resObj}))
 
 			Expect(store.List()).To(HaveLen(1))
 			x, ok, err = store.Get(obj)
@@ -378,8 +373,10 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].IsUnchanged()).To(BeFalse())
-			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added,
-				Object: object.NewViewObject("view").WithContent(obj2.UnstructuredContent())}))
+			resObj = object.NewViewObject("view")
+			object.SetContent(resObj, obj2.UnstructuredContent())
+			object.SetName(resObj, "test-ns", "test-name-2")
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added, Object: resObj}))
 
 			Expect(store.List()).To(HaveLen(2))
 			x, ok, err = store.Get(obj)
@@ -396,8 +393,10 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].IsUnchanged()).To(BeFalse())
-			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Deleted,
-				Object: object.NewViewObject("view").WithContent(obj.UnstructuredContent())}))
+			resObj = object.NewViewObject("view")
+			object.SetContent(resObj, obj.UnstructuredContent())
+			object.SetName(resObj, "test-ns", "test-name")
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Deleted, Object: resObj}))
 
 			// doesn't really change anything
 			obj.SetUnstructuredContent(map[string]any{"spec": map[string]any{"b": int64(3)}})

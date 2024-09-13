@@ -39,11 +39,12 @@ func SetName(obj Object, ns, name string) {
 	obj.SetName(name)
 }
 
-// SetContent is similar to SetUnstructuredContent but it preserves the GVK, the name and the namespace.
+// SetContent is similar to SetUnstructuredContent but it preserves the GVK, the name and the
+// namespace and deep-copies the content.
 func SetContent(obj Object, content map[string]any) {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	ns, name := obj.GetNamespace(), obj.GetName()
-	obj.SetUnstructuredContent(content)
+	obj.SetUnstructuredContent(runtime.DeepCopyJSON(content))
 	obj.GetObjectKind().SetGroupVersionKind(gvk)
 	SetName(obj, ns, name)
 }

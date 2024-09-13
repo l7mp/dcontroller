@@ -40,17 +40,21 @@ func (p *Pipeline) Evaluate(eng Engine, delta cache.Delta) ([]cache.Delta, error
 
 	// process the aggregation on each of the deltas
 	res := []cache.Delta{}
-	for _, d := range deltas {
-		ds, err := eng.EvaluateAggregation(p.Aggregation, d)
-		if err != nil {
-			return nil, err
+	if p.Aggregation != nil {
+		for _, d := range deltas {
+			ds, err := eng.EvaluateAggregation(p.Aggregation, d)
+			if err != nil {
+				return nil, err
+			}
+			res = append(res, ds...)
 		}
-		res = append(res, ds...)
-	}
 
-	// the aggregation may collapse objects that come out as different (delete+add) from the
-	// join pipeline
-	res = collapseDeltas(res)
+		// the aggregation may collapse objects that come out as different (delete+add)
+		// from the join pipeline
+		res = collapseDeltas(res)
+	} else {
+		res = deltas
+	}
 
 	eng.Log().Info("eval ready", "pipeline", p.String(), "result", util.Stringify(res))
 

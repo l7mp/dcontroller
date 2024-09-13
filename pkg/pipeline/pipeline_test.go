@@ -36,69 +36,76 @@ var _ = Describe("Pipelines", func() {
 	var eng Engine
 
 	BeforeEach(func() {
-		pod1 = object.NewViewObject("pod").
-			WithContent(Unstructured{
-				"spec": Unstructured{
-					"image":  "image1",
-					"parent": "dep1",
-				},
-			}).WithName("default", "pod1")
+		pod1 = object.NewViewObject("pod")
+		object.SetContent(pod1, Unstructured{
+			"spec": Unstructured{
+				"image":  "image1",
+				"parent": "dep1",
+			},
+		})
+		object.SetName(pod1, "default", "pod1")
 		pod1.SetLabels(map[string]string{"app": "app1"})
 
-		pod2 = object.NewViewObject("pod").
-			WithContent(Unstructured{
-				"spec": Unstructured{
-					"image":  "image2",
-					"parent": "dep1",
-				},
-			}).WithName("other", "pod2")
+		pod2 = object.NewViewObject("pod")
+		object.SetContent(pod2, Unstructured{
+			"spec": Unstructured{
+				"image":  "image2",
+				"parent": "dep1",
+			},
+		})
+		object.SetName(pod2, "other", "pod2")
 		pod2.SetLabels(map[string]string{"app": "app2"})
 
-		pod3 = object.NewViewObject("pod").
-			WithContent(Unstructured{
-				"spec": Unstructured{
-					"image":  "image1",
-					"parent": "dep2",
-				},
-			}).WithName("default", "pod3")
+		pod3 = object.NewViewObject("pod")
+		object.SetContent(pod3, Unstructured{
+			"spec": Unstructured{
+				"image":  "image1",
+				"parent": "dep2",
+			},
+		})
+		object.SetName(pod3, "default", "pod3")
 		pod3.SetLabels(map[string]string{"app": "app1"})
 
-		dep1 = object.NewViewObject("dep").
-			WithContent(Unstructured{
-				"spec": Unstructured{
-					"replicas": int64(3),
-				},
-			}).WithName("default", "dep1")
+		dep1 = object.NewViewObject("dep")
+		object.SetContent(dep1, Unstructured{
+			"spec": Unstructured{
+				"replicas": int64(3),
+			},
+		})
+		object.SetName(dep1, "default", "dep1")
 		dep1.SetLabels(map[string]string{"app": "app1"})
 
-		dep2 = object.NewViewObject("dep").
-			WithContent(Unstructured{
-				"spec": Unstructured{
-					"replicas": int64(1),
-				},
-			}).WithName("default", "dep2")
+		dep2 = object.NewViewObject("dep")
+		object.SetContent(dep2, Unstructured{
+			"spec": Unstructured{
+				"replicas": int64(1),
+			},
+		})
+		object.SetName(dep2, "default", "dep2")
 		dep2.SetLabels(map[string]string{"app": "app2"})
 
-		rs1 = object.NewViewObject("rs").
-			WithContent(Unstructured{
-				"spec": Unstructured{
-					"dep": "dep1",
-				},
-				"status": Unstructured{
-					"ready": int64(2),
-				},
-			}).WithName("default", "rs1")
+		rs1 = object.NewViewObject("rs")
+		object.SetContent(rs1, Unstructured{
+			"spec": Unstructured{
+				"dep": "dep1",
+			},
+			"status": Unstructured{
+				"ready": int64(2),
+			},
+		})
+		object.SetName(rs1, "default", "rs1")
 		rs1.SetLabels(map[string]string{"app": "app1"})
 
-		rs2 = object.NewViewObject("rs").
-			WithContent(Unstructured{
-				"spec": Unstructured{
-					"dep": "dep2",
-				},
-				"status": Unstructured{
-					"ready": int64(1),
-				},
-			}).WithName("default", "rs2")
+		rs2 = object.NewViewObject("rs")
+		object.SetContent(rs2, Unstructured{
+			"spec": Unstructured{
+				"dep": "dep2",
+			},
+			"status": Unstructured{
+				"ready": int64(1),
+			},
+		})
+		object.SetName(rs2, "default", "rs2")
 		rs2.SetLabels(map[string]string{"app": "app2"})
 
 		eng = NewDefaultEngine("view", []GVK{viewapiv1.GroupVersion.WithKind("pod"),
@@ -139,7 +146,7 @@ var _ = Describe("Pipelines", func() {
 			Expect(delta.Object.GetName()).To(Equal("dep1--pod1"))
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 			Expect(delta.Object.UnstructuredContent()).To(Equal(Unstructured{
-				"apiVersion": "view.dcontroller.github.io/v1alpha1",
+				"apiVersion": "view.dcontroller.io/v1alpha1",
 				"kind":       "view",
 				"metadata": Unstructured{
 					"name":      "dep1--pod1",
@@ -166,7 +173,7 @@ var _ = Describe("Pipelines", func() {
 			Expect(delta.Object.GetName()).To(Equal("pod1"))
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 			Expect(delta.Object.UnstructuredContent()).To(Equal(Unstructured{
-				"apiVersion": "view.dcontroller.github.io/v1alpha1",
+				"apiVersion": "view.dcontroller.io/v1alpha1",
 				"kind":       "view",
 				"metadata": Unstructured{
 					"name":      "pod1",
@@ -535,11 +542,13 @@ var _ = Describe("Pipelines", func() {
             - $.route.metadata.name`
 
 	BeforeEach(func() {
-		gateway = object.NewViewObject("gateway").WithName("default", "gateway")
-		gateway.SetUnstructuredContent(testUDPGateway)
+		gateway = object.NewViewObject("gateway")
+		object.SetName(gateway, "default", "gateway")
+		object.SetContent(gateway, testUDPGateway)
 		gateway = object.DeepCopy(gateway) // so we don't share stuff across tests
-		route = object.NewViewObject("route").WithName("default", "route")
-		route.SetUnstructuredContent(testUDPRoute)
+		route = object.NewViewObject("route")
+		object.SetName(route, "default", "route")
+		object.SetContent(route, testUDPRoute)
 		route = object.DeepCopy(route)
 		eng = NewDefaultEngine("view", []GVK{
 			viewapiv1.GroupVersion.WithKind("gateway"),
@@ -565,6 +574,7 @@ var _ = Describe("Pipelines", func() {
 				},
 			}, "spec", "listeners")
 		eng.WithObjects(gateway)
+
 		deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})
 		Expect(err).NotTo(HaveOccurred())
 

@@ -65,7 +65,7 @@ func Normalize(eng Engine, content Unstructured) (object.Object, error) {
 		obj.SetNamespace(namespaceStr)
 	}
 
-	obj.SetUnstructuredContent(content)
+	object.SetContent(obj, content)
 
 	return obj, nil
 }

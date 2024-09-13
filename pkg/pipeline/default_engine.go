@@ -69,9 +69,6 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 					delta.Type, ObjectKey(delta.Object), err))
 		}
 
-		eng.Log().Info("$$$$$$$$$$$$$$$$$$$$$")
-		eng.Log().Info(fmt.Sprintf("%#v", eng.baseViewStore[gvk].List()))
-
 		if err := eng.baseViewStore[gvk].Add(delta.Object); err != nil {
 			return nil, NewAggregationError(a.String(),
 				fmt.Errorf("processing event %q: could not add object %s to store: %w",
@@ -380,7 +377,8 @@ func (eng *defaultEngine) evalJoin(j *Join, obj object.Object) ([]object.Object,
 		}
 
 		// just to make sure
-		newObj.SetUnstructuredContent(input)
+		// newObj.SetUnstructuredContent(input)
+		object.SetContent(newObj, input)
 
 		// add input to the join list
 		return newObj.DeepCopy(), true, nil
@@ -458,7 +456,6 @@ func (eng *defaultEngine) recurseProd(obj object.Object, current []object.Object
 
 func (eng *defaultEngine) initViewStore(gvk GVK) {
 	if _, ok := eng.baseViewStore[gvk]; !ok {
-		eng.Log().Info("REINIT!!!!!!!!!!!!!!!!!!!!!!!!1")
 		eng.baseViewStore[gvk] = cache.NewStore()
 	}
 }
