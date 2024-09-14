@@ -15,7 +15,7 @@ var _ = Describe("Predicate Marshaling", func() {
 	Context("with standard predicates", func() {
 		It("should marshal and unmarshal GenerationChangedPredicate", func() {
 			pred := predicate.GenerationChangedPredicate{}
-			data, err := MarshalPredicate(pred)
+			data, err := MarshalBasicPredicate(pred)
 			Expect(err).NotTo(HaveOccurred())
 
 			unmarshaledPred, err := UnmarshalPredicate(data)
@@ -25,7 +25,7 @@ var _ = Describe("Predicate Marshaling", func() {
 
 		It("should marshal and unmarshal ResourceVersionChangedPredicate", func() {
 			pred := predicate.ResourceVersionChangedPredicate{}
-			data, err := MarshalPredicate(pred)
+			data, err := MarshalBasicPredicate(pred)
 			Expect(err).NotTo(HaveOccurred())
 
 			unmarshaledPred, err := UnmarshalPredicate(data)
@@ -35,7 +35,7 @@ var _ = Describe("Predicate Marshaling", func() {
 
 		It("should marshal and unmarshal LabelChangedPredicate", func() {
 			pred := predicate.LabelChangedPredicate{}
-			data, err := MarshalPredicate(pred)
+			data, err := MarshalBasicPredicate(pred)
 			Expect(err).NotTo(HaveOccurred())
 
 			unmarshaledPred, err := UnmarshalPredicate(data)
@@ -45,7 +45,7 @@ var _ = Describe("Predicate Marshaling", func() {
 
 		It("should marshal and unmarshal AnnotationChangedPredicate", func() {
 			pred := predicate.AnnotationChangedPredicate{}
-			data, err := MarshalPredicate(pred)
+			data, err := MarshalBasicPredicate(pred)
 			Expect(err).NotTo(HaveOccurred())
 
 			unmarshaledPred, err := UnmarshalPredicate(data)
@@ -56,11 +56,13 @@ var _ = Describe("Predicate Marshaling", func() {
 
 	Context("with composite predicates", func() {
 		It("should marshal and unmarshal And predicate", func() {
+			t1 := "GenerationChanged"
+			t2 := "ResourceVersionChanged"
 			compPred := BoolPredicate{
 				Type: "And",
 				Predicates: []BasicPredicate{
-					{Type: "GenerationChanged"},
-					{Type: "ResourceVersionChanged"},
+					{Type: &t1},
+					{Type: &t2},
 				},
 			}
 
@@ -77,11 +79,13 @@ var _ = Describe("Predicate Marshaling", func() {
 		})
 
 		It("should marshal and unmarshal Or predicate", func() {
+			t1 := "LabelChanged"
+			t2 := "AnnotationChanged"
 			compPred := BoolPredicate{
 				Type: "Or",
 				Predicates: []BasicPredicate{
-					{Type: "LabelChanged"},
-					{Type: "AnnotationChanged"},
+					{Type: &t1},
+					{Type: &t2},
 				},
 			}
 
@@ -100,8 +104,9 @@ var _ = Describe("Predicate Marshaling", func() {
 
 	Context("predicate behavior", func() {
 		It("should correctly apply GenerationChangedPredicate", func() {
+			t := "GenerationChanged"
 			compPred := BasicPredicate{
-				Type: "GenerationChanged",
+				Type: &t,
 			}
 
 			reconstitutedPred, err := compPred.ToPredicate()
@@ -129,11 +134,13 @@ var _ = Describe("Predicate Marshaling", func() {
 		})
 
 		It("should correctly apply composite And predicate", func() {
+			t1 := "GenerationChanged"
+			t2 := "LabelChanged"
 			compPred := BoolPredicate{
 				Type: "And",
 				Predicates: []BasicPredicate{
-					{Type: "GenerationChanged"},
-					{Type: "LabelChanged"},
+					{Type: &t1},
+					{Type: &t2},
 				},
 			}
 
@@ -170,7 +177,8 @@ var _ = Describe("Predicate Marshaling", func() {
 
 	Context("with actual predicates", func() {
 		It("should marshal and unmarshal GenerationChangedPredicate", func() {
-			pred := Predicate{basic: &BasicPredicate{Type: "GenerationChanged"}}
+			t := "GenerationChanged"
+			pred := Predicate{basic: &BasicPredicate{Type: &t}}
 
 			data, err := json.Marshal(pred)
 			Expect(err).NotTo(HaveOccurred())
@@ -184,13 +192,15 @@ var _ = Describe("Predicate Marshaling", func() {
 			Expect(reconstitutedPred).To(BeAssignableToTypeOf(predicate.GenerationChangedPredicate{}))
 		})
 
-		It("should marshal and unmarshal or predicate", func() {
+		It("should marshal and unmarshal an Or predicate", func() {
+			t1 := "GenerationChanged"
+			t2 := "ResourceVersionChanged"
 			compPred := Predicate{
 				boolp: &BoolPredicate{
 					Type: "Or",
 					Predicates: []BasicPredicate{
-						{Type: "GenerationChanged"},
-						{Type: "ResourceVersionChanged"},
+						{Type: &t1},
+						{Type: &t2},
 					},
 				},
 			}
@@ -220,7 +230,7 @@ var _ = Describe("Predicate Marshaling", func() {
 
 			newObjBothChanged := &unstructured.Unstructured{}
 			newObjBothChanged.SetGeneration(2)
-			oldObj.SetResourceVersion("b")
+			newObjBothChanged.SetResourceVersion("b")
 
 			Expect(reconstitutedPred.Update(event.UpdateEvent{
 				ObjectOld: client.Object(oldObj), ObjectNew: client.Object(newObjGenChanged),
@@ -231,6 +241,45 @@ var _ = Describe("Predicate Marshaling", func() {
 			Expect(reconstitutedPred.Update(event.UpdateEvent{
 				ObjectOld: client.Object(oldObj), ObjectNew: client.Object(newObjBothChanged),
 			})).To(BeTrue())
+		})
+
+		It("should marshal and unmarshal and apply a Namespace predicate", func() {
+			compPred := Predicate{
+				boolp: &BoolPredicate{
+					Type: "Not",
+					Predicates: []BasicPredicate{
+						{TypeArg: &map[string]string{"Namespace": "default"}},
+					},
+				},
+			}
+
+			data, err := json.Marshal(compPred)
+			Expect(err).NotTo(HaveOccurred())
+
+			var unmarshaledCompPred BoolPredicate
+			err = json.Unmarshal(data, &unmarshaledCompPred)
+			Expect(err).NotTo(HaveOccurred())
+
+			reconstitutedPred, err := unmarshaledCompPred.ToPredicate()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconstitutedPred).To(BeAssignableToTypeOf(
+				predicate.Not[client.Object](predicate.GenerationChangedPredicate{})))
+
+			oldObj := &unstructured.Unstructured{}
+			oldObj.SetNamespace("default")
+
+			newObjNsChanged := &unstructured.Unstructured{}
+			newObjNsChanged.SetNamespace("prod")
+
+			newObjNsUnchanged := &unstructured.Unstructured{}
+			newObjNsUnchanged.SetNamespace("default")
+
+			Expect(reconstitutedPred.Update(event.UpdateEvent{
+				ObjectOld: client.Object(oldObj), ObjectNew: client.Object(newObjNsChanged),
+			})).To(BeTrue())
+			Expect(reconstitutedPred.Update(event.UpdateEvent{
+				ObjectOld: client.Object(oldObj), ObjectNew: client.Object(newObjNsUnchanged),
+			})).To(BeFalse())
 		})
 	})
 })

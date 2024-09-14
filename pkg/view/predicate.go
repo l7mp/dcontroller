@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -65,7 +66,8 @@ func (p *Predicate) UnmarshalJSON(data []byte) error {
 //////////////
 
 type BasicPredicate struct {
-	Type string `json:"type"`
+	Type    *string `json:"type"`
+	TypeArg *map[string]string
 }
 
 type BoolPredicate struct {
@@ -74,18 +76,39 @@ type BoolPredicate struct {
 }
 
 func (pw *BasicPredicate) ToPredicate() (predicate.Predicate, error) {
-	switch pw.Type {
-	case "GenerationChanged":
-		return predicate.GenerationChangedPredicate{}, nil
-	case "ResourceVersionChanged":
-		return predicate.ResourceVersionChangedPredicate{}, nil
-	case "LabelChanged":
-		return predicate.LabelChangedPredicate{}, nil
-	case "AnnotationChanged":
-		return predicate.AnnotationChangedPredicate{}, nil
-	default:
-		return nil, fmt.Errorf("unknown predicate type: %s", pw.Type)
+	if pw.Type != nil {
+		switch *pw.Type {
+		case "GenerationChanged":
+			return predicate.GenerationChangedPredicate{}, nil
+		case "ResourceVersionChanged":
+			return predicate.ResourceVersionChangedPredicate{}, nil
+		case "LabelChanged":
+			return predicate.LabelChangedPredicate{}, nil
+		case "AnnotationChanged":
+			return predicate.AnnotationChangedPredicate{}, nil
+		default:
+			return nil, fmt.Errorf("unknown predicate type: %s", *pw.Type)
+		}
 	}
+
+	if pw.TypeArg != nil {
+		if len(*pw.TypeArg) != 1 {
+			return nil, errors.New("expecting a single type-argument pair")
+		}
+
+		for k, v := range *pw.TypeArg {
+			switch k {
+			case "Namespace":
+				return predicate.NewPredicateFuncs(func(object client.Object) bool {
+					return object.GetNamespace() == v
+				}), nil
+			default:
+				return nil, fmt.Errorf("unknown predicate type: %s", k)
+			}
+		}
+	}
+
+	return nil, errors.New("invalid basic predicate")
 }
 
 func (cp *BoolPredicate) ToPredicate() (predicate.Predicate, error) {
@@ -103,23 +126,35 @@ func (cp *BoolPredicate) ToPredicate() (predicate.Predicate, error) {
 		return predicate.And(predicates...), nil
 	case "Or":
 		return predicate.Or(predicates...), nil
+	case "Not":
+		if len(predicates) != 1 {
+			return nil, errors.New("invalid arguments to Not predicate")
+		}
+		return predicate.Not(predicates[0]), nil
 	default:
-		return nil, fmt.Errorf("unknown composite predicate type: %s", cp.Type)
+		return nil, fmt.Errorf("unknown bool predicate type: %s", cp.Type)
 	}
 }
 
-func MarshalPredicate(p predicate.Predicate) ([]byte, error) {
+// these to are useless but simplify testing
+func MarshalBasicPredicate(p predicate.Predicate) ([]byte, error) {
 	var pw BasicPredicate
 
 	switch p.(type) {
 	case predicate.GenerationChangedPredicate:
-		pw = BasicPredicate{Type: "GenerationChanged"}
+		t := "GenerationChanged"
+		pw = BasicPredicate{Type: &t}
 	case predicate.ResourceVersionChangedPredicate:
-		pw = BasicPredicate{Type: "ResourceVersionChanged"}
+		t := "ResourceVersionChanged"
+		pw = BasicPredicate{Type: &t}
 	case predicate.LabelChangedPredicate:
-		pw = BasicPredicate{Type: "LabelChanged"}
+		t := "LabelChanged"
+		pw = BasicPredicate{Type: &t}
 	case predicate.AnnotationChangedPredicate:
-		pw = BasicPredicate{Type: "AnnotationChanged"}
+		t := "AnnotationChanged"
+		pw = BasicPredicate{Type: &t}
+	case predicate.Funcs:
+		return nil, errors.New("cannot parse predicate functions")
 	default:
 		return nil, fmt.Errorf("unsupported predicate type: %T", p)
 	}
