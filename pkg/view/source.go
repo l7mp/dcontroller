@@ -1,26 +1,23 @@
 package view
 
-// import (
-// 	"fmt"
+import (
+	// corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+)
 
-// 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-// 	"k8s.io/apimachinery/pkg/runtime/schema"
-// 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+type Source struct {
+	Group         *string               `json:"apiGroup"`
+	Version       *string               `json:"version"`
+	Kind          string                `json:"kind"`
+	Namespace     *string               `json:"namespace"`
+	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"` // https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/predicate#LabelSelectorPredicate
+}
 
-// 	viewapiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
-// 	"hsnlab/dcontroller-runtime/pkg/manager"
-// )
-
-// type Predicate = predicate.TypedPredicate[*unstructured.Unstructured]
-
-// type ResourceRef struct {
-// 	Group string `json:"apiGroup"`
-// 	Kind  string `json:"kind"`
-// 	// Options are additional config for watching the resource, like predicates, etc.
-// 	Options []ResourceRefOption `json:"options"`
-// }
-
-// type ResourceRefOption struct{}
+func (s *Source) GetSource(mgr runtimeManager.Manager) source.Source {
+	return nil
+}
 
 // // GetGVKByGroupKind returns a full GVK for a Group and a Kind. The function is smart enough to
 // // handle view references.

@@ -1,68 +1,78 @@
 package view
 
-// import (
-// 	"context"
-// 	"testing"
+import (
+	"context"
+	"fmt"
+	"testing"
 
-// 	"github.com/go-logr/logr"
-// 	. "github.com/onsi/ginkgo/v2"
-// 	. "github.com/onsi/gomega"
-// 	"go.uber.org/zap/zapcore"
-// 	corev1 "k8s.io/api/core/v1"
-// 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-// 	"sigs.k8s.io/controller-runtime/pkg/client"
-// 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
-// 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"github.com/go-logr/logr"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"go.uber.org/zap/zapcore"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-// 	"hsnlab/dcontroller-runtime/pkg/manager"
-// )
+	"hsnlab/dcontroller-runtime/pkg/manager"
+)
 
-// var (
-// 	loglevel = -10
-// 	logger   = zap.New(zap.UseFlagOptions(&zap.Options{
-// 		Development:     true,
-// 		DestWriter:      GinkgoWriter,
-// 		StacktraceLevel: zapcore.Level(3),
-// 		TimeEncoder:     zapcore.RFC3339NanoTimeEncoder,
-// 		Level:           zapcore.Level(loglevel),
-// 	}))
-// )
+var (
+	loglevel = -10
+	logger   = zap.New(zap.UseFlagOptions(&zap.Options{
+		Development:     true,
+		DestWriter:      GinkgoWriter,
+		StacktraceLevel: zapcore.Level(3),
+		TimeEncoder:     zapcore.RFC3339NanoTimeEncoder,
+		Level:           zapcore.Level(loglevel),
+	}))
+)
 
-// // func init() {
-// // 	corev1.AddToScheme(scheme)
-// // }
-
-// func TestView(t *testing.T) {
-// 	RegisterFailHandler(Fail)
-// 	RunSpecs(t, "View")
+// func init() {
+// 	corev1.AddToScheme(scheme)
 // }
 
-// var _ = Describe("Cache", func() {
-// 	var (
-// 		mgr     *manager.FakeManager
-// 		testObj client.Object
-// 		ctx     = logr.NewContext(context.Background(), logger)
-// 	)
+func TestView(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "View")
+}
 
-// 	BeforeEach(func() {
-// 		testObj = &corev1.Service{
-// 			ObjectMeta: metav1.ObjectMeta{
-// 				Name:      "test-service",
-// 				Namespace: "default",
-// 			},
-// 			Spec: corev1.ServiceSpec{
-// 				Selector: map[string]string{"test-label-key": "test-label-value"},
-// 				Ports: []corev1.ServicePort{{
-// 					Name: "http",
-// 					Port: 80,
-// 				}},
-// 				ClusterIP:             "1.2.3.4",
-// 				Type:                  corev1.ServiceTypeNodePort,
-// 				ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyLocal,
-// 			},
-// 		}
-// 		mgr = manager.NewFakeManager(fakeclient.NewFakeClient(testObj))
-// 	})
+var _ = Describe("Cache", func() {
+	var (
+		mgr     *manager.FakeManager
+		testObj client.Object
+		ctx     context.Context
+		cancel  context.CancelFunc
+	)
+
+	BeforeEach(func() {
+		ctx, cancel = context.WithCancel(logr.NewContext(context.Background(), logger))
+		testObj = &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-service",
+				Namespace: "default",
+			},
+			Spec: corev1.ServiceSpec{
+				Selector: map[string]string{"test-label-key": "test-label-value"},
+				Ports: []corev1.ServicePort{{
+					Name: "http",
+					Port: 80,
+				}},
+				ClusterIP:             "1.2.3.4",
+				Type:                  corev1.ServiceTypeNodePort,
+				ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyLocal,
+			},
+		}
+		mgr, _ = manager.NewFakeManager(ctx, logger)
+		fmt.Println(mgr)
+		fmt.Println(testObj)
+	})
+
+	AfterEach(func() {
+		cancel()
+	})
+
+})
 
 // 	Describe("Reconciling views", func() {
 // 		It("should allow a view with empty pipeline to be reconciled", func() {
