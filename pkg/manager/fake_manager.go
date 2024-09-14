@@ -13,22 +13,80 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	ccache "hsnlab/dcontroller-runtime/pkg/cache"
 )
 
+var _ manager.Manager = &FakeRuntimeManager{}
 var _ manager.Manager = &FakeManager{}
 
+// /////// FakeManager
 type FakeManager struct {
+	*Manager
+	// runtime
+	fakeRuntimeManager manager.Manager
+	fakeRuntimeCache   *ccache.FakeRuntimeCache
+	fakeRuntimeClient  client.WithWatch
+	// composite
+	compositeCache *ccache.CompositeCache
+}
+
+func NewFakeManager(ctx context.Context, logger logr.Logger) (*FakeManager, error) {
+	fakeRuntimeCache := ccache.NewFakeRuntimeCache(nil)
+	compositeCache, err := ccache.NewCompositeCache(nil, ccache.Options{
+		DefaultCache: fakeRuntimeCache,
+		Logger:       &logger,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	fakeRuntimeClient := fake.NewClientBuilder().WithRuntimeObjects().Build()
+	fakeRuntimeManager := NewFakeRuntimeManager(compositeCache, &compositeClient{
+		Client:         fakeRuntimeClient,
+		compositeCache: compositeCache,
+	})
+
+	// mgr, err := New(&rest.Config{Host: "https://fake.example.com"}, Options{
+	mgr, err := New(nil, Options{
+		Manager: fakeRuntimeManager,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	fm := &FakeManager{
+		Manager:            mgr,
+		fakeRuntimeManager: fakeRuntimeManager,
+		fakeRuntimeCache:   fakeRuntimeCache,
+		fakeRuntimeClient:  fakeRuntimeClient,
+		compositeCache:     compositeCache,
+	}
+
+	go fm.Start(ctx)
+	return fm, nil
+}
+
+func (m *FakeManager) GetRuntimeManager() manager.Manager        { return m.fakeRuntimeManager }
+func (m *FakeManager) GetRuntimeCache() *ccache.FakeRuntimeCache { return m.fakeRuntimeCache }
+func (m *FakeManager) GetRuntimeClient() client.WithWatch        { return m.fakeRuntimeClient }
+func (m *FakeManager) GetCompositeCache() *ccache.CompositeCache { return m.compositeCache }
+
+///////// FakeRuntimeManager
+
+type FakeRuntimeManager struct {
 	Client client.Client
 	Cache  cache.Cache
 	Scheme *runtime.Scheme
 }
 
-func NewFakeManager(cache cache.Cache, client client.Client) *FakeManager {
-	return &FakeManager{
+func NewFakeRuntimeManager(cache cache.Cache, client client.Client) *FakeRuntimeManager {
+	return &FakeRuntimeManager{
 		Cache:  cache,
 		Client: client,
 		Scheme: runtime.NewScheme(),
@@ -36,28 +94,28 @@ func NewFakeManager(cache cache.Cache, client client.Client) *FakeManager {
 }
 
 // manager.Manager
-func (f *FakeManager) Add(runnable manager.Runnable) error                      { return nil }
-func (f *FakeManager) Elected() <-chan struct{}                                 { return nil }
-func (f *FakeManager) AddHealthzCheck(name string, check healthz.Checker) error { return nil }
-func (f *FakeManager) AddReadyzCheck(name string, check healthz.Checker) error  { return nil }
-func (f *FakeManager) Start(ctx context.Context) error                          { return nil }
-func (f *FakeManager) GetWebhookServer() webhook.Server                         { return nil }
-func (f *FakeManager) GetLogger() logr.Logger                                   { return logr.New(nil) }
-func (f *FakeManager) GetControllerOptions() config.Controller                  { return config.Controller{} }
-func (f *FakeManager) AddMetricsServerExtraHandler(path string, handler http.Handler) error {
+func (f *FakeRuntimeManager) Add(runnable manager.Runnable) error                      { return nil }
+func (f *FakeRuntimeManager) Elected() <-chan struct{}                                 { return nil }
+func (f *FakeRuntimeManager) AddHealthzCheck(name string, check healthz.Checker) error { return nil }
+func (f *FakeRuntimeManager) AddReadyzCheck(name string, check healthz.Checker) error  { return nil }
+func (f *FakeRuntimeManager) Start(ctx context.Context) error                          { return nil }
+func (f *FakeRuntimeManager) GetWebhookServer() webhook.Server                         { return nil }
+func (f *FakeRuntimeManager) GetLogger() logr.Logger                                   { return logr.New(nil) }
+func (f *FakeRuntimeManager) GetControllerOptions() config.Controller                  { return config.Controller{} }
+func (f *FakeRuntimeManager) AddMetricsServerExtraHandler(path string, handler http.Handler) error {
 	return nil
 }
 
 // cluster.Cluster
-func (f *FakeManager) GetHTTPClient() *http.Client                          { return nil }
-func (f *FakeManager) GetConfig() *rest.Config                              { return nil }
-func (f *FakeManager) GetCache() cache.Cache                                { return f.Cache }
-func (f *FakeManager) GetScheme() *runtime.Scheme                           { return f.Scheme }
-func (f *FakeManager) GetClient() client.Client                             { return f.Client }
-func (f *FakeManager) GetFieldIndexer() client.FieldIndexer                 { return nil }
-func (f *FakeManager) GetEventRecorderFor(name string) record.EventRecorder { return nil }
-func (f *FakeManager) GetRESTMapper() meta.RESTMapper                       { return &fakeRESTMapper{} }
-func (f *FakeManager) GetAPIReader() client.Reader                          { return nil }
+func (f *FakeRuntimeManager) GetHTTPClient() *http.Client                          { return nil }
+func (f *FakeRuntimeManager) GetConfig() *rest.Config                              { return nil }
+func (f *FakeRuntimeManager) GetCache() cache.Cache                                { return f.Cache }
+func (f *FakeRuntimeManager) GetScheme() *runtime.Scheme                           { return f.Scheme }
+func (f *FakeRuntimeManager) GetClient() client.Client                             { return f.Client }
+func (f *FakeRuntimeManager) GetFieldIndexer() client.FieldIndexer                 { return nil }
+func (f *FakeRuntimeManager) GetEventRecorderFor(name string) record.EventRecorder { return nil }
+func (f *FakeRuntimeManager) GetRESTMapper() meta.RESTMapper                       { return &fakeRESTMapper{} }
+func (f *FakeRuntimeManager) GetAPIReader() client.Reader                          { return nil }
 
 /////////////////////
 

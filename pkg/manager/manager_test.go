@@ -17,9 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	ccache "hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/object"
@@ -49,42 +47,11 @@ var (
 			RestartPolicy: corev1.RestartPolicyOnFailure,
 		},
 	}
-	fakeRuntimeCache  *ccache.FakeRuntimeCache
-	fakeRuntimeClient client.WithWatch
 )
 
 func TestManager(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Manager")
-}
-
-func newFakeManager(ctx context.Context) (manager.Manager, error) {
-	fakeRuntimeCache = ccache.NewFakeRuntimeCache(nil)
-
-	cache, err := ccache.NewCompositeCache(nil, ccache.Options{
-		DefaultCache: fakeRuntimeCache,
-		Logger:       &logger,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	fakeRuntimeClient = fake.NewClientBuilder().WithRuntimeObjects().Build()
-	fakeRuntimeManager := NewFakeManager(cache, &compositeClient{
-		Client:         fakeRuntimeClient,
-		compositeCache: cache,
-	})
-
-	// mgr, err := New(&rest.Config{Host: "https://fake.example.com"}, Options{
-	mgr, err := New(nil, Options{
-		Manager: fakeRuntimeManager,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	go mgr.Start(ctx)
-	return mgr, nil
 }
 
 var _ = Describe("Startup", func() {
@@ -112,7 +79,7 @@ var _ = Describe("Startup", func() {
 
 	Describe("Basics", func() {
 		It("Manager created", func() {
-			mgr, err := newFakeManager(ctx)
+			mgr, err := NewFakeManager(ctx, logger)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -132,11 +99,11 @@ var _ = Describe("Startup", func() {
 
 	Describe("Cache operation", func() {
 		It("should retrieve a native object", func() {
-			mgr, err := newFakeManager(ctx)
+			mgr, err := NewFakeManager(ctx, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			// pod added
-			err = fakeRuntimeCache.Upsert(pod)
+			Expect(mgr.GetRuntimeCache().Upsert(pod)).NotTo(HaveOccurred())
 
 			cache := mgr.GetCache()
 			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
@@ -156,7 +123,7 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should retrieve an added view object", func() {
-			mgr, err := newFakeManager(ctx)
+			mgr, err := NewFakeManager(ctx, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			cache := mgr.GetCache()
@@ -181,11 +148,11 @@ var _ = Describe("Startup", func() {
 
 	Describe("Client operation", func() {
 		It("should retrieve a native object", func() {
-			mgr, err := newFakeManager(ctx)
+			mgr, err := NewFakeManager(ctx, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			// pod added
-			err = fakeRuntimeCache.Upsert(pod)
+			Expect(mgr.GetRuntimeCache().Upsert(pod)).NotTo(HaveOccurred())
 
 			c := mgr.GetClient()
 			Expect(c).NotTo(BeNil())
@@ -205,7 +172,7 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should retrieve an added view object", func() {
-			mgr, err := newFakeManager(ctx)
+			mgr, err := NewFakeManager(ctx, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			obj := object.NewViewObject("view")
@@ -229,7 +196,7 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should write and retrieve a native object", func() {
-			mgr, err := newFakeManager(ctx)
+			mgr, err := NewFakeManager(ctx, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			list := &unstructured.UnstructuredList{}
@@ -240,7 +207,7 @@ var _ = Describe("Startup", func() {
 			})
 
 			// must watch: get would go through the cache
-			watcher, err := fakeRuntimeClient.Watch(ctx, list)
+			watcher, err := mgr.GetRuntimeClient().Watch(ctx, list)
 			Expect(err).NotTo(HaveOccurred())
 
 			c := mgr.GetClient()
