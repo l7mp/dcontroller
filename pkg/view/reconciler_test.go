@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -76,8 +77,10 @@ var _ = Describe("Reconciler", func() {
 			Expect(vcache).NotTo(BeNil())
 
 			// Create controller
+			on := true
 			c, err := controller.NewTyped("test-controller", mgr, controller.TypedOptions[Request]{
-				Reconciler: &TestReconciler{},
+				SkipNameValidation: &on,
+				Reconciler:         &TestReconciler{},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -150,12 +153,50 @@ var _ = Describe("Reconciler", func() {
 			}))
 		})
 
-		FIt("should be able to create a watch and emit events for native objects", func() {
+		It("should be able to create a watch and emit events for native objects", func() {
 			// Cannot add/remove native objects due to the limitations of the fake
 			// client: use an initial object list only
 			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger}, pod)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
+
+			// Get initial object: just to make sure
+			getObj := &unstructured.Unstructured{}
+			getObj.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			})
+
+			// From the fake runtime client
+			Expect(mgr.GetRuntimeClient().Get(ctx, types.NamespacedName{
+				Namespace: "default", Name: "podname"}, getObj)).NotTo(HaveOccurred())
+			Expect(getObj.UnstructuredContent()).To(Equal(map[string]any{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]any{
+					"namespace":         "default",
+					"name":              "podname",
+					"resourceVersion":   "999",
+					"creationTimestamp": nil,
+				},
+				"spec":   map[string]any{"containers": nil},
+				"status": map[string]any{},
+			}))
+
+			// from the default cache
+			Expect(mgr.GetClient().Get(ctx, types.NamespacedName{
+				Namespace: "default", Name: "podname"}, getObj)).NotTo(HaveOccurred())
+			// content is different this time: the object never goes through the fake
+			// runtime cache so it does not get the defaults added
+			Expect(getObj.UnstructuredContent()).To(Equal(map[string]any{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]any{
+					"namespace": "default",
+					"name":      "podname",
+				},
+			}))
 
 			// Register source
 			group, version := "", "v1"
@@ -170,8 +211,10 @@ var _ = Describe("Reconciler", func() {
 			Expect(vcache).NotTo(BeNil())
 
 			// Create controller
+			on := true
 			c, err := controller.NewTyped("test-controller", mgr, controller.TypedOptions[Request]{
-				Reconciler: &TestReconciler{},
+				SkipNameValidation: &on,
+				Reconciler:         &TestReconciler{},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -192,12 +235,12 @@ var _ = Describe("Reconciler", func() {
 			Expect(ok).To(BeTrue())
 			Expect(req).To(Equal(Request{
 				Namespace: "default",
-				Name:      "viewname",
+				Name:      "podname",
 				EventType: cache.Added,
 				GVK: schema.GroupVersionKind{
-					Group:   viewapiv1.GroupVersion.Group,
-					Version: viewapiv1.GroupVersion.Version,
-					Kind:    "view",
+					Group:   "",
+					Version: "v1",
+					Kind:    "Pod",
 				},
 			}))
 		})

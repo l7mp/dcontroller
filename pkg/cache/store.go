@@ -6,6 +6,7 @@ import (
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
+// Store is like toolscache.Store but it also deep-copies objects
 type Store struct {
 	Store toolscache.Store
 }

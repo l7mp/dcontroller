@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	ccache "hsnlab/dcontroller-runtime/pkg/cache"
+	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
 var _ manager.Manager = &FakeRuntimeManager{}
@@ -44,6 +45,13 @@ func NewFakeManager(opts manager.Options, objs ...client.Object) (*FakeManager, 
 	}
 
 	fakeRuntimeCache := ccache.NewFakeRuntimeCache(nil)
+	// add initial onjects here too (also to fake runtime client later)
+	for _, o := range objs {
+		if err := fakeRuntimeCache.Add(o.(object.Object)); err != nil {
+			return nil, err
+		}
+	}
+
 	compositeCache, err := ccache.NewCompositeCache(nil, ccache.Options{
 		DefaultCache: fakeRuntimeCache,
 		Logger:       logger,

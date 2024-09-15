@@ -108,7 +108,7 @@ var _ = Describe("Startup", func() {
 			go mgr.Start(ctx) // will stop with a context cancelled error
 
 			// pod added
-			Expect(mgr.GetRuntimeCache().Upsert(pod)).NotTo(HaveOccurred())
+			Expect(mgr.GetRuntimeCache().Add(pod)).NotTo(HaveOccurred())
 
 			cache := mgr.GetCache()
 			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
@@ -161,7 +161,7 @@ var _ = Describe("Startup", func() {
 			go mgr.Start(ctx) // will stop with a context cancelled error
 
 			// pod added
-			Expect(mgr.GetRuntimeCache().Upsert(pod)).NotTo(HaveOccurred())
+			Expect(mgr.GetRuntimeCache().Add(pod)).NotTo(HaveOccurred())
 
 			c := mgr.GetClient()
 			Expect(c).NotTo(BeNil())

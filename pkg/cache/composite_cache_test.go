@@ -108,7 +108,7 @@ var _ = Describe("CompositeCache", func() {
 		})
 
 		It("should retrieve an added native object", func() {
-			err := fakeCache.Upsert(pod)
+			err := fakeCache.Add(pod)
 			Expect(err).NotTo(HaveOccurred())
 
 			retrieved := object.DeepCopy(pod)
@@ -155,7 +155,7 @@ var _ = Describe("CompositeCache", func() {
 		})
 
 		It("should list all added native objects", func() {
-			err := fakeCache.Upsert(pod)
+			err := fakeCache.Add(pod)
 			Expect(err).NotTo(HaveOccurred())
 
 			list := &unstructured.UnstructuredList{}
