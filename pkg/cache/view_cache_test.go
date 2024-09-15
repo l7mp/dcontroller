@@ -26,7 +26,7 @@ var _ = Describe("ViewCache", func() {
 	)
 
 	BeforeEach(func() {
-		cache = NewViewCache(Options{Logger: &logger})
+		cache = NewViewCache(Options{Logger: logger})
 		ctx, cancel = context.WithCancel(context.Background())
 	})
 
@@ -145,7 +145,7 @@ var _ = Describe("ViewCache", func() {
 			object.SetName(updatedObj, "ns", "test-update")
 			go func() {
 				time.Sleep(25 * time.Millisecond)
-				cache.Update(updatedObj)
+				cache.Update(obj, updatedObj)
 			}()
 
 			event, ok := tryWatch(watcher, interval)

@@ -61,7 +61,7 @@ var _ = Describe("CompositeCache", func() {
 		fakeCache = NewFakeRuntimeCache(scheme.Scheme)
 		cache, _ = NewCompositeCache(nil, Options{
 			DefaultCache: fakeCache,
-			Logger:       &logger,
+			Logger:       logger,
 		})
 		ctx, cancel = context.WithCancel(context.Background())
 		go cache.Start(ctx)
@@ -149,9 +149,9 @@ var _ = Describe("CompositeCache", func() {
 			err := cache.List(ctx, list)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.Items).To(HaveLen(3))
-			Expect(object.DeepEqual(&list.Items[0], objects[0])).NotTo(BeFalse())
-			Expect(object.DeepEqual(&list.Items[1], objects[1])).NotTo(BeFalse())
-			Expect(object.DeepEqual(&list.Items[2], objects[2])).NotTo(BeFalse())
+			Expect(list.Items).To(ContainElement(*objects[0]))
+			Expect(list.Items).To(ContainElement(*objects[1]))
+			Expect(list.Items).To(ContainElement(*objects[2]))
 		})
 
 		It("should list all added native objects", func() {

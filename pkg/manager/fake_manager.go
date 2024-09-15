@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -36,11 +37,16 @@ type FakeManager struct {
 	compositeCache *ccache.CompositeCache
 }
 
-func NewFakeManager(ctx context.Context, logger logr.Logger, objs ...client.Object) (*FakeManager, error) {
+func NewFakeManager(opts manager.Options, objs ...client.Object) (*FakeManager, error) {
+	logger := opts.Logger
+	if logger.GetSink() == nil {
+		logger = logr.Discard()
+	}
+
 	fakeRuntimeCache := ccache.NewFakeRuntimeCache(nil)
 	compositeCache, err := ccache.NewCompositeCache(nil, ccache.Options{
 		DefaultCache: fakeRuntimeCache,
-		Logger:       &logger,
+		Logger:       logger,
 	})
 	if err != nil {
 		return nil, err
@@ -50,9 +56,8 @@ func NewFakeManager(ctx context.Context, logger logr.Logger, objs ...client.Obje
 	fakeRuntimeManager := NewFakeRuntimeManager(compositeCache, &compositeClient{
 		Client:         fakeRuntimeClient,
 		compositeCache: compositeCache,
-	})
+	}, logger)
 
-	// mgr, err := New(&rest.Config{Host: "https://fake.example.com"}, Options{
 	mgr, err := New(nil, Options{
 		Manager: fakeRuntimeManager,
 	})
@@ -60,18 +65,16 @@ func NewFakeManager(ctx context.Context, logger logr.Logger, objs ...client.Obje
 		return nil, err
 	}
 
-	fm := &FakeManager{
+	return &FakeManager{
 		Manager:            mgr,
 		fakeRuntimeManager: fakeRuntimeManager,
 		fakeRuntimeCache:   fakeRuntimeCache,
 		fakeRuntimeClient:  fakeRuntimeClient,
 		compositeCache:     compositeCache,
-	}
-
-	go fm.Start(ctx)
-	return fm, nil
+	}, nil
 }
 
+func (m *FakeManager) GetManager() manager.Manager               { return m.Manager }
 func (m *FakeManager) GetRuntimeManager() manager.Manager        { return m.fakeRuntimeManager }
 func (m *FakeManager) GetRuntimeCache() *ccache.FakeRuntimeCache { return m.fakeRuntimeCache }
 func (m *FakeManager) GetRuntimeClient() client.WithWatch        { return m.fakeRuntimeClient }
@@ -80,29 +83,59 @@ func (m *FakeManager) GetCompositeCache() *ccache.CompositeCache { return m.comp
 ///////// FakeRuntimeManager
 
 type FakeRuntimeManager struct {
-	Client client.Client
-	Cache  cache.Cache
-	Scheme *runtime.Scheme
+	Client       client.Client
+	Cache        cache.Cache
+	Scheme       *runtime.Scheme
+	runnables    []manager.Runnable
+	started      bool
+	startedMutex sync.Mutex
+	logger       logr.Logger
 }
 
-func NewFakeRuntimeManager(cache cache.Cache, client client.Client) *FakeRuntimeManager {
+func NewFakeRuntimeManager(cache cache.Cache, client client.Client, logger logr.Logger) *FakeRuntimeManager {
 	return &FakeRuntimeManager{
 		Cache:  cache,
 		Client: client,
 		Scheme: runtime.NewScheme(),
+		logger: logger.WithName("fakeruntimemanager"),
 	}
 }
 
 // manager.Manager
-func (f *FakeRuntimeManager) Add(runnable manager.Runnable) error                      { return nil }
 func (f *FakeRuntimeManager) Elected() <-chan struct{}                                 { return nil }
+func (f *FakeRuntimeManager) SetFields(i interface{}) error                            { return nil }
 func (f *FakeRuntimeManager) AddHealthzCheck(name string, check healthz.Checker) error { return nil }
 func (f *FakeRuntimeManager) AddReadyzCheck(name string, check healthz.Checker) error  { return nil }
-func (f *FakeRuntimeManager) Start(ctx context.Context) error                          { return nil }
 func (f *FakeRuntimeManager) GetWebhookServer() webhook.Server                         { return nil }
 func (f *FakeRuntimeManager) GetLogger() logr.Logger                                   { return logr.New(nil) }
 func (f *FakeRuntimeManager) GetControllerOptions() config.Controller                  { return config.Controller{} }
 func (f *FakeRuntimeManager) AddMetricsServerExtraHandler(path string, handler http.Handler) error {
+	return nil
+}
+
+func (f *FakeRuntimeManager) Add(runnable manager.Runnable) error {
+	f.logger.V(4).Info("adding runnable")
+	f.runnables = append(f.runnables, runnable)
+	return nil
+}
+
+func (f *FakeRuntimeManager) Start(ctx context.Context) error {
+	f.startedMutex.Lock()
+	defer f.startedMutex.Unlock()
+
+	if f.started {
+		return nil
+	}
+
+	for _, runnable := range f.runnables {
+		f.logger.V(4).Info("starting runnable")
+		if err := runnable.Start(ctx); err != nil {
+			return err
+		}
+	}
+
+	f.started = true
+	<-ctx.Done()
 	return nil
 }
 

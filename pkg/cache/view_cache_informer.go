@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"errors"
 	"fmt"
 	"hsnlab/dcontroller-runtime/pkg/object"
 	"sync"
@@ -8,19 +9,20 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	toolscache "k8s.io/client-go/tools/cache"
 )
 
 var _ toolscache.SharedIndexInformer = &ViewCacheInformer{}
 
 type ViewCacheInformer struct {
-	indexer        toolscache.Indexer
+	cache          toolscache.Indexer
 	handlers       map[int64]handlerEntry
 	handlerCounter int64
 	mutex          sync.RWMutex
 	transform      toolscache.TransformFunc
 	stopped        atomic.Bool
-	logger         logr.Logger
+	log            logr.Logger
 }
 
 type handlerEntry struct {
@@ -38,15 +40,14 @@ func NewViewCacheInformer(indexer toolscache.Indexer, logger logr.Logger) *ViewC
 	}
 
 	return &ViewCacheInformer{
-		indexer:  indexer,
+		cache:    indexer,
 		handlers: make(map[int64]handlerEntry),
-		logger:   logger,
+		log:      logger.WithName("viewcacheinformer"),
 	}
 }
 
 func (c *ViewCacheInformer) AddEventHandler(handler toolscache.ResourceEventHandler) (toolscache.ResourceEventHandlerRegistration, error) {
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
 
 	id := atomic.AddInt64(&c.handlerCounter, 1)
 	he := handlerEntry{
@@ -54,8 +55,17 @@ func (c *ViewCacheInformer) AddEventHandler(handler toolscache.ResourceEventHand
 		id:                   id,
 	}
 	c.handlers[id] = he
+	c.mutex.Unlock()
 
-	c.logger.V(2).Info("add-event-handler: ready", "handler-id", id)
+	c.log.V(4).Info("registering event: sending initial object list", "handler-id", id)
+
+	for _, item := range c.cache.List() {
+		obj, ok := item.(object.Object)
+		if !ok {
+			return nil, apierrors.NewInternalError(errors.New("cache must store object.Objects only"))
+		}
+		c.TriggerEvent(toolscache.Added, nil, obj, true)
+	}
 
 	return &he, nil
 }
@@ -70,6 +80,7 @@ func (c *ViewCacheInformer) RemoveEventHandler(registration toolscache.ResourceE
 	defer c.mutex.Unlock()
 
 	if reg, ok := registration.(*handlerEntry); ok {
+		c.log.V(4).Info("removing  event handler: ready", "handler-id", reg.id)
 		delete(c.handlers, reg.id)
 		return nil
 	}
@@ -77,66 +88,65 @@ func (c *ViewCacheInformer) RemoveEventHandler(registration toolscache.ResourceE
 	return fmt.Errorf("unknown registration type")
 }
 
-// TriggerEvent will send an event on obj of eventType to all registered handlers. Set
-// isInitialList to true if event is an Added as a part of the initial object list.
-func (c *ViewCacheInformer) TriggerEvent(eventType toolscache.DeltaType, obj object.Object, isInitialList bool) {
+// TriggerEvent will send an event on newObj of eventType to all registered handlers. Set
+// isInitialList to true if event is an Added as a part of the initial object list. For all event
+// types except Update events the oldObj must not be nil.
+func (c *ViewCacheInformer) TriggerEvent(eventType toolscache.DeltaType, oldObj, newObj object.Object, isInitialList bool) {
 	if len(c.handlers) == 0 {
+		c.log.V(4).Info("suppressing event trigger: no handlers", "event", eventType,
+			"object", object.DumpObject(newObj))
 		return
 	}
 
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	c.logger.V(2).Info("trigger-event", "event", eventType, "object", object.DumpObject(obj))
+	c.log.V(4).Info("triggering event", "event", eventType, "object", object.DumpObject(newObj))
 
 	if c.transform != nil {
-		obj = object.DeepCopy(obj)
+		newObj = object.DeepCopy(newObj)
 
-		item, err := c.transform(obj)
+		item, err := c.transform(newObj)
 		if err != nil {
-			c.logger.Error(err, "Failed to transform object")
+			c.log.Error(err, "Failed to transform object")
 			return
 		}
 
 		var ok bool
-		obj, ok = item.(object.Object)
+		newObj, ok = item.(object.Object)
 		if !ok {
-			c.logger.Info("transform must produce an object.Object")
+			c.log.Info("transform must produce an object.Object")
 			return
 		}
 
-		c.logger.V(3).Info("trigger-event: transformer ready", "object", object.DumpObject(obj))
+		c.log.V(4).Info("trigger-event: transformer ready", "object", object.DumpObject(newObj))
 	}
 
 	events := 0
 	for _, handler := range c.handlers {
-
-		c.logger.V(3).Info("trigger-event: sending event to informer",
-			"object", object.DumpObject(obj), "handler-id", handler.id)
+		c.log.V(8).Info("trigger-event: sending event to handler", "event", eventType,
+			"object", object.DumpObject(newObj), "handler-id", handler.id)
 
 		switch eventType {
 		case toolscache.Added:
-			handler.OnAdd(object.DeepCopy(obj), false)
+			handler.OnAdd(object.DeepCopy(newObj), false)
 			events++
 		case toolscache.Updated:
-			handler.OnUpdate(nil, object.DeepCopy(obj))
+			handler.OnUpdate(oldObj, object.DeepCopy(newObj))
 			events++
 		case toolscache.Deleted:
-			handler.OnDelete(object.DeepCopy(obj))
+			handler.OnDelete(object.DeepCopy(newObj))
 			events++
 		}
 	}
-
-	c.logger.V(3).Info("trigger-event: ready", "event", eventType, "object", object.DumpObject(obj),
-		"events-sent", events)
 }
 
 func (c *ViewCacheInformer) GetStore() toolscache.Store {
-	return c.indexer
+	return c.cache
 }
 
 func (c *ViewCacheInformer) GetIndexer() toolscache.Indexer {
-	return c.indexer
+	return c.cache
 }
 
 func (c *ViewCacheInformer) GetController() toolscache.Controller {
@@ -162,11 +172,11 @@ func (c *ViewCacheInformer) LastSyncResourceVersion() string {
 }
 
 func (c *ViewCacheInformer) AddIndexers(indexers toolscache.Indexers) error {
-	return c.indexer.AddIndexers(indexers)
+	return c.cache.AddIndexers(indexers)
 }
 
 func (c *ViewCacheInformer) SetWatchErrorHandler(handler toolscache.WatchErrorHandler) error {
-	c.logger.Info("SetWatchErrorHandler: not impllemented")
+	c.log.Info("SetWatchErrorHandler: not impllemented")
 	return nil
 }
 

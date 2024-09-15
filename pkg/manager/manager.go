@@ -37,7 +37,7 @@ func New(config *rest.Config, options Options) (*Manager, error) {
 			options.NewCache = func(config *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
 				return cache.NewCompositeCache(config, cache.Options{
 					Options: opts,
-					Logger:  &options.Logger,
+					Logger:  options.Logger,
 				})
 			}
 		}

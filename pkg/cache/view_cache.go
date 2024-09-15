@@ -14,7 +14,6 @@ import (
 	toolscache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
@@ -32,10 +31,11 @@ type ViewCache struct {
 }
 
 func NewViewCache(opts Options) *ViewCache {
-	logger := *opts.Logger
-	if opts.Logger == nil {
-		logger = log.Log
+	logger := opts.Logger
+	if logger.GetSink() == nil {
+		logger = logr.Discard()
 	}
+
 	c := &ViewCache{
 		caches:    make(map[schema.GroupVersionKind]toolscache.Indexer),
 		informers: make(map[schema.GroupVersionKind]*ViewCacheInformer),
@@ -157,7 +157,7 @@ func (c *ViewCache) RemoveInformer(ctx context.Context, obj client.Object) error
 func (c *ViewCache) Add(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	c.log.V(2).Info("add: adding object to view cache", "gvk", gvk, "key", client.ObjectKeyFromObject(obj))
+	c.log.V(2).Info("add: adding an object", "gvk", gvk, "key", client.ObjectKeyFromObject(obj))
 
 	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {
@@ -174,16 +174,19 @@ func (c *ViewCache) Add(obj object.Object) error {
 	if err != nil {
 		return err
 	}
-	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Added, obj, false)
+
+	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Added, nil, obj, false)
 
 	return nil
 }
 
 // Update can manually modify objects in the cache.
-func (c *ViewCache) Update(obj object.Object) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
+func (c *ViewCache) Update(oldObj, newObj object.Object) error {
+	gvk := newObj.GetObjectKind().GroupVersionKind()
 
-	c.log.V(2).Info("update: updating object in view cache", "gvk", gvk, "key", client.ObjectKeyFromObject(obj))
+	c.log.V(2).Info("update: updating object in view cache", "gvk", gvk,
+		"newObj", client.ObjectKeyFromObject(newObj),
+		"oldObj", client.ObjectKeyFromObject(oldObj))
 
 	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {
@@ -191,8 +194,8 @@ func (c *ViewCache) Update(obj object.Object) error {
 	}
 
 	// cache does not apply deepcopy to stored objects
-	obj = object.DeepCopy(obj)
-	if err := cache.Update(obj); err != nil {
+	newObj = object.DeepCopy(newObj)
+	if err := cache.Update(newObj); err != nil {
 		return err
 	}
 
@@ -200,7 +203,7 @@ func (c *ViewCache) Update(obj object.Object) error {
 	if err != nil {
 		return err
 	}
-	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Updated, obj, false)
+	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Updated, oldObj, newObj, false)
 
 	return nil
 }
@@ -224,7 +227,7 @@ func (c *ViewCache) Delete(obj object.Object) error {
 	if err != nil {
 		return err
 	}
-	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Deleted, obj, false)
+	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Deleted, nil, obj, false)
 
 	return nil
 }
@@ -333,23 +336,6 @@ func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...c
 		informer.RemoveEventHandler(handlerReg)
 		watcher.Stop()
 	}()
-
-	// send initial list
-	cache, err := c.GetCacheForKind(gvk)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, item := range cache.List() {
-		obj, ok := item.(object.Object)
-		if !ok {
-			return nil, apierrors.NewConflict(
-				schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind},
-				client.ObjectKeyFromObject(item.(client.Object)).String(),
-				errors.New("cache must store object.Objects only"))
-		}
-		informer.(*ViewCacheInformer).TriggerEvent(toolscache.Added, obj, true)
-	}
 
 	return watcher, nil
 }

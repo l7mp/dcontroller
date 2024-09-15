@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	ccache "hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/object"
@@ -79,9 +80,11 @@ var _ = Describe("Startup", func() {
 
 	Describe("Basics", func() {
 		It("Manager created", func() {
-			mgr, err := NewFakeManager(ctx, logger)
+			mgr, err := NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
+
+			go mgr.Start(ctx) // will stop with a context cancelled error
 
 			cache := mgr.GetCache()
 			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
@@ -99,8 +102,10 @@ var _ = Describe("Startup", func() {
 
 	Describe("Cache operation", func() {
 		It("should retrieve a native object", func() {
-			mgr, err := NewFakeManager(ctx, logger)
+			mgr, err := NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
+
+			go mgr.Start(ctx) // will stop with a context cancelled error
 
 			// pod added
 			Expect(mgr.GetRuntimeCache().Upsert(pod)).NotTo(HaveOccurred())
@@ -123,8 +128,10 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should retrieve an added view object", func() {
-			mgr, err := NewFakeManager(ctx, logger)
+			mgr, err := NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
+
+			go mgr.Start(ctx) // will stop with a context cancelled error
 
 			cache := mgr.GetCache()
 			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
@@ -148,8 +155,10 @@ var _ = Describe("Startup", func() {
 
 	Describe("Client operation", func() {
 		It("should retrieve a native object", func() {
-			mgr, err := NewFakeManager(ctx, logger)
+			mgr, err := NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
+
+			go mgr.Start(ctx) // will stop with a context cancelled error
 
 			// pod added
 			Expect(mgr.GetRuntimeCache().Upsert(pod)).NotTo(HaveOccurred())
@@ -172,8 +181,10 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should retrieve an added view object", func() {
-			mgr, err := NewFakeManager(ctx, logger)
+			mgr, err := NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
+
+			go mgr.Start(ctx) // will stop with a context cancelled error
 
 			obj := object.NewViewObject("view")
 			object.SetContent(obj, map[string]any{"a": int64(1)})
@@ -196,8 +207,10 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should write and retrieve a native object", func() {
-			mgr, err := NewFakeManager(ctx, logger)
+			mgr, err := NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
+
+			go mgr.Start(ctx) // will stop with a context cancelled error
 
 			list := &unstructured.UnstructuredList{}
 			list.SetGroupVersionKind(schema.GroupVersionKind{

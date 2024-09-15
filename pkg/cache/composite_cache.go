@@ -11,7 +11,6 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	viewapiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
 )
@@ -31,7 +30,7 @@ type Options struct {
 	// DefaultCache is the controller-runtime cache used for anything that is not a view.
 	DefaultCache cache.Cache
 	// Logger is for logging. Currently only the viewcache generates log messages.
-	Logger *logr.Logger
+	Logger logr.Logger
 }
 
 func NewCompositeCache(config *rest.Config, opts Options) (*CompositeCache, error) {
@@ -44,9 +43,9 @@ func NewCompositeCache(config *rest.Config, opts Options) (*CompositeCache, erro
 		defaultCache = dc
 	}
 
-	logger := *opts.Logger
-	if opts.Logger == nil {
-		logger = log.Log
+	logger := opts.Logger
+	if logger.GetSink() == nil {
+		logger = logr.Discard()
 	}
 
 	return &CompositeCache{
@@ -67,7 +66,7 @@ func (cc *CompositeCache) GetViewCache() *ViewCache {
 func (cc *CompositeCache) GetInformer(ctx context.Context, obj client.Object, opts ...cache.InformerGetOption) (cache.Informer, error) {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	cc.log.V(3).Info("get-informer", "gvk", gvk)
+	cc.log.V(5).Info("get-informer", "gvk", gvk)
 
 	if gvk.Group == viewapiv1.GroupVersion.Group {
 		return cc.viewCache.GetInformer(ctx, obj)

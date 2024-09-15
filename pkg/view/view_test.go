@@ -1,11 +1,9 @@
 package view
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
-	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap/zapcore"
@@ -22,7 +20,7 @@ var (
 	logger   = zap.New(zap.UseFlagOptions(&zap.Options{
 		Development:     true,
 		DestWriter:      GinkgoWriter,
-		StacktraceLevel: zapcore.Level(3),
+		StacktraceLevel: zapcore.Level(10),
 		TimeEncoder:     zapcore.RFC3339NanoTimeEncoder,
 		Level:           zapcore.Level(loglevel),
 	}))
@@ -41,12 +39,12 @@ var _ = Describe("Cache", func() {
 	var (
 		mgr     *manager.FakeManager
 		testObj client.Object
-		ctx     context.Context
-		cancel  context.CancelFunc
+		// ctx     context.Context
+		// cancel  context.CancelFunc
 	)
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithCancel(logr.NewContext(context.Background(), logger))
+		// ctx, cancel = context.WithCancel(logr.NewContext(context.Background(), logger))
 		testObj = &corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-service",
@@ -63,15 +61,13 @@ var _ = Describe("Cache", func() {
 				ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyLocal,
 			},
 		}
-		mgr, _ = manager.NewFakeManager(ctx, logger)
 		fmt.Println(mgr)
 		fmt.Println(testObj)
 	})
 
-	AfterEach(func() {
-		cancel()
-	})
-
+	// AfterEach(func() {
+	// 	cancel()
+	// })
 })
 
 // 	Describe("Reconciling views", func() {

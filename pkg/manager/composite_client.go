@@ -83,11 +83,19 @@ func (c *compositeClient) Update(ctx context.Context, obj client.Object, opts ..
 			return errors.New("cache is not set")
 		}
 
-		o, ok := obj.(object.Object)
+		newObj, ok := obj.(object.Object)
 		if !ok {
 			return errors.New("object must be an object.Object")
 		}
-		return c.compositeCache.GetViewCache().Update(o)
+
+		// get the old object
+		oldObj := object.NewViewObject(newObj.GetKind())
+		if err := c.compositeCache.GetViewCache().Get(ctx, client.ObjectKeyFromObject(newObj), oldObj); err != nil {
+			return fmt.Errorf("cannot update object with key %s: not in cache",
+				client.ObjectKeyFromObject(newObj))
+		}
+
+		return c.compositeCache.GetViewCache().Update(oldObj, newObj)
 	}
 	return c.Client.Update(ctx, obj, opts...)
 }
@@ -99,10 +107,11 @@ func (c *compositeClient) Patch(ctx context.Context, obj client.Object, patch cl
 			return errors.New("cache is not set")
 		}
 
-		o, ok := obj.(object.Object)
+		oldObj, ok := obj.(object.Object)
 		if !ok {
 			return errors.New("object must be an object.Object")
 		}
+
 		if patch.Type() != types.JSONPatchType && patch.Type() != types.MergePatchType {
 			return errors.New("strategic merge patch not supported in views")
 		}
@@ -118,7 +127,7 @@ func (c *compositeClient) Patch(ctx context.Context, obj client.Object, patch cl
 		}
 
 		target := object.NewViewObject(gvk.Kind)
-		if err := c.compositeCache.GetViewCache().Get(ctx, client.ObjectKeyFromObject(o), target); err != nil {
+		if err := c.compositeCache.GetViewCache().Get(ctx, client.ObjectKeyFromObject(oldObj), target); err != nil {
 			return err
 		}
 
@@ -126,7 +135,7 @@ func (c *compositeClient) Patch(ctx context.Context, obj client.Object, patch cl
 			return err
 		}
 
-		return c.compositeCache.GetViewCache().Update(target)
+		return c.compositeCache.GetViewCache().Update(oldObj, target)
 	}
 
 	return c.Client.Patch(ctx, obj, patch, opts...)
