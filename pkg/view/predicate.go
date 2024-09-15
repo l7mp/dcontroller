@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -13,7 +14,7 @@ var _ json.Marshaler = &Predicate{}
 var _ json.Unmarshaler = &Predicate{}
 
 type Interface interface {
-	ToPredicate() (predicate.Predicate, error)
+	ToPredicate() (predicate.TypedPredicate[client.Object], error)
 }
 
 type BasicPredicate string
@@ -24,7 +25,7 @@ type Predicate struct {
 	*BoolPredicate
 }
 
-func (p *Predicate) ToPredicate() (predicate.Predicate, error) {
+func (p *Predicate) ToPredicate() (predicate.TypedPredicate[client.Object], error) {
 	if p.BasicPredicate != nil {
 		return p.BasicPredicate.ToPredicate()
 	}
@@ -64,7 +65,7 @@ func (p *Predicate) UnmarshalJSON(data []byte) error {
 	return err
 }
 
-func (pw *BasicPredicate) ToPredicate() (predicate.Predicate, error) {
+func (pw *BasicPredicate) ToPredicate() (predicate.TypedPredicate[client.Object], error) {
 	switch string(*pw) {
 	case "GenerationChanged":
 		return predicate.GenerationChangedPredicate{}, nil
@@ -79,7 +80,7 @@ func (pw *BasicPredicate) ToPredicate() (predicate.Predicate, error) {
 	}
 }
 
-func (cp *BoolPredicate) ToPredicate() (predicate.Predicate, error) {
+func (cp *BoolPredicate) ToPredicate() (predicate.TypedPredicate[client.Object], error) {
 	if len(*cp) != 1 {
 		return nil, errors.New("expecting a single predicate op")
 	}

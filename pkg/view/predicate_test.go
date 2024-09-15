@@ -90,7 +90,7 @@ var _ = Describe("Predicate", func() {
 			reconstitutedPred, err := unmarshaledCompPred.ToPredicate()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reconstitutedPred).To(BeAssignableToTypeOf(
-				predicate.Not[client.Object](predicate.GenerationChangedPredicate{})))
+				predicate.Not(predicate.GenerationChangedPredicate{})))
 
 			oldObj := &unstructured.Unstructured{}
 			oldObj.SetGeneration(1)

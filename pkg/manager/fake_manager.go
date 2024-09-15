@@ -36,7 +36,7 @@ type FakeManager struct {
 	compositeCache *ccache.CompositeCache
 }
 
-func NewFakeManager(ctx context.Context, logger logr.Logger) (*FakeManager, error) {
+func NewFakeManager(ctx context.Context, logger logr.Logger, objs ...client.Object) (*FakeManager, error) {
 	fakeRuntimeCache := ccache.NewFakeRuntimeCache(nil)
 	compositeCache, err := ccache.NewCompositeCache(nil, ccache.Options{
 		DefaultCache: fakeRuntimeCache,
@@ -46,7 +46,7 @@ func NewFakeManager(ctx context.Context, logger logr.Logger) (*FakeManager, erro
 		return nil, err
 	}
 
-	fakeRuntimeClient := fake.NewClientBuilder().WithRuntimeObjects().Build()
+	fakeRuntimeClient := fake.NewClientBuilder().WithObjects(objs...).Build()
 	fakeRuntimeManager := NewFakeRuntimeManager(compositeCache, &compositeClient{
 		Client:         fakeRuntimeClient,
 		compositeCache: compositeCache,

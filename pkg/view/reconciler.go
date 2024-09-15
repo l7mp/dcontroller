@@ -3,56 +3,59 @@ package view
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"hsnlab/dcontroller-runtime/pkg/cache"
+	"hsnlab/dcontroller-runtime/pkg/util"
 )
 
+type Reconciler = reconcile.TypedReconciler[Request]
+
+// type Reconciler[request comparable] struct {
+// 	client.Client
+// }
+
 type Request struct {
-	reconcile.Request
-	EventType string
-	GVK       schema.GroupVersionKind
+	Namespace, Name string
+	EventType       cache.DeltaType
+	GVK             schema.GroupVersionKind
 }
 
-type Reconciler struct {
-	client.Client
+var _ handler.TypedEventHandler[client.Object, Request] = &EventHandler[client.Object]{}
+
+type EventHandler[object client.Object] struct{ log logr.Logger }
+
+func (h EventHandler[O]) Create(ctx context.Context, evt event.TypedCreateEvent[O], q workqueue.TypedRateLimitingInterface[Request]) {
+	h.log.Info("handling Create event", "event", util.Stringify(evt))
+	h.enqueue(evt.Object, cache.Added, q)
 }
 
-type EventHandler struct{}
-
-func (h *EventHandler) Create(ctx context.Context, evt event.CreateEvent, q workqueue.RateLimitingInterface) {
-	h.enqueue(evt.Object, "Create", q)
+func (h EventHandler[O]) Update(ctx context.Context, evt event.TypedUpdateEvent[O], q workqueue.TypedRateLimitingInterface[Request]) {
+	h.log.Info("handling Update event", "event", util.Stringify(evt))
+	h.enqueue(evt.ObjectNew, cache.Updated, q)
 }
 
-func (h *EventHandler) Update(ctx context.Context, evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
-	h.enqueue(evt.ObjectNew, "Update", q)
+func (h EventHandler[O]) Delete(ctx context.Context, evt event.TypedDeleteEvent[O], q workqueue.TypedRateLimitingInterface[Request]) {
+	h.log.Info("handling Delete event", "event", util.Stringify(evt))
+	h.enqueue(evt.Object, cache.Deleted, q)
 }
 
-func (h *EventHandler) Delete(ctx context.Context, evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
-	h.enqueue(evt.Object, "Delete", q)
+func (h EventHandler[O]) Generic(ctx context.Context, evt event.TypedGenericEvent[O], q workqueue.TypedRateLimitingInterface[Request]) {
+	h.log.Info("ignoring Generic event", "event", util.Stringify(evt))
 }
 
-func (h *EventHandler) Generic(ctx context.Context, evt event.GenericEvent, q workqueue.RateLimitingInterface) {
-	h.enqueue(evt.Object, "Generic", q)
-}
-
-func (h *EventHandler) enqueue(obj client.Object, eventType string, q workqueue.RateLimitingInterface) {
-	u, ok := obj.(*unstructured.Unstructured)
-	if !ok {
-		return
-	}
+func (h EventHandler[O]) enqueue(obj O, eventType cache.DeltaType, q workqueue.TypedRateLimitingInterface[Request]) {
 	q.Add(Request{
-		Request: reconcile.Request{
-			NamespacedName: client.ObjectKey{
-				Name:      u.GetName(),
-				Namespace: u.GetNamespace(),
-			},
-		},
+		Name:      obj.GetName(),
+		Namespace: obj.GetNamespace(),
 		EventType: eventType,
-		GVK:       u.GroupVersionKind(),
+		GVK:       obj.GetObjectKind().GroupVersionKind(),
 	})
 }
 
