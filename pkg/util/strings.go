@@ -1,8 +1,9 @@
 package util
 
 import (
-	"encoding/json"
 	"fmt"
+
+	"k8s.io/apimachinery/pkg/util/json"
 )
 
 // functional map: (a -> b) -> [a] -> [b]

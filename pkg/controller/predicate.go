@@ -1,17 +1,18 @@
 package view
 
 import (
-	"encoding/json"
+	encodingjson "encoding/json"
 	"errors"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 var _ Interface = &Predicate{}
-var _ json.Marshaler = &Predicate{}
-var _ json.Unmarshaler = &Predicate{}
+var _ encodingjson.Marshaler = &Predicate{}
+var _ encodingjson.Unmarshaler = &Predicate{}
 
 type Interface interface {
 	ToPredicate() (predicate.TypedPredicate[client.Object], error)

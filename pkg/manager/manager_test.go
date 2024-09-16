@@ -212,6 +212,64 @@ var _ = Describe("Startup", func() {
 
 			go mgr.Start(ctx) // will stop with a context cancelled error
 
+			obj := &unstructured.UnstructuredList{}
+			obj.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			})
+
+			c := mgr.GetClient()
+			Expect(c).NotTo(BeNil())
+
+			// get from the object tracker: a normal get would go through the cache
+			// first get should fail
+			tracker := mgr.GetObjectTracker()
+			gvr := schema.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
+				Resource: "pods", // Resource does not equal Kind!
+			}
+			getFromTracker, err := tracker.Get(gvr, "testns", "testpod")
+			Expect(err).To(HaveOccurred())
+
+			// create
+			Expect(c.Create(ctx, pod)).NotTo(HaveOccurred())
+
+			// second get should succeed
+			getFromTracker, err = tracker.Get(gvr, "testns", "testpod")
+			Expect(err).NotTo(HaveOccurred())
+			// no way to deep-equal: the tracker returns a native Pod object (not unstructured)
+			Expect(getFromTracker.GetObjectKind().GroupVersionKind()).To(Equal(schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			}))
+			// make a Get so that we get a full object (tracker returns only a runtime.Object)
+
+			// getFromClient := &corev1.Pod{}
+			// Expect(c.Get(ctx, client.ObjectKeyFromObject(pod), getFromClient)).NotTo(HaveOccurred())
+			getFromClient, err := object.ConvertRuntimeObjectToClientObject(getFromTracker)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(getFromClient.GetObjectKind().GroupVersionKind()).To(Equal(schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			}))
+			p := getFromClient.(*corev1.Pod)
+			Expect(p.GetName()).To(Equal("testpod"))
+			Expect(p.GetNamespace()).To(Equal("testns"))
+			Expect(p.Spec.Containers).To(HaveLen(1))
+			Expect(p.Spec.Containers[0].Name).To(Equal("nginx"))
+			Expect(p.Spec.Containers[0].Image).To(Equal("nginx"))
+		})
+
+		It("should write and watch a native object", func() {
+			mgr, err := NewFakeManager(manager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+
+			go mgr.Start(ctx) // will stop with a context cancelled error
+
 			list := &unstructured.UnstructuredList{}
 			list.SetGroupVersionKind(schema.GroupVersionKind{
 				Group:   "",

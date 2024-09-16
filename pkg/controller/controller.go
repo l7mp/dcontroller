@@ -3,8 +3,6 @@ package view
 // import (
 // 	"context"
 // 	"errors"
-// 	apiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
-// 	viewapiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
 
 // 	"github.com/go-logr/logr"
 // 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -22,6 +20,7 @@ package view
 // 	"hsnlab/dcontroller-runtime/pkg/manager"
 // 	"hsnlab/dcontroller-runtime/pkg/object"
 // 	"hsnlab/dcontroller-runtime/pkg/pipeline"
+// 	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
 // )
 
 // type View interface {

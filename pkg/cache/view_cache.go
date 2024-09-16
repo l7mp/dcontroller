@@ -185,8 +185,7 @@ func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 	gvk := newObj.GetObjectKind().GroupVersionKind()
 
 	c.log.V(2).Info("update: updating object in view cache", "gvk", gvk,
-		"newObj", client.ObjectKeyFromObject(newObj),
-		"oldObj", client.ObjectKeyFromObject(oldObj))
+		"object-key", client.ObjectKeyFromObject(newObj))
 
 	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {

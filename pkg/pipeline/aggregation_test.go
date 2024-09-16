@@ -1,12 +1,11 @@
 package pipeline
 
 import (
-	"encoding/json"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/yaml"
 
 	"hsnlab/dcontroller-runtime/pkg/cache"

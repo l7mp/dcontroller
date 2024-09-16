@@ -6,7 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	viewapiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
+	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
 )
 
 type Object = *unstructured.Unstructured
@@ -15,7 +15,7 @@ type ObjectList = *unstructured.UnstructuredList
 func NewViewObject(view string) Object {
 	obj := &unstructured.Unstructured{}
 	obj.SetUnstructuredContent(map[string]any{})
-	obj.SetGroupVersionKind(viewapiv1.NewGVK(view))
+	obj.SetGroupVersionKind(viewv1a1.NewGVK(view))
 	return obj
 }
 
@@ -74,7 +74,7 @@ func DeepCopy(in Object) Object {
 
 func NewViewObjectList(view string) ObjectList {
 	list := &unstructured.UnstructuredList{}
-	list.SetGroupVersionKind(viewapiv1.NewGVK(view))
+	list.SetGroupVersionKind(viewv1a1.NewGVK(view))
 	return list
 }
 

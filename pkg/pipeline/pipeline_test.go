@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/yaml"
 
-	viewapiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
+	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
 	"hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
@@ -108,9 +108,9 @@ var _ = Describe("Pipelines", func() {
 		object.SetName(rs2, "default", "rs2")
 		rs2.SetLabels(map[string]string{"app": "app2"})
 
-		eng = NewDefaultEngine("view", []GVK{viewapiv1.GroupVersion.WithKind("pod"),
-			viewapiv1.GroupVersion.WithKind("dep"),
-			viewapiv1.GroupVersion.WithKind("rs")}, logger)
+		eng = NewDefaultEngine("view", []GVK{viewv1a1.GroupVersion.WithKind("pod"),
+			viewv1a1.GroupVersion.WithKind("dep"),
+			viewv1a1.GroupVersion.WithKind("rs")}, logger)
 	})
 
 	Describe("Evaluating pipeline expressions for Added events", func() {
@@ -133,12 +133,12 @@ var _ = Describe("Pipelines", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			eng.WithObjects(dep1, dep2)
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 			Expect(eng.(*defaultEngine).baseViewStore).NotTo(HaveKey("pod"))
 
 			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(eng.(*defaultEngine).baseViewStore).To(HaveKey(viewapiv1.GroupVersion.WithKind("pod")))
+			Expect(eng.(*defaultEngine).baseViewStore).To(HaveKey(viewv1a1.GroupVersion.WithKind("pod")))
 
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
@@ -551,8 +551,8 @@ var _ = Describe("Pipelines", func() {
 		object.SetContent(route, testUDPRoute)
 		route = object.DeepCopy(route)
 		eng = NewDefaultEngine("view", []GVK{
-			viewapiv1.GroupVersion.WithKind("gateway"),
-			viewapiv1.GroupVersion.WithKind("route")}, logger)
+			viewv1a1.GroupVersion.WithKind("gateway"),
+			viewv1a1.GroupVersion.WithKind("route")}, logger)
 	})
 
 	It("should implement the route attachment API with the All policy", func() {

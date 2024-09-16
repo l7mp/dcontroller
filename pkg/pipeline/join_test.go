@@ -1,14 +1,13 @@
 package pipeline
 
 import (
-	"encoding/json"
-
 	"github.com/bsm/gomega/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/json"
 
-	viewapiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
+	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
 	"hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
@@ -84,9 +83,9 @@ var _ = Describe("Joins", func() {
 		object.SetName(rs2, "default", "rs2")
 		rs2.SetLabels(map[string]string{"app": "app2"})
 
-		eng = NewDefaultEngine("view", []GVK{viewapiv1.GroupVersion.WithKind("pod"),
-			viewapiv1.GroupVersion.WithKind("dep"),
-			viewapiv1.GroupVersion.WithKind("rs")}, logger)
+		eng = NewDefaultEngine("view", []GVK{viewv1a1.GroupVersion.WithKind("pod"),
+			viewv1a1.GroupVersion.WithKind("dep"),
+			viewv1a1.GroupVersion.WithKind("rs")}, logger)
 	})
 
 	Describe("Evaluating join expressions for Added events", func() {
@@ -97,13 +96,13 @@ var _ = Describe("Joins", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			eng.WithObjects(dep1, dep2)
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
-			Expect(eng.(*defaultEngine).baseViewStore).NotTo(HaveKey(viewapiv1.GroupVersion.WithKind("pod")))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore).NotTo(HaveKey(viewv1a1.GroupVersion.WithKind("pod")))
 
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("pod")].List()).To(HaveLen(1))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(1))
 
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
@@ -135,14 +134,14 @@ var _ = Describe("Joins", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			eng.WithObjects(pod1, pod2, pod3)
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
-			Expect(eng.(*defaultEngine).baseViewStore).NotTo(HaveKey(viewapiv1.GroupVersion.WithKind("dep")))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).baseViewStore).NotTo(HaveKey(viewv1a1.GroupVersion.WithKind("dep")))
 
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(1))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(1))
 
 			Expect(deltas).To(HaveLen(2))
 			Expect(deltas).To(ContainElement(objFieldEq(dep1.UnstructuredContent(), "dep")))
@@ -191,14 +190,14 @@ var _ = Describe("Joins", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			eng.WithObjects(dep1, dep2, pod3)
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("pod")].List()).To(HaveLen(1))
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(1))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Deleted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("pod")].List()).To(HaveLen(0))
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(0))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
@@ -228,14 +227,14 @@ var _ = Describe("Joins", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			eng.WithObjects(dep1, dep2, pod1, pod2)
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("pod")].List()).To(HaveLen(2))
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
@@ -249,8 +248,8 @@ var _ = Describe("Joins", func() {
 			deltas, err = j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
 			// should receive update pod3-dep1
 			Expect(deltas).To(HaveLen(1))
@@ -277,14 +276,14 @@ var _ = Describe("Joins", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			eng.WithObjects(dep1, dep2, pod1, pod2)
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("pod")].List()).To(HaveLen(2))
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
@@ -299,8 +298,8 @@ var _ = Describe("Joins", func() {
 			deltas, err = j.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
 			// should receive a delete for pod3-dep1 and an add for pod3-dep2
 			Expect(deltas).To(HaveLen(2))
@@ -333,8 +332,8 @@ var _ = Describe("Joins", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			eng.WithObjects(dep1, dep2, pod1, pod2, pod3)
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
 			// re-label pod
 			olddep1 := object.DeepCopy(dep1)
@@ -342,8 +341,8 @@ var _ = Describe("Joins", func() {
 			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
-			Expect(eng.(*defaultEngine).baseViewStore[viewapiv1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
 			// should remove dep1-pod1 and dep1-pod3 and add dep1-pod2
 			Expect(deltas).To(HaveLen(3))

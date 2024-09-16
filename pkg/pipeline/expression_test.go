@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 
@@ -9,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/yaml"
 
 	"hsnlab/dcontroller-runtime/pkg/object"

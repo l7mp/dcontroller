@@ -10,7 +10,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,6 +36,7 @@ type FakeManager struct {
 	fakeRuntimeManager manager.Manager
 	fakeRuntimeCache   *ccache.FakeRuntimeCache
 	fakeRuntimeClient  client.WithWatch
+	tracker            testing.ObjectTracker
 	// composite
 	compositeCache *ccache.CompositeCache
 }
@@ -60,7 +63,12 @@ func NewFakeManager(opts manager.Options, objs ...client.Object) (*FakeManager, 
 		return nil, err
 	}
 
-	fakeRuntimeClient := fake.NewClientBuilder().WithObjects(objs...).Build()
+	scheme := object.GetBaseScheme()
+	tracker := testing.NewObjectTracker(scheme, serializer.NewCodecFactory(scheme).UniversalDecoder())
+	fakeRuntimeClient := fake.NewClientBuilder().
+		WithObjectTracker(tracker).
+		WithObjects(objs...).
+		Build()
 	fakeRuntimeManager := NewFakeRuntimeManager(compositeCache, &compositeClient{
 		Client:         fakeRuntimeClient,
 		compositeCache: compositeCache,
@@ -79,6 +87,7 @@ func NewFakeManager(opts manager.Options, objs ...client.Object) (*FakeManager, 
 		fakeRuntimeCache:   fakeRuntimeCache,
 		fakeRuntimeClient:  fakeRuntimeClient,
 		compositeCache:     compositeCache,
+		tracker:            tracker,
 	}, nil
 }
 
@@ -87,6 +96,7 @@ func (m *FakeManager) GetRuntimeManager() manager.Manager        { return m.fake
 func (m *FakeManager) GetRuntimeCache() *ccache.FakeRuntimeCache { return m.fakeRuntimeCache }
 func (m *FakeManager) GetRuntimeClient() client.WithWatch        { return m.fakeRuntimeClient }
 func (m *FakeManager) GetCompositeCache() *ccache.CompositeCache { return m.compositeCache }
+func (m *FakeManager) GetObjectTracker() testing.ObjectTracker   { return m.tracker }
 
 ///////// FakeRuntimeManager
 
@@ -97,15 +107,17 @@ type FakeRuntimeManager struct {
 	runnables    []manager.Runnable
 	started      bool
 	startedMutex sync.Mutex
-	logger       logr.Logger
+	logger, log  logr.Logger
 }
 
 func NewFakeRuntimeManager(cache cache.Cache, client client.Client, logger logr.Logger) *FakeRuntimeManager {
+	scheme := object.GetBaseScheme()
 	return &FakeRuntimeManager{
 		Cache:  cache,
 		Client: client,
-		Scheme: runtime.NewScheme(),
-		logger: logger.WithName("fakeruntimemanager"),
+		Scheme: scheme,
+		logger: logger,
+		log:    logger.WithName("fakeruntimemanager"),
 	}
 }
 
@@ -115,14 +127,14 @@ func (f *FakeRuntimeManager) SetFields(i interface{}) error                     
 func (f *FakeRuntimeManager) AddHealthzCheck(name string, check healthz.Checker) error { return nil }
 func (f *FakeRuntimeManager) AddReadyzCheck(name string, check healthz.Checker) error  { return nil }
 func (f *FakeRuntimeManager) GetWebhookServer() webhook.Server                         { return nil }
-func (f *FakeRuntimeManager) GetLogger() logr.Logger                                   { return logr.New(nil) }
+func (f *FakeRuntimeManager) GetLogger() logr.Logger                                   { return f.logger }
 func (f *FakeRuntimeManager) GetControllerOptions() config.Controller                  { return config.Controller{} }
 func (f *FakeRuntimeManager) AddMetricsServerExtraHandler(path string, handler http.Handler) error {
 	return nil
 }
 
 func (f *FakeRuntimeManager) Add(runnable manager.Runnable) error {
-	f.logger.V(4).Info("adding runnable")
+	f.log.V(4).Info("adding runnable")
 	f.runnables = append(f.runnables, runnable)
 	return nil
 }
@@ -136,7 +148,7 @@ func (f *FakeRuntimeManager) Start(ctx context.Context) error {
 	}
 
 	for _, runnable := range f.runnables {
-		f.logger.V(4).Info("starting runnable")
+		f.log.V(4).Info("starting runnable")
 		if err := runnable.Start(ctx); err != nil {
 			return err
 		}

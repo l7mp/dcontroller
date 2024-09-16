@@ -9,7 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1 "hsnlab/dcontroller-runtime/pkg/api/view/v1"
+	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
@@ -36,7 +36,7 @@ var _ = Describe("ViewCache", func() {
 
 	Describe("Registering views", func() {
 		It("should allow a view to be registered", func() {
-			err := cache.RegisterCacheForKind(apiv1.NewGVK("view"))
+			err := cache.RegisterCacheForKind(viewv1a1.NewGVK("view"))
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
