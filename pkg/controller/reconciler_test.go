@@ -3,12 +3,10 @@ package view
 import (
 	"context"
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -25,24 +23,7 @@ import (
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
-const (
-	timeout  = time.Second * 1
-	interval = time.Millisecond * 50
-)
-
-var (
-	watcher chan Request
-	podn    = &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testpod",
-			Namespace: "testns",
-		},
-		Spec: corev1.PodSpec{
-			Containers:    []corev1.Container{{Name: "nginx", Image: "nginx"}},
-			RestartPolicy: corev1.RestartPolicyOnFailure,
-		},
-	}
-)
+var watcher chan Request
 
 type TestReconciler struct{}
 
@@ -258,7 +239,6 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Start the manager
-			// go mgr.Start(ctx) // will stop with a context cancelled erro
 			go func() { mgr.Start(ctx) }() // will stop with a context cancelled erro
 
 			// Try to obtain the view from the watcher
@@ -577,21 +557,3 @@ var _ = Describe("Reconciler", func() {
 		})
 	})
 })
-
-func tryWatchReq(watcher chan Request, d time.Duration) (Request, bool) {
-	select {
-	case req := <-watcher:
-		return req, true
-	case <-time.After(d):
-		return Request{}, false
-	}
-}
-
-func tryWatchWatcher(watcher watch.Interface, d time.Duration) (watch.Event, bool) {
-	select {
-	case event := <-watcher.ResultChan():
-		return event, true
-	case <-time.After(d):
-		return watch.Event{}, false
-	}
-}

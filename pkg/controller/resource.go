@@ -18,6 +18,7 @@ import (
 
 	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
 	"hsnlab/dcontroller-runtime/pkg/cache"
+	"hsnlab/dcontroller-runtime/pkg/object"
 	"hsnlab/dcontroller-runtime/pkg/util"
 )
 
@@ -25,6 +26,19 @@ type Resource struct {
 	Group   *string `json:"apiGroup"`
 	Version *string `json:"version"`
 	Kind    string  `json:"kind"`
+}
+
+func (r *Resource) String(mgr runtimeManager.Manager) string {
+	gvk, err := r.GetGVK(mgr)
+	if err != nil {
+		return ""
+	}
+	// do not use the standard notation: it adds spaces
+	gr := gvk.Group
+	if gr == "" {
+		gr = "core"
+	}
+	return fmt.Sprintf("%s/%s:%s", gr, gvk.Version, gvk.Kind)
 }
 
 func (r *Resource) GetGVK(mgr runtimeManager.Manager) (schema.GroupVersionKind, error) {
@@ -178,7 +192,9 @@ func (t *Target) patch(ctx context.Context, mgr runtimeManager.Manager, delta ca
 
 	switch delta.Type {
 	case cache.Added, cache.Updated, cache.Replaced:
-		log.V(4).Info("update-patch", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
+		log.V(4).Info("update-patch", "event-type", delta.Type,
+			"key", client.ObjectKeyFromObject(delta.Object).String(),
+			"object", object.Dump(delta.Object))
 		patch, err := json.Marshal(delta.Object.UnstructuredContent())
 		if err != nil {
 			return err

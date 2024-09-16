@@ -124,21 +124,22 @@ func (c *compositeClient) Patch(ctx context.Context, obj client.Object, patch cl
 			return fmt.Errorf("cannot decode JSON patch: %w", err)
 		}
 
-		p := map[string]any{}
-		if err := json.Unmarshal(j, &p); err != nil {
+		newContent := map[string]any{}
+		if err := json.Unmarshal(j, &newContent); err != nil {
 			return fmt.Errorf("cannot parse JSON patch: %w", err)
 		}
 
-		target := object.NewViewObject(gvk.Kind)
-		if err := c.compositeCache.GetViewCache().Get(ctx, client.ObjectKeyFromObject(patchObj), target); err != nil {
+		oldObj := object.NewViewObject(gvk.Kind)
+		if err := c.compositeCache.GetViewCache().Get(ctx, client.ObjectKeyFromObject(patchObj), oldObj); err != nil {
 			return err
 		}
 
-		if err := object.Patch(target, p); err != nil {
+		newObj := oldObj.DeepCopy()
+		if err := object.Patch(newObj, newContent); err != nil {
 			return err
 		}
 
-		return c.compositeCache.GetViewCache().Update(patchObj, target)
+		return c.compositeCache.GetViewCache().Update(oldObj, newObj)
 	}
 
 	return c.Client.Patch(ctx, obj, patch, opts...)

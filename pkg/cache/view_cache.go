@@ -157,7 +157,9 @@ func (c *ViewCache) RemoveInformer(ctx context.Context, obj client.Object) error
 func (c *ViewCache) Add(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	c.log.V(2).Info("add: adding an object", "gvk", gvk, "key", client.ObjectKeyFromObject(obj))
+	c.log.V(2).Info("add: adding object", "gvk", gvk,
+		"key", client.ObjectKeyFromObject(obj).String(),
+		"object", object.Dump(obj))
 
 	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {
@@ -184,8 +186,17 @@ func (c *ViewCache) Add(obj object.Object) error {
 func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 	gvk := newObj.GetObjectKind().GroupVersionKind()
 
-	c.log.V(2).Info("update: updating object in view cache", "gvk", gvk,
-		"object-key", client.ObjectKeyFromObject(newObj))
+	c.log.V(4).Info("YYYYYYYYYYYYYYYYYYYYYYYYY", "oldObj", object.Dump(oldObj), "newObj", object.Dump(newObj))
+
+	if object.DeepEqual(oldObj, newObj) {
+		c.log.V(4).Info("update: suppressing object update", "gvk", gvk,
+			"key", client.ObjectKeyFromObject(newObj).String())
+		return nil
+	}
+
+	c.log.V(2).Info("update: updating object", "gvk", gvk,
+		"key", client.ObjectKeyFromObject(newObj).String(),
+		"object", object.Dump(newObj))
 
 	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {
@@ -211,7 +222,9 @@ func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 func (c *ViewCache) Delete(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	c.log.V(2).Info("delete: removing object from view cache", "gvk", gvk, "key", client.ObjectKeyFromObject(obj))
+	c.log.V(2).Info("delete: removing object", "gvk", gvk, "key",
+		"key", client.ObjectKeyFromObject(obj).String(),
+		"object", object.Dump(obj))
 
 	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {

@@ -98,7 +98,11 @@ func (m *FakeManager) GetRuntimeClient() client.WithWatch        { return m.fake
 func (m *FakeManager) GetCompositeCache() *ccache.CompositeCache { return m.compositeCache }
 func (m *FakeManager) GetObjectTracker() testing.ObjectTracker   { return m.tracker }
 
-///////// FakeRuntimeManager
+// /////// FakeRuntimeManager
+type Runnable interface {
+	manager.Runnable
+	GetName() string
+}
 
 type FakeRuntimeManager struct {
 	Client       client.Client
@@ -107,6 +111,7 @@ type FakeRuntimeManager struct {
 	runnables    []manager.Runnable
 	started      bool
 	startedMutex sync.Mutex
+	ctx          context.Context
 	logger, log  logr.Logger
 }
 
@@ -135,26 +140,45 @@ func (f *FakeRuntimeManager) AddMetricsServerExtraHandler(path string, handler h
 
 func (f *FakeRuntimeManager) Add(runnable manager.Runnable) error {
 	f.log.V(4).Info("adding runnable")
+
+	f.startedMutex.Lock()
+	defer f.startedMutex.Unlock()
+
+	if f.started {
+		name := "<unknown>"
+		if r, ok := runnable.(Runnable); ok {
+			name = r.GetName()
+		}
+		f.log.V(4).Info("starting runnable", "started", f.started, "name", name)
+		go runnable.Start(f.ctx)
+	}
+
 	f.runnables = append(f.runnables, runnable)
+
 	return nil
 }
 
 func (f *FakeRuntimeManager) Start(ctx context.Context) error {
 	f.startedMutex.Lock()
-	defer f.startedMutex.Unlock()
-
 	if f.started {
 		return nil
 	}
+	f.ctx = ctx
+	f.started = true
+	runnables := make([]manager.Runnable, len(f.runnables))
+	copy(runnables, f.runnables)
+	f.startedMutex.Unlock()
 
-	for _, runnable := range f.runnables {
-		f.log.V(4).Info("starting runnable")
-		if err := runnable.Start(ctx); err != nil {
-			return err
+	for _, runnable := range runnables {
+		name := "<unknown>"
+		if r, ok := runnable.(Runnable); ok {
+			name = r.GetName()
 		}
+		f.log.V(4).Info("starting runnable", "started", f.started, "name", name)
+
+		go runnable.Start(f.ctx)
 	}
 
-	f.started = true
 	<-ctx.Done()
 	return nil
 }

@@ -94,14 +94,14 @@ func (c *ViewCacheInformer) RemoveEventHandler(registration toolscache.ResourceE
 func (c *ViewCacheInformer) TriggerEvent(eventType toolscache.DeltaType, oldObj, newObj object.Object, isInitialList bool) {
 	if len(c.handlers) == 0 {
 		c.log.V(4).Info("suppressing event trigger: no handlers", "event", eventType,
-			"object", object.DumpObject(newObj))
+			"object", object.Dump(newObj))
 		return
 	}
 
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	c.log.V(4).Info("triggering event", "event", eventType, "object", object.DumpObject(newObj))
+	c.log.V(4).Info("triggering event", "event", eventType, "object", object.Dump(newObj))
 
 	if c.transform != nil {
 		newObj = object.DeepCopy(newObj)
@@ -119,13 +119,13 @@ func (c *ViewCacheInformer) TriggerEvent(eventType toolscache.DeltaType, oldObj,
 			return
 		}
 
-		c.log.V(4).Info("trigger-event: transformer ready", "object", object.DumpObject(newObj))
+		c.log.V(4).Info("trigger-event: transformer ready", "object", object.Dump(newObj))
 	}
 
 	events := 0
 	for _, handler := range c.handlers {
 		c.log.V(8).Info("trigger-event: sending event to handler", "event", eventType,
-			"object", object.DumpObject(newObj), "handler-id", handler.id)
+			"object", object.Dump(newObj), "handler-id", handler.id)
 
 		switch eventType {
 		case toolscache.Added:

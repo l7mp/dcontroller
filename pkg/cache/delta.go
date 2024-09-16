@@ -1,7 +1,10 @@
 package cache
 
 import (
+	"fmt"
+
 	toolscache "k8s.io/client-go/tools/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
@@ -27,3 +30,11 @@ type Delta struct {
 }
 
 func (d Delta) IsUnchanged() bool { return d.Object == nil }
+
+func (d Delta) String() string {
+	key := ""
+	if d.Object != nil {
+		key = client.ObjectKeyFromObject(d.Object).String()
+	}
+	return fmt.Sprintf("Delta(Type:%s,Object:%s)", d.Type, key)
+}

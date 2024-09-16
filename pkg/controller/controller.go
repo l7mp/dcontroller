@@ -1,173 +1,233 @@
 package view
 
-// import (
-// 	"context"
-// 	"errors"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
 
-// 	"github.com/go-logr/logr"
-// 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-// 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-// 	"k8s.io/apimachinery/pkg/runtime"
-// 	"k8s.io/apimachinery/pkg/runtime/schema"
-// 	"sigs.k8s.io/controller-runtime/pkg/client"
-// 	"sigs.k8s.io/controller-runtime/pkg/controller"
-// 	"sigs.k8s.io/controller-runtime/pkg/handler"
-// 	"sigs.k8s.io/controller-runtime/pkg/log"
-// 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-// 	"sigs.k8s.io/controller-runtime/pkg/source"
+	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-// 	"hsnlab/dcontroller-runtime/pkg/cache"
-// 	"hsnlab/dcontroller-runtime/pkg/manager"
-// 	"hsnlab/dcontroller-runtime/pkg/object"
-// 	"hsnlab/dcontroller-runtime/pkg/pipeline"
-// 	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
-// )
+	"hsnlab/dcontroller-runtime/pkg/cache"
+	"hsnlab/dcontroller-runtime/pkg/pipeline"
+	"hsnlab/dcontroller-runtime/pkg/util"
+)
 
-// type View interface {
-// 	GetGroupVersionKind() schema.GroupVersionKind
-// 	Start(context.Context) error
-// 	GetClient()
-// }
+const WatcherBufferSize int = 1024
 
-// // ViewConf is the basic view definition.
-// type ViewConf struct {
-// 	// Name is the unique name of the view.
-// 	Name string `json:"name"`
-// 	// Pipeline is an aggregation pipeline the view applies to the base object(s).
-// 	Pipeline pipeline.Pipeline `json:"pipeline"`
-// 	// The base API resource the base view watches.
-// 	Resources []ResourceRef `json:"resources"`
-// }
+// ViewConf is the basic view definition.
+type Config struct {
+	// The base resource(s) the controller watches.
+	Sources []Source `json:"sources"`
+	// Pipeline is an aggregation pipeline applied to base objects.
+	Pipeline pipeline.Pipeline `json:"pipeline"`
+	// The target resource the results are to be added.
+	Target Target `json:"target"`
+}
 
-// // implementation
-// type view struct {
-// 	name        string
-// 	manager     *manager.Manager
-// 	scheme      *runtime.Scheme
-// 	pipeline    pipeline.Pipeline
-// 	baseGVKs    []schema.GroupVersionKind
-// 	cache       *cache.ViewCache
-// 	ctrlClient  client.Client
-// 	cacheClient cache.ReadOnlyClient
-// 	engine      pipeline.Engine
-// 	log         logr.Logger
-// }
+type ProcessorFunc func(ctx context.Context, c *Controller, req Request) error
+type Options struct {
+	// Processor allows to override the default request processor of the controller.
+	Processor ProcessorFunc
+}
 
-// // NewView registers a view with the manager. A view is a given by a unique name, an aggregation
-// // pipeline to process the base resources into view objects, and a set of Kubernetes base resources
-// // to watch.
-// func NewView(name string, mgr *manager.Manager, pipeline pipeline.Pipeline, resources []ResourceRef) (View, error) {
-// 	v := &view{
-// 		name:        name,
-// 		pipeline:    pipeline,
-// 		scheme:      mgr.GetScheme(),
-// 		cache:       mgr.GetCache(),
-// 		cacheClient: mgr.GetClient(),
-// 		log:         mgr.GetLogger(),
-// 	}
+var _ runtimeManager.Runnable = &Controller{}
 
-// 	// sanity check
-// 	if len(resources) > 1 && pipeline.Join == nil {
-// 		return nil, errors.New("multi-views (views on multiple base resources) must specify a Join in the pipeline")
-// 	}
+// implementation
+type Controller struct {
+	name        string
+	config      Config
+	manager     runtimeManager.Manager
+	watcher     chan Request
+	engine      pipeline.Engine
+	processor   ProcessorFunc
+	logger, log logr.Logger
+}
 
-// 	for _, r := range resources {
-// 		gvk, err := GetGVKByGroupKind(mgr, schema.GroupKind{Group: r.Group, Kind: r.Kind})
-// 		if err != nil {
-// 			return nil, err
-// 		}
+// New registers a new controller with the manager. A controller is given by the source resource(s) the controller watches, an
+// processing pipeline to process the base resources, and a target resource the processing result is applied to.
+func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, error) {
+	name := config.Target.Resource.String(mgr)
 
-// 		if gvk.Group == viewapiv1.GroupVersion.Group {
+	processor := processRequest
+	if opts.Processor != nil {
+		processor = opts.Processor
+	}
+	// sanity check
+	if len(config.Sources) > 1 && config.Pipeline.Join == nil {
+		return nil, errors.New("controllers defined on multiple base resources must specify a Join in the pipeline")
+	}
 
-// 		}
+	logger := mgr.GetLogger()
+	if logger.GetSink() == nil {
+		logger = logr.Discard()
+	}
 
-// 		baseGVK, err := v.getBaseGVK(obj)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		v.baseGVK = baseGVK
+	c := &Controller{
+		name:      name,
+		manager:   mgr,
+		config:    config,
+		watcher:   make(chan Request, WatcherBufferSize),
+		processor: processor,
+		logger:    logger,
+		log:       logger.WithName("controller").WithValues("name", name),
+	}
 
-// 		c, err := controller.New(name, mgr.Manager, controller.Options{Reconciler: v})
-// 		if err != nil {
-// 			return nil, err
-// 		}
+	srcs := []string{}
+	for _, s := range config.Sources {
+		srcs = append(srcs, s.Resource.String(mgr))
+	}
+	c.log.Info("creating", "sources", fmt.Sprintf("[%s]", strings.Join(srcs, ",")))
 
-// 		u := &unstructured.Unstructured{}
-// 		u.SetGroupVersionKind(v.baseGVK)
-// 		if err := c.Watch(source.Kind(mgr.Manager.GetCache(), u, // base manager cache, not ours
-// 			&handler.TypedEnqueueRequestForObject[*unstructured.Unstructured]{},
-// 			predicates...,
-// 		)); err != nil {
-// 			return nil, err
-// 		}
+	on := true
+	baseviews := []schema.GroupVersionKind{}
+	for i := range config.Sources {
+		s := &config.Sources[i]
+		gvk, err := s.GetGVK(mgr)
+		if err != nil {
+			return nil, fmt.Errorf("controller: cannot obtain GVK for source %s: %w",
+				util.Stringify(s), err)
+		}
 
-// 		mgr.GetCache().RegisterGVK(apiv1.NewGVK(name))
+		// Create the reconciler
+		reconciler := NewControllerReconciler(mgr, s, c.watcher)
 
-// 		v.engine = pipeline.NewDefaultEngine(name, []string{v.baseGVK.String()}, view.log)
+		// Create the controller
+		// c, err := controller.NewTyped(name, mgr.Manager, controller.TypedOptions[Request]{
+		ctrl, err := controller.NewTyped(name, mgr, controller.TypedOptions[Request]{
+			SkipNameValidation: &on,
+			Reconciler:         reconciler,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("controller: cannot create runtime controller for resource %s: %w",
+				gvk.String(), err)
+		}
 
-// 	}
+		// Set up the watch
+		src, err := s.GetSource(mgr)
+		if err != nil {
+			return nil, fmt.Errorf("controller: cannot create runtime source for resource %s: %w",
+				gvk.String(), err)
+		}
 
-// 	return v, nil
-// }
+		if err := ctrl.Watch(src); err != nil {
+			return nil, fmt.Errorf("controller: cannot watch resource %s: %w",
+				gvk.String(), err)
+		}
 
-// func (v *view) GetGroupVersionKind() schema.GroupVersionKind {
-// 	return schema.GroupVersionKind{
-// 		Group:   viewapiv1.GroupVersion.Group,
-// 		Kind:    view.name,
-// 		Version: viewapiv1.GroupVersion.Version,
-// 	}
-// }
+		c.log.V(2).Info("watching base resource", "source", s.String(mgr))
 
-// func (v *view) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
-// 	log := log.FromContext(ctx).WithName("view-reconciler").WithValues("view", v.name, "req", req.String())
-// 	log.Info("reconciling")
+		baseviews = append(baseviews, gvk)
+	}
 
-// 	u := &unstructured.Unstructured{}
-// 	u.SetGroupVersionKind(v.baseGVK)
-// 	obj := object.New(v.name).WithName(req.Namespace, req.Name)
+	c.engine = pipeline.NewDefaultEngine(name, baseviews, logger)
 
-// 	if err := v.ctrlClient.Get(ctx, req.NamespacedName, u); err != nil {
-// 		if apierrors.IsNotFound(err) {
-// 			// delete
-// 			delta, err := v.aggregation.Evaluate(v.engine, cache.Delta{
-// 				Type:   cache.Deleted,
-// 				Object: obj,
-// 			})
-// 			if err == nil {
-// 				err = v.cache.Delete(delta.Object)
-// 				log.V(4).Info("object deleted", "object", delta.Object.String())
-// 			}
-// 		}
-// 		return reconcile.Result{}, err
-// 	}
+	if err := mgr.Add(c); err != nil {
+		return nil, fmt.Errorf("controller: cannot schedule controller %s: %w",
+			c.name, err)
+	}
 
-// 	// upsert
-// 	obj.SetUnstructuredContent(u.Object)
+	return c, nil
+}
 
-// 	delta, err := v.aggregation.Evaluate(v.engine, cache.Delta{
-// 		Type:   cache.Upserted,
-// 		Object: obj,
-// 	})
+func (c *Controller) GetName() string { return c.name }
 
-// 	if err := v.cache.Upsert(delta.Object); err != nil {
-// 		return reconcile.Result{}, err
-// 	}
+// GetWatcher returns the channel that multiplexes the requests coming from the base resources.
+func (c *Controller) GetWatcher() chan Request { return c.watcher }
 
-// 	log.V(2).Info("object upserted", "event", delta.Type, "object", delta.Object.String())
+func (c *Controller) Start(ctx context.Context) error {
+	c.log.Info("starting")
 
-// 	return reconcile.Result{}, nil
-// }
+	// set up the watcher
+	go func() {
+		defer close(c.watcher)
+		for {
+			select {
+			case req := <-c.watcher:
+				c.log.V(2).Info("processing request", "request", util.Stringify(req))
 
-// // helpers
-// // ignore possible cache client errors
-// func (v *view) getUpsertEventType(obj client.Object) cache.DeltaType {
-// 	eventType := cache.Added
-// 	tmpObj := object.New(v.name).WithName(obj.GetNamespace(), obj.GetName())
-// 	if err := v.cacheClient.Get(context.Background(), client.ObjectKeyFromObject(obj), tmpObj); err != nil {
-// 		if apierrors.IsNotFound(err) {
-// 			return cache.Added
-// 		}
-// 		return eventType
-// 	}
-// 	return cache.Updated
-// }
+				if err := c.processor(ctx, c, req); err != nil {
+					c.log.Info("error processing watch event", "request", req,
+						"error", err.Error())
+				}
+			case <-ctx.Done():
+				c.log.V(2).Info("controller terminating")
+				return
+			}
+		}
+	}()
+
+	return nil
+}
+
+func processRequest(ctx context.Context, c *Controller, req Request) error {
+	// Obtain the requested object
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(req.GVK)
+	obj.SetNamespace(req.Namespace)
+	obj.SetName(req.Name)
+
+	if req.EventType == cache.Added || req.EventType == cache.Updated || req.EventType == cache.Replaced {
+		if err := c.manager.GetClient().Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+			return fmt.Errorf("controller: object %s/%s disappeared for Add/Update event: %w",
+				req.GVK, client.ObjectKeyFromObject(obj), err)
+		}
+	}
+	delta := cache.Delta{
+		Type:   req.EventType,
+		Object: obj,
+	}
+
+	fmt.Println("0000000000000000000000")
+	fmt.Println(util.Stringify(req))
+
+	// Process the delta through the pipeline
+	deltas, err := c.config.Pipeline.Evaluate(c.engine, delta)
+	if err != nil {
+		return fmt.Errorf("controller: error evaluating pipeline for object %s/%s: %w",
+			req.GVK, client.ObjectKeyFromObject(obj), err)
+	}
+
+	fmt.Println("1111111111111111111111111")
+	fmt.Println(util.Stringify(deltas))
+
+	// Apply the resultant deltas
+	target := c.config.Target
+	for _, d := range deltas {
+		if err := target.Write(ctx, c.manager, d); err != nil {
+			return fmt.Errorf("controller: cannot update target %s for delta %s: %w",
+				req.GVK, d.String(), err)
+		}
+	}
+
+	return nil
+}
+
+type ContrllerReconciler struct {
+	name    string
+	manager runtimeManager.Manager
+	watcher chan Request
+	log     logr.Logger
+}
+
+func NewControllerReconciler(mgr runtimeManager.Manager, s *Source, watcher chan Request) *ContrllerReconciler {
+	name := s.String(mgr)
+	return &ContrllerReconciler{
+		manager: mgr,
+		name:    name,
+		watcher: watcher,
+		log:     mgr.GetLogger().WithName("reconciler").WithValues("object", name),
+	}
+}
+
+func (r *ContrllerReconciler) Reconcile(ctx context.Context, req Request) (reconcile.Result, error) {
+	r.log.V(4).Info("reconcile", "request", req)
+	r.watcher <- req
+	return reconcile.Result{}, nil
+}

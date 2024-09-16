@@ -14,8 +14,8 @@ import (
 
 var scheme = runtime.NewScheme()
 
-// DumpObject convers an unstuctured object into a human-readable form.
-func DumpObject(obj Object) string {
+// Dump convers an unstuctured object into a human-readable form.
+func Dump(obj Object) string {
 	// copy
 	ro := DeepCopy(obj)
 

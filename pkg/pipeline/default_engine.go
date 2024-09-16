@@ -75,8 +75,6 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 					delta.Type, ObjectKey(delta.Object), err))
 		}
 
-		eng.Log().Info(fmt.Sprintf("%#v", eng.baseViewStore[gvk].List()))
-		eng.Log().Info("$$$$$$$$$$$$$$$$$$$$$")
 		ds = []cache.Delta{{Type: cache.Added, Object: o}}
 
 	case cache.Updated, cache.Replaced:
@@ -139,17 +137,11 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 					delta.Type, ObjectKey(delta.Object), err))
 		}
 
-		eng.Log().Info("@@@@@@@@@@@@@@@@@2")
-		eng.Log().Info(fmt.Sprintf("%#v", eng.baseViewStore[gvk].List()))
-
 		if err := eng.baseViewStore[gvk].Delete(old); err != nil {
 			return nil, NewAggregationError(a.String(),
 				fmt.Errorf("procesing event %q: could not delete object %s from store: %w",
 					delta.Type, ObjectKey(delta.Object), err))
 		}
-
-		eng.Log().Info(fmt.Sprintf("%#v", eng.baseViewStore[gvk].List()))
-		eng.Log().Info("@@@@@@@@@@@@@@@@@2")
 
 		ds = []cache.Delta{{Type: cache.Deleted, Object: o}}
 
