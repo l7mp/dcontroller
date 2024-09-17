@@ -110,7 +110,7 @@ func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, 
 		}
 
 		// Set up the watch
-		src, err := s.GetSource(mgr)
+		src, err := NewSource(mgr, s).GetSource()
 		if err != nil {
 			return nil, fmt.Errorf("controller: cannot create runtime source for resource %s: %w",
 				gvk.String(), err)
@@ -121,7 +121,7 @@ func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, 
 				gvk.String(), err)
 		}
 
-		c.log.V(2).Info("watching base resource", "source", s.String(mgr))
+		c.log.V(2).Info("watching resource", "GVK", s.String(mgr))
 
 		baseviews = append(baseviews, gvk)
 	}
@@ -184,9 +184,6 @@ func processRequest(ctx context.Context, c *Controller, req Request) error {
 		Object: obj,
 	}
 
-	fmt.Println("0000000000000000000000")
-	fmt.Println(util.Stringify(req))
-
 	// Process the delta through the pipeline
 	deltas, err := c.config.Pipeline.Evaluate(c.engine, delta)
 	if err != nil {
@@ -194,13 +191,10 @@ func processRequest(ctx context.Context, c *Controller, req Request) error {
 			req.GVK, client.ObjectKeyFromObject(obj), err)
 	}
 
-	fmt.Println("1111111111111111111111111")
-	fmt.Println(util.Stringify(deltas))
-
 	// Apply the resultant deltas
-	target := c.config.Target
+	target := NewTarget(c.manager, &c.config.Target)
 	for _, d := range deltas {
-		if err := target.Write(ctx, c.manager, d); err != nil {
+		if err := target.Write(ctx, d); err != nil {
 			return fmt.Errorf("controller: cannot update target %s for delta %s: %w",
 				req.GVK, d.String(), err)
 		}

@@ -2,7 +2,6 @@ package view
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -29,13 +28,15 @@ import (
 )
 
 const (
-	timeout  = time.Second * 1
-	interval = time.Millisecond * 50
+	timeout       = time.Second * 1
+	interval      = time.Millisecond * 50
+	retryInterval = time.Millisecond * 100
 )
 
 var (
 	loglevel = -10
-	logger   = zap.New(zap.UseFlagOptions(&zap.Options{
+	// loglevel = -4
+	logger = zap.New(zap.UseFlagOptions(&zap.Options{
 		Development:     true,
 		DestWriter:      GinkgoWriter,
 		StacktraceLevel: zapcore.Level(10),
@@ -53,10 +54,6 @@ var (
 		},
 	}
 )
-
-// func init() {
-// 	corev1.AddToScheme(scheme)
-// }
 
 func TestView(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -90,69 +87,70 @@ var _ = Describe("Controller", func() {
 		cancel()
 	})
 
-	It("should generate watch requests on the target view", func() {
-		jsonData := `
+	Describe("With self-referential Controllers", func() {
+		It("should generate watch requests on the target view", func() {
+			jsonData := `
 '@aggregate':
   - '@project':
       metadata:
         annotations:
           testannotation: $.testannotation`
-		var p pipeline.Pipeline
-		err := yaml.Unmarshal([]byte(jsonData), &p)
-		Expect(err).NotTo(HaveOccurred())
+			var p pipeline.Pipeline
+			err := yaml.Unmarshal([]byte(jsonData), &p)
+			Expect(err).NotTo(HaveOccurred())
 
-		config := Config{
-			Sources: []Source{{
-				Resource: Resource{
-					Kind: "view",
+			config := Config{
+				Sources: []Source{{
+					Resource: Resource{
+						Kind: "view",
+					},
+				}},
+				Pipeline: p,
+				Target: Target{
+					Resource: Resource{
+						Kind: "view",
+					},
+					Type: "Patcher",
 				},
-			}},
-			Pipeline: p,
-			Target: Target{
-				Resource: Resource{
-					Kind: "view",
+			}
+
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
+
+			// Create controller overriding the request processor
+			request := Request{}
+			c, err := New(mgr, config, Options{
+				Processor: func(_ context.Context, _ *Controller, req Request) error {
+					request = req
+					return nil
 				},
-				Type: "Patcher",
-			},
-		}
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.GetName()).To(Equal(config.Target.Resource.String(mgr)))
 
-		mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(mgr).NotTo(BeNil())
+			// push a view object via the view cache
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			Expect(vcache).NotTo(BeNil())
 
-		go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
+			err = vcache.Add(view)
+			Expect(err).NotTo(HaveOccurred())
 
-		// Create controller overriding the request processor
-		request := Request{}
-		c, err := New(mgr, config, Options{
-			Processor: func(_ context.Context, _ *Controller, req Request) error {
-				request = req
-				return nil
-			},
+			Eventually(func() bool {
+				return request != Request{}
+			}, timeout, retryInterval).Should(BeTrue())
+			Expect(request).To(Equal(Request{
+				GVK:       viewv1a1.NewGVK("view"),
+				Namespace: "default",
+				Name:      "viewname",
+				EventType: cache.Added,
+			}))
 		})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(c.GetName()).To(Equal(config.Target.Resource.String(mgr)))
 
-		// push a view object via the view cache
-		vcache := mgr.GetCompositeCache().GetViewCache()
-		Expect(vcache).NotTo(BeNil())
-
-		err = vcache.Add(view)
-		Expect(err).NotTo(HaveOccurred())
-
-		Eventually(func() bool {
-			return request != Request{}
-		}, timeout, interval).Should(BeTrue())
-		Expect(request).To(Equal(Request{
-			GVK:       viewv1a1.NewGVK("view"),
-			Namespace: "default",
-			Name:      "viewname",
-			EventType: cache.Added,
-		}))
-	})
-
-	FIt("should implement a basic controller on view objects", func() {
-		jsonData := `
+		It("should implement a basic controller on view objects", func() {
+			jsonData := `
 '@aggregate':
   - '@project':
       metadata:
@@ -160,178 +158,149 @@ var _ = Describe("Controller", func() {
         namespace: $.metadata.namespace
         annotations:
           testannotation: $.testannotation`
-		var p pipeline.Pipeline
-		err := yaml.Unmarshal([]byte(jsonData), &p)
-		Expect(err).NotTo(HaveOccurred())
+			var p pipeline.Pipeline
+			err := yaml.Unmarshal([]byte(jsonData), &p)
+			Expect(err).NotTo(HaveOccurred())
 
-		config := Config{
-			Sources: []Source{{
-				Resource: Resource{
-					Kind: "view",
+			config := Config{
+				Sources: []Source{{
+					Resource: Resource{
+						Kind: "view",
+					},
+				}},
+				Pipeline: p,
+				Target: Target{
+					Resource: Resource{
+						Kind: "view",
+					},
+					Type: "Patcher",
 				},
-			}},
-			Pipeline: p,
-			Target: Target{
-				Resource: Resource{
-					Kind: "view",
-				},
-				Type: "Patcher",
-			},
-		}
-
-		mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(mgr).NotTo(BeNil())
-
-		go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
-
-		// Create controller
-		c, err := New(mgr, config, Options{})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(c.GetName()).To(Equal(config.Target.Resource.String(mgr)))
-
-		// Obtain the viewcache
-		vcache := mgr.GetCompositeCache().GetViewCache()
-		Expect(vcache).NotTo(BeNil())
-
-		// Push a view object via the view cache
-		err = vcache.Add(view)
-		Expect(err).NotTo(HaveOccurred())
-
-		res := view.DeepCopy()
-		anns := res.GetAnnotations()
-		if anns == nil {
-			anns = map[string]string{}
-		}
-		anns["testannotation"] = "test-value"
-		res.SetAnnotations(anns)
-		Eventually(func() bool {
-			get := object.DeepCopy(view)
-			err := vcache.Get(ctx, client.ObjectKeyFromObject(view), get)
-			if err != nil {
-				return false
 			}
-			return object.DeepEqual(get, res)
-		}, timeout, interval).Should(BeTrue())
 
-		// Push a view object via the view cache
-		Expect(unstructured.SetNestedField(view.Object, "test-value-2", "testannotation")).NotTo(HaveOccurred())
-		err = vcache.Add(view)
-		Expect(err).NotTo(HaveOccurred())
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
 
-		// Create a viewcache watcher
-		watcher, err := vcache.Watch(ctx, object.NewViewObjectList("view"))
-		Expect(err).NotTo(HaveOccurred())
+			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
 
-		res = view.DeepCopy()
-		anns = res.GetAnnotations()
-		if anns == nil {
-			anns = map[string]string{}
-		}
-		anns["testannotation"] = "test-value-2"
-		res.SetAnnotations(anns)
+			// Create controller
+			c, err := New(mgr, config, Options{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.GetName()).To(Equal(config.Target.Resource.String(mgr)))
 
-		Eventually(func() bool {
-			event, ok := tryWatchWatcher(watcher, interval)
-			if !ok || event.Type != watch.Added {
-				return false
+			// Obtain the viewcache
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			Expect(vcache).NotTo(BeNil())
+
+			// Push a view object via the view cache
+			err = vcache.Add(view)
+			Expect(err).NotTo(HaveOccurred())
+
+			res := view.DeepCopy()
+			anns := res.GetAnnotations()
+			if anns == nil {
+				anns = map[string]string{}
 			}
-			fmt.Println("XXXXXXXXXXXXXXXXXXXX")
-			fmt.Println(object.Dump(event.Object.(object.Object)))
-			fmt.Println(object.Dump(res))
-			return object.DeepEqual(event.Object.(object.Object), res)
-		}, timeout, interval).Should(BeTrue())
+			anns["testannotation"] = "test-value"
+			res.SetAnnotations(anns)
+			get := object.New()
+			Eventually(func() bool {
+				get = object.DeepCopy(view)
+				err := vcache.Get(ctx, client.ObjectKeyFromObject(view), get)
+				if err != nil {
+					return false
+				}
+				return object.DeepEqual(get, res)
+			}, timeout, retryInterval).Should(BeTrue())
 
-		// Expect(err).NotTo(HaveOccurred())
-		// name := fmt.Sprintf("%s:view", viewv1a1.GroupVersion.String())
-		// Expect(c.GetName()).To(Equal(name))
+			// Push a view object via the view cache
+			Expect(unstructured.SetNestedField(view.Object, "test-value-2", "testannotation")).NotTo(HaveOccurred())
+			err = vcache.Update(get, view)
+			Expect(err).NotTo(HaveOccurred())
 
-		// watcher
+			// Create a viewcache watcher
+			watcher, err := vcache.Watch(ctx, object.NewViewObjectList("view"))
+			Expect(err).NotTo(HaveOccurred())
 
-		// tracker := mgr.GetObjectTracker()
-		// err = tracker.Add(pod)
-		// Expect(err).NotTo(HaveOccurred())
+			res = view.DeepCopy()
+			anns = res.GetAnnotations()
+			if anns == nil {
+				anns = map[string]string{}
+			}
+			anns["testannotation"] = "test-value-2"
+			res.SetAnnotations(anns)
 
-		// // this should induce an event on the pod itself
-		// gvr := schema.GroupVersionResource{
-		// 	Group:    "",
-		// 	Version:  "v1",
-		// 	Resource: "pods", // Resource does not equal Kind!
-		// }
-		// watcher, err := tracker.Watch(gvr, "testns")
-		// Expect(err).NotTo(HaveOccurred())
+			Eventually(func() bool {
+				event, ok := tryWatchWatcher(watcher, interval)
+				if !ok || event.Type != watch.Modified {
+					return false
+				}
 
-		// event, ok := tryWatchWatcher(watcher, interval)
-		// Expect(ok).To(BeTrue())
-		// Expect(event.Type).To(Equal(watch.Added))
-		// anns := event.Object.(object.Object).GetAnnotations()
-		// rv, ok := anns["recourceVersion"]
-		// Expect(ok).To(BeTrue())
-		// Expect(rv).To(Equal("999"))
-	})
+				return object.DeepEqual(event.Object.(object.Object), res)
+			}, timeout, retryInterval).Should(BeTrue())
+		})
 
-	It("should implement a basic controller on native objects", func() {
-		jsonData := `
-'@aggregate':
-  - '@project':
-      annotations:
-        - resourceVersion: $.metadata.resourceVersion`
-		var p pipeline.Pipeline
-		err := yaml.Unmarshal([]byte(jsonData), &p)
-		Expect(err).NotTo(HaveOccurred())
+		It("should implement a basic controller on native objects", func() {
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
 
-		group, version := "", "v1"
-		config := Config{
-			Sources: []Source{{
-				Resource: Resource{
-					Group:   &group,
-					Version: &version,
-					Kind:    "Pod",
-				},
-			}},
-			Pipeline: p,
-			Target: Target{
-				Resource: Resource{
-					Group:   &group,
-					Version: &version,
-					Kind:    "Pod",
-				},
-				Type: "Patcher",
-			},
-		}
+			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
 
-		mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(mgr).NotTo(BeNil())
+			yamlData := `
+sources:
+  - apiGroup: ""
+    kind: Pod
+pipeline:
+  '@aggregate':
+    - '@project':
+        "$.metadata.name": "$.metadata.namespace"
+        "$.metadata.namespace": "default"
+target:
+  apiGroup: ""
+  kind: Pod
+  type: Patcher`
 
-		go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
+			var config Config
+			err = yaml.Unmarshal([]byte(yamlData), &config)
+			Expect(err).NotTo(HaveOccurred())
 
-		c, err := New(mgr, config, Options{})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(c.GetName()).To(Equal("core/v1:Pod"))
+			c, err := New(mgr, config, Options{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.GetName()).To(Equal("core/v1:Pod"))
 
-		// push a pod via the tracker
-		tracker := mgr.GetObjectTracker()
-		err = tracker.Add(pod)
-		Expect(err).NotTo(HaveOccurred())
+			// push a pod via the fakeRuntimeCache.Add function (the tracker would not
+			// work since the split client takes all watches from the cache, not the
+			// tracker)
+			rcache := mgr.GetRuntimeCache()
+			err = rcache.Add(pod)
+			Expect(err).NotTo(HaveOccurred())
 
-		// this should induce an event on the pod itself
-		gvr := schema.GroupVersionResource{
-			Group:    "",
-			Version:  "v1",
-			Resource: "pods", // Resource does not equal Kind!
-		}
-		watcher, err := tracker.Watch(gvr, "testns")
-		Expect(err).NotTo(HaveOccurred())
+			// this should induce an event on the pod itself
+			gvr := schema.GroupVersionResource{
+				Group:    "",
+				Version:  "v1",
+				Resource: "pods", // Resource does not equal Kind!
+			}
 
-		event, ok := tryWatchWatcher(watcher, interval)
-		Expect(ok).To(BeTrue())
-		Expect(event.Type).To(Equal(watch.Added))
-		anns := event.Object.(object.Object).GetAnnotations()
-		rv, ok := anns["recourceVersion"]
-		Expect(ok).To(BeTrue())
-		Expect(rv).To(Equal("999"))
-
+			tracker := mgr.GetObjectTracker()
+			// get := object.New()
+			var get *corev1.Pod
+			Eventually(func() bool {
+				// namespace->name, "default"->namespace
+				g, err := tracker.Get(gvr, "default", "testns")
+				if err != nil {
+					return false
+				}
+				// for some strange reason we get a structured object back
+				ok := false
+				get, ok = g.(*corev1.Pod)
+				if !ok {
+					return false
+				}
+				return get.GetName() == "testns" && get.GetNamespace() == "default"
+			}, timeout, retryInterval).Should(BeTrue())
+		})
 	})
 })
 

@@ -12,8 +12,12 @@ import (
 type Object = *unstructured.Unstructured
 type ObjectList = *unstructured.UnstructuredList
 
+func New() Object {
+	return &unstructured.Unstructured{}
+}
+
 func NewViewObject(view string) Object {
-	obj := &unstructured.Unstructured{}
+	obj := New()
 	obj.SetUnstructuredContent(map[string]any{})
 	obj.SetGroupVersionKind(viewv1a1.NewGVK(view))
 	return obj

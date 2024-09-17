@@ -49,7 +49,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			return nil, NewExpressionError(e.Op, e.Raw, err)
 		}
 
-		ctx.log.V(4).Info("eval ready", "expression", e.String(), "result", v)
+		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", v)
 
 		return v, nil
 
@@ -69,7 +69,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			return nil, NewExpressionError(e.Op, e.Raw, err)
 		}
 
-		ctx.log.V(4).Info("eval ready", "expression", e.String(), "result", v)
+		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", v)
 
 		return v, nil
 
@@ -89,7 +89,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			return nil, NewExpressionError(e.Op, e.Raw, err)
 		}
 
-		ctx.log.V(4).Info("eval ready", "expression", e.String(), "result", v)
+		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", v)
 
 		return v, nil
 
@@ -114,7 +114,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			return nil, err
 		}
 
-		ctx.log.V(4).Info("eval ready", "expression", e.String(), "result", ret)
+		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
 
 		return ret, nil
 
@@ -154,7 +154,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		// WARNING: this will destroy multi-dimensional arrays
 		ret = unpackList(ret)
 
-		ctx.log.V(4).Info("eval ready", "expression", e.String(), "result", ret)
+		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
 
 		return ret, nil
 
@@ -201,7 +201,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			}
 		}
 
-		ctx.log.V(4).Info("eval ready", "expression", e.String(), "result", ret)
+		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
 
 		return ret, nil
 	}
@@ -254,7 +254,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				}
 			}
 
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "result", vs)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", vs)
 
 			return vs, nil
 
@@ -304,7 +304,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				}
 			}
 
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
 		case "@all": // @in: [exp, list]
@@ -353,7 +353,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				}
 			}
 
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
 		case "@none": // @in: [exp, list]
@@ -402,7 +402,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				}
 			}
 
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
 		case "@map":
@@ -435,7 +435,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				vs = append(vs, res)
 			}
 
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "result", vs)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", vs)
 
 			return vs, nil
 
@@ -487,12 +487,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		// unary bool
 		case "@isnil":
 			v := arg == nil
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
 			return v, nil
 
 		case "@exists":
 			v := arg != nil
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
 			return v, nil
 
 		case "@not":
@@ -502,7 +502,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			}
 
 			v := !arg
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
 			return v, nil
 
 		// binary bool
@@ -519,7 +519,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			}
 
 			v := reflect.DeepEqual(args[0], args[1])
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", args, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
 			return v, nil
 
 			// list bool
@@ -534,7 +534,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				v = v && args[i]
 			}
 
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", args, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
 
 			return v, nil
 
@@ -549,7 +549,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				v = v || args[i]
 			}
 
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", args, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
 
 			return v, nil
 
@@ -562,12 +562,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 			if kind == reflect.Int64 {
 				v := is[0] < is[1]
-				ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", is, "result", v)
+				ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", is, "result", v)
 				return v, nil
 			}
 
 			v := fs[0] < fs[1]
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
 			return v, nil
 
 		case "@lte":
@@ -578,12 +578,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 			if kind == reflect.Int64 {
 				v := is[0] <= is[1]
-				ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", is, "result", v)
+				ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", is, "result", v)
 				return v, nil
 			}
 
 			v := fs[0] <= fs[1]
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
 			return v, nil
 
 		case "@gt":
@@ -594,12 +594,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 			if kind == reflect.Int64 {
 				v := is[0] > is[1]
-				ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", is, "result", v)
+				ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", is, "result", v)
 				return v, nil
 			}
 
 			v := fs[0] > fs[1]
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
 			return v, nil
 
 		case "@gte":
@@ -610,12 +610,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 			if kind == reflect.Int64 {
 				v := is[0] >= is[1]
-				ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", is, "result", v)
+				ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", is, "result", v)
 				return v, nil
 			}
 
 			v := fs[0] >= fs[1]
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
 			return v, nil
 
 		case "@selector": // [selector, labels]
@@ -659,7 +659,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 						"evaluate to boolean: %w", err))
 			}
 
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
 			// unary arithmetic
@@ -670,7 +670,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			}
 
 			v := math.Abs(f)
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", f, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", f, "result", v)
 			return v, nil
 
 		case "@ceil":
@@ -680,7 +680,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			}
 
 			v := math.Ceil(f)
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", f, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", f, "result", v)
 			return v, nil
 
 		case "@floor":
@@ -690,7 +690,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			}
 
 			v := math.Floor(f)
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "args", f, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", f, "result", v)
 			return v, nil
 
 			// list ops
@@ -715,7 +715,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				v = vf
 			}
 
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "arg", arg, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", arg, "result", v)
 			return v, nil
 
 		case "@len":
@@ -726,7 +726,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			}
 
 			v := int64(len(args))
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
 		case "@in": // @in: [elem, list]
@@ -755,7 +755,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				}
 			}
 
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
 		case "@concat":
@@ -769,7 +769,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				v += args[i]
 			}
 
-			ctx.log.V(4).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 
 			return v, nil
 

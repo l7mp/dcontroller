@@ -2,7 +2,6 @@ package view
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -13,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
+	runtimeCtrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -90,14 +89,14 @@ var _ = Describe("Reconciler", func() {
 
 			// Create controller
 			on := true
-			c, err := controller.NewTyped("test-controller", mgr, controller.TypedOptions[Request]{
+			c, err := runtimeCtrl.NewTyped("test-controller", mgr, runtimeCtrl.TypedOptions[Request]{
 				SkipNameValidation: &on,
 				Reconciler:         &TestReconciler{},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a source
-			src, err := s.GetSource(mgr)
+			src, err := NewSource(mgr, &s).GetSource()
 			Expect(err).NotTo(HaveOccurred())
 
 			// Watch the source
@@ -222,16 +221,16 @@ var _ = Describe("Reconciler", func() {
 			vcache := mgr.GetCompositeCache().GetViewCache()
 			Expect(vcache).NotTo(BeNil())
 
-			// Create controller
+			// Create runtime controller
 			on := true
-			c, err := controller.NewTyped("test-controller", mgr, controller.TypedOptions[Request]{
+			c, err := runtimeCtrl.NewTyped("test-controller", mgr, runtimeCtrl.TypedOptions[Request]{
 				SkipNameValidation: &on,
 				Reconciler:         &TestReconciler{},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a source
-			src, err := s.GetSource(mgr)
+			src, err := NewSource(mgr, &s).GetSource()
 			Expect(err).NotTo(HaveOccurred())
 
 			// Watch the source
@@ -265,14 +264,14 @@ var _ = Describe("Reconciler", func() {
 			Expect(mgr).NotTo(BeNil())
 
 			// Register source
-			target := Target{Resource: Resource{Kind: "view"}}
+			target := NewTarget(mgr, &Target{Resource: Resource{Kind: "view"}})
 
 			// Start the manager
 			// go mgr.Start(ctx) // will stop with a context cancelled erro
 			go func() { mgr.Start(ctx) }() // will stop with a context cancelled erro
 
 			// Push a view object to the target
-			err = target.Write(ctx, mgr, cache.Delta{Type: cache.Added, Object: view})
+			err = target.Write(ctx, cache.Delta{Type: cache.Added, Object: view})
 			Expect(err).NotTo(HaveOccurred())
 
 			// Get view cache
@@ -291,12 +290,12 @@ var _ = Describe("Reconciler", func() {
 			view2 := object.DeepCopy(view)
 			object.SetContent(view2, map[string]any{"b": int64(2)})
 
-			err = target.Write(ctx, mgr, cache.Delta{Type: cache.Updated, Object: view2})
+			err = target.Write(ctx, cache.Delta{Type: cache.Updated, Object: view2})
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok = tryWatchWatcher(watcher, interval)
 			Expect(ok).To(BeTrue())
-			Expect(event.Type).To(Equal(watch.EventType("MODIFIED")))
+			Expect(event.Type).To(Equal(watch.Modified))
 			res := view.DeepCopy()
 			// Updater rewrites, not patches!
 			// object.SetContent(view2, map[string]any{"a": int64(1), "b": int64(2)})
@@ -304,7 +303,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(object.DeepEqual(res, event.Object.(object.Object))).To(BeTrue())
 
 			// Push a delete to the target
-			err = target.Write(ctx, mgr, cache.Delta{Type: cache.Deleted, Object: view2})
+			err = target.Write(ctx, cache.Delta{Type: cache.Deleted, Object: view2})
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok = tryWatchWatcher(watcher, interval)
@@ -324,14 +323,14 @@ var _ = Describe("Reconciler", func() {
 
 			// Register target
 			group, version := "", "v1"
-			target := Target{Resource: Resource{
+			target := NewTarget(mgr, &Target{Resource: Resource{
 				Group:   &group,
 				Version: &version,
 				Kind:    "Pod",
-			}}
+			}})
 
 			// Push a view object to the target
-			err = target.Write(ctx, mgr, cache.Delta{Type: cache.Added, Object: pod2})
+			err = target.Write(ctx, cache.Delta{Type: cache.Added, Object: pod2})
 			Expect(err).NotTo(HaveOccurred())
 
 			// Get from the object tracker: a normal get would go through the cache
@@ -373,7 +372,7 @@ var _ = Describe("Reconciler", func() {
 			newPod := object.DeepCopy(pod2)
 			unstructured.RemoveNestedField(newPod.UnstructuredContent(), "spec", "containers")
 			unstructured.SetNestedField(newPod.UnstructuredContent(), "Always", "spec", "restartPolicy")
-			err = target.Write(ctx, mgr, cache.Delta{Type: cache.Updated, Object: newPod})
+			err = target.Write(ctx, cache.Delta{Type: cache.Updated, Object: newPod})
 			Expect(err).NotTo(HaveOccurred())
 
 			getFromTracker, err = tracker.Get(gvr, "testns", "testpod")
@@ -398,7 +397,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(p.Spec.RestartPolicy).To(Equal(corev1.RestartPolicy("Always")))
 
 			// Delete from the target
-			err = target.Write(ctx, mgr, cache.Delta{Type: cache.Deleted, Object: newPod})
+			err = target.Write(ctx, cache.Delta{Type: cache.Deleted, Object: newPod})
 			Expect(err).NotTo(HaveOccurred())
 			getFromTracker, err = tracker.Get(gvr, "testns", "testpod")
 			Expect(err).To(HaveOccurred())
@@ -411,7 +410,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(mgr).NotTo(BeNil())
 
 			// Register source
-			target := Target{Resource: Resource{Kind: "view"}, Type: "Patcher"}
+			target := NewTarget(mgr, &Target{Resource: Resource{Kind: "view"}, Type: "Patcher"})
 
 			// Start the manager
 			// go mgr.Start(ctx) // will stop with a context cancelled erro
@@ -437,12 +436,12 @@ var _ = Describe("Reconciler", func() {
 			view2 := object.DeepCopy(view)
 			object.SetContent(view2, map[string]any{"b": int64(2)})
 
-			err = target.Write(ctx, mgr, cache.Delta{Type: cache.Updated, Object: view2})
+			err = target.Write(ctx, cache.Delta{Type: cache.Updated, Object: view2})
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok = tryWatchWatcher(watcher, interval)
 			Expect(ok).To(BeTrue())
-			Expect(event.Type).To(Equal(watch.EventType("MODIFIED")))
+			Expect(event.Type).To(Equal(watch.Modified))
 			res := view.DeepCopy()
 			// Updater patches!
 			object.SetContent(res, map[string]any{"a": int64(1), "b": int64(2)})
@@ -452,12 +451,12 @@ var _ = Describe("Reconciler", func() {
 			// Push a delete to the target
 			view2 = object.DeepCopy(view)
 			object.SetContent(view2, map[string]any{"a": int64(1)})
-			err = target.Write(ctx, mgr, cache.Delta{Type: cache.Deleted, Object: view2})
+			err = target.Write(ctx, cache.Delta{Type: cache.Deleted, Object: view2})
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok = tryWatchWatcher(watcher, interval)
 			Expect(ok).To(BeTrue())
-			Expect(event.Type).To(Equal(watch.EventType("MODIFIED")))
+			Expect(event.Type).To(Equal(watch.Modified))
 			res = view.DeepCopy()
 			object.SetName(res, "default", "viewname")
 			object.SetContent(res, map[string]any{"b": int64(2)})
@@ -476,11 +475,14 @@ var _ = Describe("Reconciler", func() {
 
 			// Register target
 			group, version := "", "v1"
-			target := Target{Resource: Resource{
-				Group:   &group,
-				Version: &version,
-				Kind:    "Pod",
-			}, Type: "Patcher"}
+			target := NewTarget(mgr, &Target{
+				Resource: Resource{
+					Group:   &group,
+					Version: &version,
+					Kind:    "Pod",
+				},
+				Type: "Patcher",
+			})
 
 			// Object should already be registered in the runtime cache client
 			c := mgr.GetClient()
@@ -492,7 +494,7 @@ var _ = Describe("Reconciler", func() {
 			newPod := object.DeepCopy(pod2)
 			unstructured.RemoveNestedField(newPod.UnstructuredContent(), "spec", "containers")
 			unstructured.SetNestedField(newPod.UnstructuredContent(), "Always", "spec", "restartPolicy")
-			err = target.Write(ctx, mgr, cache.Delta{Type: cache.Updated, Object: newPod})
+			err = target.Write(ctx, cache.Delta{Type: cache.Updated, Object: newPod})
 			Expect(err).NotTo(HaveOccurred())
 
 			tracker := mgr.GetObjectTracker()
@@ -528,8 +530,7 @@ var _ = Describe("Reconciler", func() {
 			// Delete patch to the target
 			newPod = object.DeepCopy(pod2)
 			unstructured.SetNestedField(newPod.UnstructuredContent(), nil, "spec", "restartPolicy")
-			fmt.Println(newPod)
-			err = target.Write(ctx, mgr, cache.Delta{Type: cache.Deleted, Object: newPod})
+			err = target.Write(ctx, cache.Delta{Type: cache.Deleted, Object: newPod})
 			Expect(err).NotTo(HaveOccurred())
 			getFromTracker, err = tracker.Get(gvr, "testns", "testpod")
 			Expect(err).NotTo(HaveOccurred())

@@ -56,11 +56,24 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 	// find out whether an upsert is an update/replace or an add
 	delta = eng.handleUpsertEvent(delta)
 
+	ds, err := eng.evaluateAggregation(a, delta)
+	if err != nil {
+		return nil, err
+	}
+
+	eng.log.V(2).Info("aggregation: ready", "event-type", delta.Type, "result", util.Stringify(ds))
+
+	return ds, nil
+}
+
+func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta) ([]cache.Delta, error) {
+	gvk := delta.Object.GetObjectKind().GroupVersionKind()
+
 	// update local view cache
 	var ds []cache.Delta
 	switch delta.Type {
 	case cache.Added:
-		eng.log.V(1).Info("aggregation: add using new object", "object", delta.Object)
+		eng.log.V(6).Info("aggregation: add using new object", "object", delta.Object)
 
 		o, err := eng.evalAggregation(a, object.DeepCopy(delta.Object))
 		if err != nil {
@@ -78,10 +91,10 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 		ds = []cache.Delta{{Type: cache.Added, Object: o}}
 
 	case cache.Updated, cache.Replaced:
-		eng.log.V(1).Info("aggregate: replacing event with a Delete followed by an Add",
+		eng.log.V(6).Info("aggregate: replacing event with a Delete followed by an Add",
 			"event-type", delta.Type, "object", delta.Object)
 
-		delDeltas, err := eng.EvaluateAggregation(a, cache.Delta{Type: cache.Deleted, Object: delta.Object})
+		delDeltas, err := eng.evaluateAggregation(a, cache.Delta{Type: cache.Deleted, Object: delta.Object})
 		if err != nil {
 			return nil, NewAggregationError(a.String(), err)
 		}
@@ -90,7 +103,7 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 			delDelta = delDeltas[0]
 		}
 
-		addDeltas, err := eng.EvaluateAggregation(a, cache.Delta{Type: cache.Added, Object: delta.Object})
+		addDeltas, err := eng.evaluateAggregation(a, cache.Delta{Type: cache.Added, Object: delta.Object})
 		if err != nil {
 			return nil, NewAggregationError(a.String(), err)
 		}
@@ -123,12 +136,12 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 			return nil, NewAggregationError(a.String(), err)
 		}
 		if !ok {
-			eng.log.V(1).Info("aggregation: ignoring delete event for an unknown object",
+			eng.log.V(4).Info("aggregation: ignoring delete event for an unknown object",
 				"event-type", delta.Type, "object", ObjectKey(delta.Object))
 			return nil, nil
 		}
 
-		eng.log.V(1).Info("aggregation: delete using existing object", "object", old)
+		eng.log.V(6).Info("aggregation: delete using existing object", "object", old)
 
 		o, err := eng.evalAggregation(a, object.DeepCopy(old))
 		if err != nil {
@@ -146,12 +159,10 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 		ds = []cache.Delta{{Type: cache.Deleted, Object: o}}
 
 	default:
-		eng.log.V(1).Info("aggregate: ignoring event", "event-type", delta.Type)
+		eng.log.V(4).Info("aggregate: ignoring event", "event-type", delta.Type)
 
 		return []cache.Delta{}, nil
 	}
-
-	eng.log.V(1).Info("aggregation: ready", "event-type", delta.Type, "result", util.Stringify(ds))
 
 	return ds, nil
 }
@@ -243,7 +254,7 @@ func (eng *defaultEngine) EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 }
 
 func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error) {
-	eng.log.V(1).Info("join: processing event", "event-type", delta.Type, "object", ObjectKey(delta.Object))
+	eng.log.V(2).Info("join: processing event", "event-type", delta.Type, "object", ObjectKey(delta.Object))
 
 	gvk := delta.Object.GetObjectKind().GroupVersionKind()
 	eng.initViewStore(gvk)
@@ -272,7 +283,7 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 		}
 
 	case cache.Updated, cache.Replaced:
-		eng.log.V(1).Info("join: replacing event with a Delete followed by an Add",
+		eng.log.V(2).Info("join: replacing event with a Delete followed by an Add",
 			"event-type", delta.Type, "object", delta.Object)
 
 		delDeltas, err := eng.evaluateJoin(j, cache.Delta{Type: cache.Deleted, Object: delta.Object})
@@ -297,12 +308,12 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 			return nil, NewJoinError(j.String(), err)
 		}
 		if !ok {
-			eng.log.V(1).Info("join: ignoring delete event for an unknown object",
+			eng.log.V(4).Info("join: ignoring delete event for an unknown object",
 				"event-type", delta.Type, "object", ObjectKey(delta.Object))
 			return []cache.Delta{}, nil
 		}
 
-		eng.log.V(1).Info("join: delete using existing object", "object", old)
+		eng.log.V(4).Info("join: delete using existing object", "object", old)
 
 		os, err := eng.evalJoin(j, old)
 		if err != nil {
@@ -322,12 +333,12 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 		}
 
 	default:
-		eng.log.V(1).Info("join: ignoring event", "event-type", delta.Type)
+		eng.log.V(4).Info("join: ignoring event", "event-type", delta.Type)
 
 		return []cache.Delta{}, nil
 	}
 
-	eng.log.V(1).Info("join: ready", "event-type", delta.Type, "result", util.Stringify(ds))
+	eng.log.V(2).Info("join: ready", "event-type", delta.Type, "result", util.Stringify(ds))
 
 	return ds, nil
 }

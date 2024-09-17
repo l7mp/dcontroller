@@ -169,6 +169,8 @@ func (f *FakeRuntimeManager) Start(ctx context.Context) error {
 	copy(runnables, f.runnables)
 	f.startedMutex.Unlock()
 
+	f.log.V(4).Info("starting fake runtime manager")
+
 	for _, runnable := range runnables {
 		name := "<unknown>"
 		if r, ok := runnable.(Runnable); ok {

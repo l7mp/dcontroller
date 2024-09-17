@@ -186,8 +186,6 @@ func (c *ViewCache) Add(obj object.Object) error {
 func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 	gvk := newObj.GetObjectKind().GroupVersionKind()
 
-	c.log.V(4).Info("YYYYYYYYYYYYYYYYYYYYYYYYY", "oldObj", object.Dump(oldObj), "newObj", object.Dump(newObj))
-
 	if object.DeepEqual(oldObj, newObj) {
 		c.log.V(4).Info("update: suppressing object update", "gvk", gvk,
 			"key", client.ObjectKeyFromObject(newObj).String())
@@ -222,7 +220,7 @@ func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 func (c *ViewCache) Delete(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	c.log.V(2).Info("delete: removing object", "gvk", gvk, "key",
+	c.log.V(2).Info("delete: removing object", "gvk", gvk,
 		"key", client.ObjectKeyFromObject(obj).String(),
 		"object", object.Dump(obj))
 
@@ -398,6 +396,9 @@ func (w *ViewCacheWatcher) sendEvent(eventType watch.EventType, o any) {
 	}
 
 	event := watch.Event{Type: eventType, Object: obj}
+
+	w.logger.V(8).Info("watcher sending object", "object", object.Dump(obj))
+
 	select {
 	case w.eventChan <- event:
 	case <-time.After(time.Second):

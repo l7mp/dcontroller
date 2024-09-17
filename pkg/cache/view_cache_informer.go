@@ -101,7 +101,8 @@ func (c *ViewCacheInformer) TriggerEvent(eventType toolscache.DeltaType, oldObj,
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	c.log.V(4).Info("triggering event", "event", eventType, "object", object.Dump(newObj))
+	c.log.V(8).Info("triggering event", "event", eventType, "object", object.Dump(newObj),
+		"isInitial", isInitialList)
 
 	if c.transform != nil {
 		newObj = object.DeepCopy(newObj)

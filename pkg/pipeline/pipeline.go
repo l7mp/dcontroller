@@ -38,7 +38,7 @@ func (p *Pipeline) Evaluate(eng Engine, delta cache.Delta) ([]cache.Delta, error
 		deltas = []cache.Delta{delta}
 	}
 
-	// process the aggregation on each of the deltas
+	// process the aggregation on each delta
 	res := []cache.Delta{}
 	if p.Aggregation != nil {
 		for _, d := range deltas {

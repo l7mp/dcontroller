@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -14,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/source"
+	runtimeSource "sigs.k8s.io/controller-runtime/pkg/source"
 
 	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
 	"hsnlab/dcontroller-runtime/pkg/cache"
@@ -23,8 +24,8 @@ import (
 )
 
 type Resource struct {
-	Group   *string `json:"apiGroup"`
-	Version *string `json:"version"`
+	Group   *string `json:"apiGroup,omitempty"`
+	Version *string `json:"version,omitempty"`
 	Kind    string  `json:"kind"`
 }
 
@@ -84,9 +85,27 @@ type Source struct {
 	Predicate     *Predicate            `json:"predicate"`
 }
 
-func (s *Source) GetSource(mgr runtimeManager.Manager) (source.TypedSource[Request], error) {
+type source struct {
+	*Source
+	manager runtimeManager.Manager
+	log     logr.Logger
+}
+
+func NewSource(mgr runtimeManager.Manager, s *Source) *source {
+	src := &source{
+		manager: mgr,
+		Source:  s,
+	}
+
+	log := mgr.GetLogger().WithName("source").WithValues("name", s.Resource.String(mgr))
+	src.log = log
+
+	return src
+}
+
+func (s *source) GetSource() (runtimeSource.TypedSource[Request], error) {
 	// gvk to watch
-	gvk, err := s.GetGVK(mgr)
+	gvk, err := s.GetGVK(s.manager)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +139,7 @@ func (s *Source) GetSource(mgr runtimeManager.Manager) (source.TypedSource[Reque
 	}
 
 	// generic handler
-	src := source.TypedKind(mgr.GetCache(), obj, EventHandler[client.Object]{}, ps...)
+	src := runtimeSource.TypedKind(s.manager.GetCache(), obj, EventHandler[client.Object]{}, ps...)
 
 	return src, nil
 }
@@ -137,18 +156,36 @@ type Target struct {
 	Type TargetType `json:"target,omitempty"`
 }
 
+type target struct {
+	*Target
+	manager runtimeManager.Manager
+	log     logr.Logger
+}
+
+func NewTarget(mgr runtimeManager.Manager, t *Target) *target {
+	target := &target{
+		manager: mgr,
+		Target:  t,
+	}
+
+	log := mgr.GetLogger().WithName("target").WithValues("name", t.Resource.String(mgr))
+	target.log = log
+
+	return target
+}
+
 // Write enforces a delta on a target. The behavior depends on the target type:
 //   - For Updaters the delta is enforced as is to the target
 //   - For Patchers the delta object is applied as a strategic merge patch: for Add and Update
 //     deltas the target is patched with the delta object, while for Delete the delta object
 //     content is removed from the target using a strategic merge patch.
-func (t *Target) Write(ctx context.Context, mgr runtimeManager.Manager, delta cache.Delta) error {
+func (t *target) Write(ctx context.Context, delta cache.Delta) error {
 	if delta.Object == nil {
 		return errors.New("write: empty object in delta")
 	}
 
 	// gvk to watch
-	gvk, err := t.GetGVK(mgr)
+	gvk, err := t.GetGVK(t.manager)
 	if err != nil {
 		return err
 	}
@@ -158,43 +195,41 @@ func (t *Target) Write(ctx context.Context, mgr runtimeManager.Manager, delta ca
 
 	switch t.Type {
 	case "Updater", "":
-		return t.update(ctx, mgr, delta)
+		return t.update(ctx, delta)
 	case "Patcher":
-		return t.patch(ctx, mgr, delta)
+		return t.patch(ctx, delta)
 	default:
 		return fmt.Errorf("unknown target type: %s", t.Type)
 	}
 }
 
-func (t *Target) update(ctx context.Context, mgr runtimeManager.Manager, delta cache.Delta) error {
-	c := mgr.GetClient()
-	log := mgr.GetLogger().WithName("target-updater")
+func (t *target) update(ctx context.Context, delta cache.Delta) error {
+	c := t.manager.GetClient()
 
 	switch delta.Type {
 	case cache.Added:
-		log.V(4).Info("create", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
+		t.log.V(4).Info("create", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
 		return c.Create(ctx, delta.Object)
 	case cache.Updated, cache.Replaced:
-		log.Info("update", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
+		t.log.Info("update", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
 		return c.Update(ctx, delta.Object)
 	case cache.Deleted:
-		log.V(4).Info("delete", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
+		t.log.V(4).Info("delete", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
 		return c.Delete(ctx, delta.Object)
 	default:
-		log.V(2).Info("target: ignoring delta", "type", delta.Type)
+		t.log.V(2).Info("target: ignoring delta", "type", delta.Type)
 		return nil
 	}
 }
 
-func (t *Target) patch(ctx context.Context, mgr runtimeManager.Manager, delta cache.Delta) error {
-	c := mgr.GetClient()
-	log := mgr.GetLogger().WithName("target-patcher")
+func (t *target) patch(ctx context.Context, delta cache.Delta) error {
+	c := t.manager.GetClient()
 
 	switch delta.Type {
 	case cache.Added, cache.Updated, cache.Replaced:
-		log.V(4).Info("update-patch", "event-type", delta.Type,
+		t.log.V(4).Info("update-patch", "event-type", delta.Type,
 			"key", client.ObjectKeyFromObject(delta.Object).String(),
-			"object", object.Dump(delta.Object))
+			"patch", object.Dump(delta.Object))
 		patch, err := json.Marshal(delta.Object.UnstructuredContent())
 		if err != nil {
 			return err
@@ -217,11 +252,15 @@ func (t *Target) patch(ctx context.Context, mgr runtimeManager.Manager, delta ca
 		if err != nil {
 			return err
 		}
-		log.V(4).Info("delete-patch", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object),
+
+		t.log.V(4).Info("delete-patch", "event-type", delta.Type,
+			"object", client.ObjectKeyFromObject(delta.Object),
 			"patch", util.Stringify(patch), "raw-patch", string(b))
+
 		return c.Patch(context.Background(), delta.Object, client.RawPatch(types.StrategicMergePatchType, b))
 	default:
-		log.V(2).Info("target: ignoring delta", "type", delta.Type)
+		t.log.V(2).Info("target: ignoring delta", "type", delta.Type)
+
 		return nil
 
 	}
