@@ -101,9 +101,11 @@ func (cc *CompositeCache) RemoveInformer(ctx context.Context, obj client.Object)
 
 func (cc *CompositeCache) Start(ctx context.Context) error {
 	cc.log.V(1).Info("starting")
-	if err := cc.viewCache.Start(ctx); err != nil {
-		return err
-	}
+
+	// we must run this in a goroutine, otherwise the default cache cannot start up
+	// ignore the returned error: viewcache.Start() never errs
+	go cc.viewCache.Start(ctx)
+
 	return cc.defaultCache.Start(ctx)
 }
 

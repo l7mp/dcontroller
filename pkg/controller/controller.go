@@ -1,4 +1,4 @@
-package view
+package controller
 
 import (
 	"context"
@@ -60,7 +60,17 @@ func New(name string, mgr runtimeManager.Manager, config Config, opts Options) (
 	if opts.Processor != nil {
 		processor = opts.Processor
 	}
+
 	// sanity check
+	if len(config.Sources) == 0 {
+		return nil, errors.New("no source")
+	}
+
+	emptyTarget := Target{}
+	if config.Target == emptyTarget {
+		return nil, errors.New("no target")
+	}
+
 	if len(config.Sources) > 1 && config.Pipeline.Join == nil {
 		return nil, errors.New("controllers defined on multiple base resources must specify a Join in the pipeline")
 	}
@@ -144,29 +154,26 @@ func (c *Controller) GetName() string { return c.name }
 // GetWatcher returns the channel that multiplexes the requests coming from the base resources.
 func (c *Controller) GetWatcher() chan Request { return c.watcher }
 
+// Start starts running the controller. The Start function blocks until the context is closed or an
+// error occurs, and it will stop running when the context is closed.
 func (c *Controller) Start(ctx context.Context) error {
 	c.log.Info("starting")
 
-	// set up the watcher
-	go func() {
-		defer close(c.watcher)
-		for {
-			select {
-			case req := <-c.watcher:
-				c.log.V(2).Info("processing request", "request", util.Stringify(req))
+	defer close(c.watcher)
+	for {
+		select {
+		case req := <-c.watcher:
+			c.log.V(2).Info("processing request", "request", util.Stringify(req))
 
-				if err := c.processor(ctx, c, req); err != nil {
-					c.log.Info("error processing watch event", "request", req,
-						"error", err.Error())
-				}
-			case <-ctx.Done():
-				c.log.V(2).Info("controller terminating")
-				return
+			if err := c.processor(ctx, c, req); err != nil {
+				c.log.Info("error processing watch event", "request", req,
+					"error", err.Error())
 			}
+		case <-ctx.Done():
+			c.log.V(2).Info("controller terminating")
+			return nil
 		}
-	}()
-
-	return nil
+	}
 }
 
 func processRequest(ctx context.Context, c *Controller, req Request) error {

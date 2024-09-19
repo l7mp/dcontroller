@@ -3,8 +3,10 @@ package manager
 import (
 	"errors"
 
+	"github.com/go-logr/logr"
 	"k8s.io/client-go/rest"
 	ctrlCache "sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"hsnlab/dcontroller-runtime/pkg/cache"
@@ -24,12 +26,15 @@ type Options struct {
 // cache.
 type Manager struct {
 	manager.Manager
-	// views map[string]view.View
-	// triggers map[string]trigger.Trigger
 }
 
 // New creates a new manager
 func New(config *rest.Config, options Options) (*Manager, error) {
+	logger := options.Options.Logger
+	if logger.GetSink() == nil {
+		logger = logr.Discard()
+	}
+
 	mgr := options.Manager
 	if options.Manager == nil {
 		// override the cache created by the base manager with the composite cache
@@ -37,7 +42,7 @@ func New(config *rest.Config, options Options) (*Manager, error) {
 			options.NewCache = func(config *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
 				return cache.NewCompositeCache(config, cache.Options{
 					Options: opts,
-					Logger:  options.Logger,
+					Logger:  logger,
 				})
 			}
 		}
@@ -46,7 +51,11 @@ func New(config *rest.Config, options Options) (*Manager, error) {
 		if options.NewClient == nil {
 			// make sure unstructured objects are served through the cache (the default
 			// is to obtain them directly from the API server)
-			options.Client.Cache.Unstructured = true
+			options.Client = client.Options{
+				Cache: &client.CacheOptions{
+					Unstructured: true,
+				},
+			}
 			// this, apparently, only affects the Writer of the split client!
 			options.NewClient = NewCompositeClient
 		}
@@ -57,19 +66,15 @@ func New(config *rest.Config, options Options) (*Manager, error) {
 		}
 		mgr = m
 
-		if options.NewClient == nil {
-			c, ok := mgr.GetClient().(*compositeClient)
-			if !ok {
-				return nil, errors.New("cache must be a composite client")
-			}
-			c.setCache(mgr.GetCache())
+		// pass the composite cache in to the client
+		c, ok := mgr.GetClient().(*compositeClient)
+		if !ok {
+			return nil, errors.New("cache must be a composite client")
 		}
+		c.setCache(mgr.GetCache())
 	}
 
-	return &Manager{
-		Manager: mgr,
-		// views:   map[string]view.View{},
-	}, nil
+	return &Manager{Manager: mgr}, nil
 }
 
 // // GetCache returns the view cache. Use manager.Manager.GetCache() to obtain the cache of the

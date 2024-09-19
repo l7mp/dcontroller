@@ -1,4 +1,4 @@
-package view
+package controller
 
 import (
 	"context"
@@ -355,6 +355,78 @@ target:
 				return get.GetName() == "testns" && get.GetNamespace() == "default"
 			}, timeout, retryInterval).Should(BeTrue())
 		})
+
+		It("should reject a controller with no sources", func() {
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
+
+			yamlData := `
+pipeline:
+  '@aggregate':
+    - '@project':
+        "$.metadata": "$.metadata"
+target:
+  apiGroup: ""
+  kind: Pod
+  type: Patcher`
+
+			var config Config
+			err = yaml.Unmarshal([]byte(yamlData), &config)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = New("test", mgr, config, Options{})
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should reject a controller with no target", func() {
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
+
+			yamlData := `
+sources:
+  - apiGroup: ""
+    kind: Pod
+pipeline:
+  '@aggregate':
+    - '@project':
+        "$.metadata": "$.metadata"`
+
+			var config Config
+			err = yaml.Unmarshal([]byte(yamlData), &config)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = New("test", mgr, config, Options{})
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should reject a controller with an invalid pipeline", func() {
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
+
+			yamlData := `
+sources:
+  - apiGroup: ""
+    kind: Pod
+pipeline:
+  '@aggregate': "AAAAAAAAAAAAAAAAAA"
+target:
+  apiGroup: ""
+  kind: Pod
+  type: Patcher`
+
+			var config Config
+			err = yaml.Unmarshal([]byte(yamlData), &config)
+			Expect(err).To(HaveOccurred())
+		})
 	})
 
 	Describe("With complex Controllers", func() {
@@ -592,7 +664,7 @@ target:
 			}))
 		})
 
-		FIt("should implement 2 controller chain with complex pipelines", func() {
+		It("should implement 2 controller chain with complex pipelines", func() {
 			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())

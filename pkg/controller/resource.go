@@ -1,4 +1,4 @@
-package view
+package controller
 
 import (
 	// corev1 "k8s.io/api/core/v1"
@@ -43,6 +43,10 @@ func (r *Resource) String(mgr runtimeManager.Manager) string {
 }
 
 func (r *Resource) GetGVK(mgr runtimeManager.Manager) (schema.GroupVersionKind, error) {
+	if r.Kind == "" {
+		return schema.GroupVersionKind{}, fmt.Errorf("empty Kind in %s", util.Stringify(*r))
+	}
+
 	if r.Group == nil || *r.Group == viewv1a1.GroupVersion.Group {
 		// this will be a View, version is enforced
 		return GetGVKByGroupKind(mgr, schema.GroupKind{Group: viewv1a1.GroupVersion.Group, Kind: r.Kind})
@@ -80,9 +84,9 @@ func GetGVKByGroupKind(m runtimeManager.Manager, gr schema.GroupKind) (schema.Gr
 
 type Source struct {
 	Resource
-	Namespace     *string               `json:"namespace"`
-	LabelSelector *metav1.LabelSelector `json:"labelSelector"`
-	Predicate     *Predicate            `json:"predicate"`
+	Namespace     *string               `json:"namespace,omitempty"`
+	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
+	Predicate     *Predicate            `json:"predicate,omitempty"`
 }
 
 type source struct {
@@ -143,6 +147,8 @@ func (s *source) GetSource() (runtimeSource.TypedSource[Request], error) {
 	// generic handler
 	src := runtimeSource.TypedKind(s.manager.GetCache(), obj, EventHandler[client.Object]{}, ps...)
 
+	s.log.V(4).Info("watch source: ready", "GVK", gvk.String(), "predicate-num", len(ps))
+
 	return src, nil
 }
 
@@ -155,7 +161,7 @@ const (
 
 type Target struct {
 	Resource
-	Type TargetType `json:"target,omitempty"`
+	Type TargetType `json:"type,omitempty"`
 }
 
 type target struct {
@@ -176,7 +182,9 @@ func NewTarget(mgr runtimeManager.Manager, t *Target) *target {
 	return target
 }
 
-func (t *target) String() string { return t.Resource.String(t.manager) }
+func (t *target) String() string {
+	return fmt.Sprintf("%s<type:%s>", t.Resource.String(t.manager), t.Type)
+}
 
 // Write enforces a delta on a target. The behavior depends on the target type:
 //   - For Updaters the delta is enforced as is to the target

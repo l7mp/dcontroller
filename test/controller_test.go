@@ -1,0 +1,154 @@
+package integration
+
+import (
+	"context"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlmanager "sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/yaml"
+
+	// viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
+
+	"hsnlab/dcontroller-runtime/pkg/controller"
+	"hsnlab/dcontroller-runtime/pkg/manager"
+	"hsnlab/dcontroller-runtime/pkg/object"
+)
+
+var _ = Describe("Integration test:", Ordered, func() {
+	// write ClusterIP into an annotation for services running in the default namespace
+	Context("When applying a self-referencial controller", Ordered, Label("managed"), func() {
+		const annotationName = "cluster-ip"
+		var (
+			ctrlCtx    context.Context
+			ctrlCancel context.CancelFunc
+			svc        object.Object
+			gvk        schema.GroupVersionKind
+			mgr        *manager.Manager
+		)
+
+		BeforeAll(func() {
+			ctrlCtx, ctrlCancel = context.WithCancel(context.Background())
+			svc = &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "v1",
+					"kind":       "Service",
+					"metadata": map[string]interface{}{
+						"name":      "service",
+						"namespace": "default",
+					},
+					"spec": map[string]interface{}{
+						"selector": map[string]interface{}{
+							"app": "example",
+						},
+						"ports": []interface{}{
+							map[string]interface{}{
+								"protocol":   "TCP",
+								"port":       80,
+								"targetPort": 8080,
+							},
+						},
+						"type": "ClusterIP",
+					},
+				},
+			}
+			gvk = schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Service",
+			}
+			svc.SetGroupVersionKind(gvk)
+
+		})
+
+		AfterAll(func() {
+			ctrlCancel()
+		})
+
+		It("should create and start a manager succcessfully", func() {
+			setupLog.Info("setting up congroller manager")
+			m, err := manager.New(cfg, manager.Options{
+				Options: ctrlmanager.Options{
+					LeaderElection:         false, // disable leader-election
+					HealthProbeBindAddress: "0",   // disable health-check
+					Metrics: metricsserver.Options{
+						BindAddress: "0", // disable the metrics server
+					},
+					Logger: logger,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			mgr = m
+			Expect(mgr).NotTo(BeNil())
+
+			setupLog.Info("starting manager")
+			go func() {
+				defer GinkgoRecover()
+				err := mgr.Start(ctrlCtx)
+				Expect(err).ToNot(HaveOccurred(), "failed to run manager")
+			}()
+		})
+
+		It("should let a controller to be attached to the manager", func() {
+			yamlData := `
+sources:
+  - apiGroup: ""
+    kind: Service
+pipeline:
+  "@aggregate":
+    - "@project":
+        metadata:
+          name: "$.metadata.name"
+          namespace: "$.metadata.namespace"
+          annotations:
+            "cluster-ip": "$.spec.clusterIP"
+target:
+  apiGroup: ""
+  kind: Service
+  type: Patcher
+`
+
+			var config controller.Config
+			Expect(yaml.Unmarshal([]byte(yamlData), &config)).NotTo(HaveOccurred())
+
+			c, err := controller.New("svc-annotator", mgr, config, controller.Options{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.GetName()).To(Equal("svc-annotator"))
+		})
+
+		It("should add the clusterIP annotation to a service", func() {
+			ctrl.Log.Info("loading service")
+			Expect(k8sClient.Create(ctrlCtx, svc)).Should(Succeed())
+
+			get := object.New()
+			get.SetGroupVersionKind(gvk)
+			key := client.ObjectKeyFromObject(svc)
+			Eventually(func() bool {
+				// if err := mgr.GetClient().Get(ctx, key, get); err != nil && apierrors.IsNotFound(err) {
+				if err := k8sClient.Get(ctx, key, get); err != nil && apierrors.IsNotFound(err) {
+					setupLog.Info("could not query starting manager")
+					return false
+				}
+
+				if get.GetName() != key.Name || get.GetNamespace() != key.Namespace {
+					return false
+				}
+
+				clusterIP, ok, err := unstructured.NestedString(get.Object, "spec", "clusterIP")
+				if err != nil || !ok {
+					return false
+				}
+
+				anns := get.GetAnnotations()
+				return len(anns) > 0 && anns[annotationName] == clusterIP
+			}, timeout, interval).Should(BeTrue())
+		})
+	})
+})

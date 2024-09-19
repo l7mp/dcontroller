@@ -182,6 +182,7 @@ func (f *FakeRuntimeManager) Start(ctx context.Context) error {
 	}
 
 	<-ctx.Done()
+
 	return nil
 }
 

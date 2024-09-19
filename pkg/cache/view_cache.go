@@ -53,7 +53,9 @@ func (c *ViewCache) RegisterCacheForKind(gvk schema.GroupVersionKind) error {
 	defer c.mu.Unlock()
 
 	if _, exists := c.caches[gvk]; exists {
-		return fmt.Errorf("cache is already registered for GVK %s", gvk)
+		// race condition: someone already registered the cache while we were waiting on
+		// the lock - ignore
+		return nil
 	}
 
 	indexer := toolscache.NewIndexer(
@@ -375,7 +377,6 @@ func (c *ViewCache) Start(ctx context.Context) error {
 	c.mu.RUnlock()
 
 	// We should wait for caches to sync here, but in our case they are always sync'd
-
 	<-ctx.Done()
 
 	return nil
