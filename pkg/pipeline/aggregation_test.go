@@ -54,12 +54,6 @@ var _ = Describe("Aggregations", func() {
 			Expect(res).To(HaveLen(1))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res[0].IsUnchanged()).To(BeTrue())
-
-			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[0]})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(1))
-			Expect(res[0].Type).To(Equal(cache.Updated))
-			Expect(res[0].IsUnchanged()).To(BeFalse())
 		})
 
 		It("should evaluate a false select expression", func() {

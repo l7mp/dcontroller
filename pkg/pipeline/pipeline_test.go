@@ -321,6 +321,28 @@ var _ = Describe("Pipelines", func() {
 			Expect(delta.Object.UnstructuredContent()["replicas"]).To(Equal(int64(1)))
 			Expect(delta.Object.UnstructuredContent()["ready"]).To(Equal(int64(1)))
 		})
+
+		It("should ignore a duplicate event", func() {
+			eng.WithObjects(dep1)
+			p := Pipeline{}
+
+			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: dep1})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deltas).To(HaveLen(0))
+
+			deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: dep1})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deltas).To(HaveLen(0))
+
+			// do not ignore a delete event for the same object
+			deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Deleted, Object: dep1})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deltas).To(HaveLen(1))
+			Expect(deltas[0].IsUnchanged()).To(BeFalse())
+			Expect(deltas[0].Type).To(Equal(cache.Deleted))
+			Expect(deltas[0].Object.GetName()).To(Equal("dep1"))
+			Expect(deltas[0].Object.GetNamespace()).To(Equal("default"))
+		})
 	})
 })
 

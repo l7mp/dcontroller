@@ -258,15 +258,6 @@ var _ = Describe("Joins", func() {
 			Expect(delta.Type).To(Equal(cache.Updated))
 			Expect(delta.Object.UnstructuredContent()["pod"]).To(Equal(pod3.UnstructuredContent()))
 			Expect(delta.Object.UnstructuredContent()["dep"]).To(Equal(dep2.UnstructuredContent()))
-
-			// should yield the same update on pod3-dep1
-			deltas, err = j.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: pod3})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(deltas).To(HaveLen(1))
-			Expect(deltas[0].IsUnchanged()).To(BeFalse())
-			Expect(deltas[0].Type).To(Equal(cache.Updated))
-			Expect(deltas[0].Object.UnstructuredContent()["pod"]).To(Equal(pod3.UnstructuredContent()))
-			Expect(deltas[0].Object.UnstructuredContent()["dep"]).To(Equal(dep2.UnstructuredContent()))
 		})
 
 		It("should evaluate a join on labels that induces a remove followed by an add", func() {
@@ -315,12 +306,11 @@ var _ = Describe("Joins", func() {
 			Expect(delta.Object.UnstructuredContent()["pod"]).To(Equal(pod3.UnstructuredContent()))
 			Expect(delta.Object.UnstructuredContent()["dep"]).To(Equal(dep2.UnstructuredContent()))
 
-			// should now yield a single update on pod3-dep2
-			deltas, err = j.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: pod3})
+			deltas, err = j.Evaluate(eng, cache.Delta{Type: cache.Deleted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(1))
 			Expect(deltas[0].IsUnchanged()).To(BeFalse())
-			Expect(deltas[0].Type).To(Equal(cache.Updated))
+			Expect(deltas[0].Type).To(Equal(cache.Deleted))
 			Expect(deltas[0].Object.UnstructuredContent()["pod"]).To(Equal(pod3.UnstructuredContent()))
 			Expect(deltas[0].Object.UnstructuredContent()["dep"]).To(Equal(dep2.UnstructuredContent()))
 		})
@@ -370,15 +360,6 @@ var _ = Describe("Joins", func() {
 			Expect(delta.Type).To(Equal(cache.Added))
 			Expect(delta.Object.UnstructuredContent()["pod"]).To(Equal(pod2.UnstructuredContent()))
 			Expect(delta.Object.UnstructuredContent()["dep"]).To(Equal(dep1.UnstructuredContent()))
-
-			// should now yield a single update on pod2-dep1
-			deltas, err = j.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: dep1})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(deltas).To(HaveLen(1))
-			Expect(deltas[0].IsUnchanged()).To(BeFalse())
-			Expect(deltas[0].Type).To(Equal(cache.Updated))
-			Expect(deltas[0].Object.UnstructuredContent()["pod"]).To(Equal(pod2.UnstructuredContent()))
-			Expect(deltas[0].Object.UnstructuredContent()["dep"]).To(Equal(dep1.UnstructuredContent()))
 		})
 	})
 })

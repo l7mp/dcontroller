@@ -25,6 +25,14 @@ func (p *Pipeline) String() string {
 
 // Evaluate processes an pipeline expression on the given delta.
 func (p *Pipeline) Evaluate(eng Engine, delta cache.Delta) ([]cache.Delta, error) {
+	eng.Log().V(2).Info("processing event", "event-type", delta.Type, "object", ObjectKey(delta.Object))
+
+	if !eng.IsValidEvent(delta) {
+		eng.Log().V(4).Info("aggregation: ignoring nil/duplicate event",
+			"event-type", delta.Type)
+		return []cache.Delta{}, nil
+	}
+
 	var deltas []cache.Delta
 
 	// process the join
@@ -56,7 +64,8 @@ func (p *Pipeline) Evaluate(eng Engine, delta cache.Delta) ([]cache.Delta, error
 		res = deltas
 	}
 
-	eng.Log().Info("eval ready", "pipeline", p.String(), "result", util.Stringify(res))
+	eng.Log().V(1).Info("eval ready", "event-type", delta.Type,
+		"object", ObjectKey(delta.Object), "result", util.Stringify(res))
 
 	return res, nil
 }

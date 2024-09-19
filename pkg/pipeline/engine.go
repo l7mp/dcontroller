@@ -13,16 +13,19 @@ import (
 type GVK = schema.GroupVersionKind
 
 type Engine interface {
+	// EvaluateJoin evaluates a join expression.
+	EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error)
 	// EvaluateAggregation evaluates an aggregation pipeline.
 	EvaluateAggregation(a *Aggregation, delta cache.Delta) ([]cache.Delta, error)
+	// IsValidEvent returns false for some invalid events, like null-events or duplicate
+	// events.
+	IsValidEvent(cache.Delta) bool
 	// View returns the target view of the engine.
 	View() string
 	// WithObjects sets some base objects in the cache for testing.
 	WithObjects(objects ...object.Object)
 	// Log returns a logger.
 	Log() logr.Logger
-	// EvaluateJoin evaluates a join expression.
-	EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error)
 }
 
 func Normalize(eng Engine, content Unstructured) (object.Object, error) {

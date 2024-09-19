@@ -45,6 +45,26 @@ func (eng *defaultEngine) WithObjects(objs ...object.Object) {
 	return
 }
 
+func (eng *defaultEngine) IsValidEvent(delta cache.Delta) bool {
+	if delta.Object == nil {
+		return false
+	}
+
+	gvk := delta.Object.GetObjectKind().GroupVersionKind()
+	eng.initViewStore(gvk)
+
+	if delta.Type == cache.Added || delta.Type == cache.Updated ||
+		delta.Type == cache.Upserted || delta.Type == cache.Replaced {
+		obj, ok, err := eng.baseViewStore[gvk].GetByKey(ObjectKey(delta.Object).String())
+		if err == nil && ok {
+			// duplicate0>not-valid
+			return !object.DeepEqual(delta.Object, obj)
+		}
+	}
+
+	return true
+}
+
 func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta) ([]cache.Delta, error) {
 	if delta.IsUnchanged() {
 		return []cache.Delta{delta}, nil
@@ -52,6 +72,12 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 
 	gvk := delta.Object.GetObjectKind().GroupVersionKind()
 	eng.initViewStore(gvk)
+
+	if !eng.IsValidEvent(delta) {
+		eng.log.V(4).Info("aggregation: ignoring duplicate event", "GVK", gvk,
+			"event-type", delta.Type)
+		return []cache.Delta{}, nil
+	}
 
 	// find out whether an upsert is an update/replace or an add
 	delta = eng.handleUpsertEvent(delta)
@@ -61,7 +87,7 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 		return nil, err
 	}
 
-	eng.log.V(2).Info("aggregation: ready", "event-type", delta.Type, "result", util.Stringify(ds))
+	eng.log.V(4).Info("aggregation: ready", "event-type", delta.Type, "result", util.Stringify(ds))
 
 	return ds, nil
 }
@@ -114,10 +140,10 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 
 		// consolidate: objects both in the deleted and added cache are updated
 		if delDelta.IsUnchanged() && addDelta.IsUnchanged() {
-			// nothing happened: object wasn't in the view and it it still isn't
+			// nothing happened: object wasn't in the view and it still isn't
 			ds = []cache.Delta{{Type: cache.Updated, Object: nil}}
 		} else if delDelta.IsUnchanged() && !addDelta.IsUnchanged() {
-			// object added into the view and it it still isn't
+			// object added into the view
 			ds = []cache.Delta{addDelta}
 		} else if !delDelta.IsUnchanged() && addDelta.IsUnchanged() {
 			// object removed from the view
@@ -189,7 +215,7 @@ func (eng *defaultEngine) evalAggregation(a *Aggregation, obj object.Object) (ob
 		return nil, err
 	}
 
-	eng.Log().V(4).Info("eval ready", "aggregation", a.String(), "result", obj)
+	eng.Log().V(5).Info("eval ready", "aggregation", a.String(), "result", obj)
 
 	return obj, nil
 }
@@ -220,7 +246,7 @@ func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured
 			v = u
 		}
 
-		eng.log.V(4).Info("eval ready", "expression", e.String(), "result", u)
+		eng.log.V(5).Info("eval ready", "expression", e.String(), "result", u)
 
 		return v, nil
 
@@ -235,7 +261,7 @@ func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured
 			return nil, NewAggregationError(e.String(), err)
 		}
 
-		eng.log.V(4).Info("eval ready", "expression", e.String(), "result", v)
+		eng.log.V(5).Info("eval ready", "expression", e.String(), "result", v)
 
 		return v, nil
 
@@ -254,10 +280,16 @@ func (eng *defaultEngine) EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 }
 
 func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error) {
-	eng.log.V(2).Info("join: processing event", "event-type", delta.Type, "object", ObjectKey(delta.Object))
+	eng.log.V(5).Info("join: processing event", "event-type", delta.Type, "object", ObjectKey(delta.Object))
 
 	gvk := delta.Object.GetObjectKind().GroupVersionKind()
 	eng.initViewStore(gvk)
+
+	if !eng.IsValidEvent(delta) {
+		eng.log.V(4).Info("aggregation: ignoring duplicate event", "GVK", gvk,
+			"event-type", delta.Type)
+		return []cache.Delta{}, nil
+	}
 
 	// find out whether an upsert is an update/replace or an add
 	delta = eng.handleUpsertEvent(delta)
@@ -338,7 +370,7 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 		return []cache.Delta{}, nil
 	}
 
-	eng.log.V(2).Info("join: ready", "event-type", delta.Type, "result", util.Stringify(ds))
+	eng.log.V(4).Info("join: ready", "event-type", delta.Type, "result", util.Stringify(ds))
 
 	return ds, nil
 }
@@ -390,7 +422,7 @@ func (eng *defaultEngine) evalJoin(j *Join, obj object.Object) ([]object.Object,
 		return nil, NewExpressionError(j.Expression.Op, j.Expression.Raw, err)
 	}
 
-	eng.log.V(4).Info("eval ready", "expression", j.String(), "result", res)
+	eng.log.V(5).Info("eval ready", "expression", j.String(), "result", res)
 
 	return res, nil
 }
