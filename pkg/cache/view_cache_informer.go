@@ -10,12 +10,14 @@ import (
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	toolscache "k8s.io/client-go/tools/cache"
 )
 
 var _ toolscache.SharedIndexInformer = &ViewCacheInformer{}
 
 type ViewCacheInformer struct {
+	gvk            schema.GroupVersionKind // just for logging
 	cache          toolscache.Indexer
 	handlers       map[int64]handlerEntry
 	handlerCounter int64
@@ -34,15 +36,16 @@ func (h *handlerEntry) HasSynced() bool {
 	return true
 }
 
-func NewViewCacheInformer(indexer toolscache.Indexer, logger logr.Logger) *ViewCacheInformer {
+func NewViewCacheInformer(gvk schema.GroupVersionKind, indexer toolscache.Indexer, logger logr.Logger) *ViewCacheInformer {
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
 	}
 
 	return &ViewCacheInformer{
+		gvk:      gvk,
 		cache:    indexer,
 		handlers: make(map[int64]handlerEntry),
-		log:      logger.WithName("viewcacheinformer"),
+		log:      logger.WithName("viewcacheinformer").WithValues("GVK", gvk.String()),
 	}
 }
 
@@ -57,7 +60,8 @@ func (c *ViewCacheInformer) AddEventHandler(handler toolscache.ResourceEventHand
 	c.handlers[id] = he
 	c.mutex.Unlock()
 
-	c.log.V(4).Info("registering event: sending initial object list", "handler-id", id)
+	c.log.V(4).Info("registering event handler: sending initial object list", "handler-id", id,
+		"cache-size", len(c.cache.List()))
 
 	for _, item := range c.cache.List() {
 		obj, ok := item.(object.Object)

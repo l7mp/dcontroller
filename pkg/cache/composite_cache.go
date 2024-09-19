@@ -71,7 +71,7 @@ func (cc *CompositeCache) GetViewCache() *ViewCache {
 func (cc *CompositeCache) GetInformer(ctx context.Context, obj client.Object, opts ...cache.InformerGetOption) (cache.Informer, error) {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	cc.log.V(5).Info("get-informer", "gvk", gvk)
+	cc.log.V(6).Info("get-informer", "gvk", gvk)
 
 	if gvk.Group == viewv1a1.GroupVersion.Group {
 		return cc.viewCache.GetInformer(ctx, obj)
@@ -80,7 +80,7 @@ func (cc *CompositeCache) GetInformer(ctx context.Context, obj client.Object, op
 }
 
 func (cc *CompositeCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind, opts ...cache.InformerGetOption) (cache.Informer, error) {
-	cc.log.V(3).Info("get-informer-for-kind", "gvk", gvk)
+	cc.log.V(6).Info("get-informer-for-kind", "gvk", gvk)
 
 	if gvk.Group == viewv1a1.GroupVersion.Group {
 		return cc.viewCache.GetInformerForKind(ctx, gvk)
@@ -91,7 +91,7 @@ func (cc *CompositeCache) GetInformerForKind(ctx context.Context, gvk schema.Gro
 func (cc *CompositeCache) RemoveInformer(ctx context.Context, obj client.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	cc.log.V(3).Info("get-informer-for-kind", "gvk", gvk)
+	cc.log.V(6).Info("remove-informer", "gvk", gvk)
 
 	if gvk.Group == viewv1a1.GroupVersion.Group {
 		return cc.viewCache.RemoveInformer(ctx, obj)
@@ -100,7 +100,7 @@ func (cc *CompositeCache) RemoveInformer(ctx context.Context, obj client.Object)
 }
 
 func (cc *CompositeCache) Start(ctx context.Context) error {
-	cc.log.V(3).Info("starting")
+	cc.log.V(1).Info("starting")
 	if err := cc.viewCache.Start(ctx); err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func (cc *CompositeCache) IndexField(ctx context.Context, obj client.Object, fie
 func (cc *CompositeCache) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	cc.log.V(3).Info("get", "gvk", gvk, "key", key)
+	cc.log.V(5).Info("get", "gvk", gvk, "key", key)
 
 	if gvk.Group == viewv1a1.GroupVersion.Group {
 		return cc.viewCache.Get(ctx, key, obj, opts...)
@@ -133,7 +133,7 @@ func (cc *CompositeCache) Get(ctx context.Context, key client.ObjectKey, obj cli
 func (cc *CompositeCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	gvk := list.GetObjectKind().GroupVersionKind()
 
-	cc.log.V(3).Info("list", "gvk", gvk)
+	cc.log.V(5).Info("list", "gvk", gvk)
 
 	if gvk.Group == viewv1a1.GroupVersion.Group {
 		return cc.viewCache.List(ctx, list, opts...)

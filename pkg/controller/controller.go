@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"hsnlab/dcontroller-runtime/pkg/cache"
+	"hsnlab/dcontroller-runtime/pkg/object"
 	"hsnlab/dcontroller-runtime/pkg/pipeline"
 	"hsnlab/dcontroller-runtime/pkg/util"
 )
@@ -41,8 +42,9 @@ var _ runtimeManager.Runnable = &Controller{}
 
 // implementation
 type Controller struct {
-	name        string
+	name, kind  string
 	config      Config
+	target      *target
 	manager     runtimeManager.Manager
 	watcher     chan Request
 	engine      pipeline.Engine
@@ -50,11 +52,10 @@ type Controller struct {
 	logger, log logr.Logger
 }
 
-// New registers a new controller with the manager. A controller is given by the source resource(s) the controller watches, an
-// processing pipeline to process the base resources, and a target resource the processing result is applied to.
-func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, error) {
-	name := config.Target.Resource.String(mgr)
-
+// New registers a new controller given by the source resource(s) the controller watches, a target
+// resource the controller sends its output, and a processing pipeline to process the base
+// resources into target resources.
+func New(name string, mgr runtimeManager.Manager, config Config, opts Options) (*Controller, error) {
 	processor := processRequest
 	if opts.Processor != nil {
 		processor = opts.Processor
@@ -71,6 +72,7 @@ func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, 
 
 	c := &Controller{
 		name:      name,
+		kind:      config.Target.Resource.Kind, // the kind of the target
 		manager:   mgr,
 		config:    config,
 		watcher:   make(chan Request, WatcherBufferSize),
@@ -78,6 +80,10 @@ func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, 
 		logger:    logger,
 		log:       logger.WithName("controller").WithValues("name", name),
 	}
+
+	// Create the reconciler
+	c.target = NewTarget(c.manager, &c.config.Target)
+	reconciler := NewControllerReconciler(mgr, c)
 
 	srcs := []string{}
 	for _, s := range config.Sources {
@@ -95,11 +101,7 @@ func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, 
 				util.Stringify(s), err)
 		}
 
-		// Create the reconciler
-		reconciler := NewControllerReconciler(mgr, s, c.watcher)
-
 		// Create the controller
-		// c, err := controller.NewTyped(name, mgr.Manager, controller.TypedOptions[Request]{
 		ctrl, err := controller.NewTyped(name, mgr, controller.TypedOptions[Request]{
 			SkipNameValidation: &on,
 			Reconciler:         reconciler,
@@ -126,7 +128,8 @@ func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, 
 		baseviews = append(baseviews, gvk)
 	}
 
-	c.engine = pipeline.NewDefaultEngine(name, baseviews, logger)
+	c.engine = pipeline.NewDefaultEngine(c.kind, baseviews,
+		logger.WithName("pipeline").WithValues("controller", c.name, "kind/view", c.kind))
 
 	if err := mgr.Add(c); err != nil {
 		return nil, fmt.Errorf("controller: cannot schedule controller %s: %w",
@@ -192,9 +195,11 @@ func processRequest(ctx context.Context, c *Controller, req Request) error {
 	}
 
 	// Apply the resultant deltas
-	target := NewTarget(c.manager, &c.config.Target)
 	for _, d := range deltas {
-		if err := target.Write(ctx, d); err != nil {
+		c.log.V(4).Info("writing delta to target", "target", c.target.String(),
+			"delta-type", d.Type, "object", object.Dump(delta.Object))
+
+		if err := c.target.Write(ctx, d); err != nil {
 			return fmt.Errorf("controller: cannot update target %s for delta %s: %w",
 				req.GVK, d.String(), err)
 		}
@@ -204,19 +209,16 @@ func processRequest(ctx context.Context, c *Controller, req Request) error {
 }
 
 type ContrllerReconciler struct {
-	name    string
 	manager runtimeManager.Manager
 	watcher chan Request
 	log     logr.Logger
 }
 
-func NewControllerReconciler(mgr runtimeManager.Manager, s *Source, watcher chan Request) *ContrllerReconciler {
-	name := s.String(mgr)
+func NewControllerReconciler(mgr runtimeManager.Manager, c *Controller) *ContrllerReconciler {
 	return &ContrllerReconciler{
 		manager: mgr,
-		name:    name,
-		watcher: watcher,
-		log:     mgr.GetLogger().WithName("reconciler").WithValues("object", name),
+		watcher: c.watcher,
+		log:     mgr.GetLogger().WithName("reconciler").WithValues("name", c.name),
 	}
 }
 

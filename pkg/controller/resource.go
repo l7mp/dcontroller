@@ -103,6 +103,8 @@ func NewSource(mgr runtimeManager.Manager, s *Source) *source {
 	return src
 }
 
+func (s *source) String() string { return s.Resource.String(s.manager) }
+
 func (s *source) GetSource() (runtimeSource.TypedSource[Request], error) {
 	// gvk to watch
 	gvk, err := s.GetGVK(s.manager)
@@ -173,6 +175,8 @@ func NewTarget(mgr runtimeManager.Manager, t *Target) *target {
 
 	return target
 }
+
+func (t *target) String() string { return t.Resource.String(t.manager) }
 
 // Write enforces a delta on a target. The behavior depends on the target type:
 //   - For Updaters the delta is enforced as is to the target

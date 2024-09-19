@@ -89,7 +89,7 @@ func (c *ViewCache) GetCacheForKind(gvk schema.GroupVersionKind) (toolscache.Ind
 
 // informer handlers
 func (c *ViewCache) RegisterInformerForKind(gvk schema.GroupVersionKind) error {
-	c.log.V(1).Info("registering informer for new GVK", "gvk", gvk)
+	c.log.V(4).Info("registering informer for new GVK", "gvk", gvk)
 
 	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {
@@ -103,7 +103,7 @@ func (c *ViewCache) RegisterInformerForKind(gvk schema.GroupVersionKind) error {
 		return fmt.Errorf("informer is already registered for GVK %s", gvk)
 	}
 
-	informer := NewViewCacheInformer(cache, c.logger)
+	informer := NewViewCacheInformer(gvk, cache, c.logger)
 	c.informers[gvk] = informer
 
 	return nil
@@ -157,8 +157,7 @@ func (c *ViewCache) RemoveInformer(ctx context.Context, obj client.Object) error
 func (c *ViewCache) Add(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	c.log.V(2).Info("add: adding object", "gvk", gvk,
-		"key", client.ObjectKeyFromObject(obj).String(),
+	c.log.V(5).Info("add", "gvk", gvk, "key", client.ObjectKeyFromObject(obj).String(),
 		"object", object.Dump(obj))
 
 	cache, err := c.GetCacheForKind(gvk)
@@ -192,8 +191,7 @@ func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 		return nil
 	}
 
-	c.log.V(2).Info("update: updating object", "gvk", gvk,
-		"key", client.ObjectKeyFromObject(newObj).String(),
+	c.log.V(5).Info("update", "gvk", gvk, "key", client.ObjectKeyFromObject(newObj).String(),
 		"object", object.Dump(newObj))
 
 	cache, err := c.GetCacheForKind(gvk)
@@ -220,8 +218,7 @@ func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 func (c *ViewCache) Delete(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	c.log.V(2).Info("delete: removing object", "gvk", gvk,
-		"key", client.ObjectKeyFromObject(obj).String(),
+	c.log.V(5).Info("delete", "gvk", gvk, "key", client.ObjectKeyFromObject(obj).String(),
 		"object", object.Dump(obj))
 
 	cache, err := c.GetCacheForKind(gvk)
@@ -262,7 +259,7 @@ func (c *ViewCache) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		return apierrors.NewBadRequest("invalid GVK")
 	}
 
-	c.log.V(2).Info("get", "gvk", gvk, "key", key)
+	c.log.V(5).Info("get", "gvk", gvk, "key", key)
 
 	item, exists, err := cache.GetByKey(key.String())
 	if err != nil {
@@ -288,7 +285,7 @@ func (c *ViewCache) List(ctx context.Context, list client.ObjectList, opts ...cl
 		return apierrors.NewBadRequest("invalid GVK")
 	}
 
-	c.log.V(2).Info("get", "gvk", gvk)
+	c.log.V(5).Info("list", "gvk", gvk)
 
 	for _, item := range cache.List() {
 		target, ok := item.(object.Object)
@@ -304,11 +301,27 @@ func (c *ViewCache) List(ctx context.Context, list client.ObjectList, opts ...cl
 	return nil
 }
 
+func (c *ViewCache) Dump(ctx context.Context, gvk schema.GroupVersionKind) []string {
+	ret := []string{}
+	cache, err := c.GetCacheForKind(gvk)
+	if err != nil {
+		return ret
+	}
+	for _, item := range cache.List() {
+		target, ok := item.(object.Object)
+		if ok {
+			ret = append(ret, object.Dump(target))
+		}
+	}
+
+	return ret
+}
+
 // watcher
 func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
 	gvk := list.GetObjectKind().GroupVersionKind()
 
-	c.log.V(2).Info("watch: adding watch", "gvk", gvk)
+	c.log.V(5).Info("watch: adding watch", "gvk", gvk)
 
 	informer, err := c.GetInformerForKind(ctx, gvk)
 	if err != nil {
@@ -341,7 +354,7 @@ func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...c
 	go func() {
 		<-ctx.Done()
 
-		c.log.V(4).Info("stopping watcher", "gvk", gvk)
+		c.log.V(5).Info("stopping watcher", "gvk", gvk)
 
 		informer.RemoveEventHandler(handlerReg)
 		watcher.Stop()

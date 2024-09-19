@@ -10,11 +10,14 @@ import (
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
+	runtimeCache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
@@ -35,7 +38,7 @@ const (
 
 var (
 	loglevel = -10
-	// loglevel = -4
+	//loglevel = -3
 	logger = zap.New(zap.UseFlagOptions(&zap.Options{
 		Development:     true,
 		DestWriter:      GinkgoWriter,
@@ -43,6 +46,7 @@ var (
 		TimeEncoder:     zapcore.RFC3339NanoTimeEncoder,
 		Level:           zapcore.Level(loglevel),
 	}))
+	log  = logger.WithName("test")
 	podn = &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "testpod",
@@ -62,14 +66,15 @@ func TestView(t *testing.T) {
 
 var _ = Describe("Controller", func() {
 	var (
-		pod, view object.Object
-		ctx       context.Context
-		cancel    context.CancelFunc
+		pod, view                    object.Object
+		dep1, dep2, pod1, pod2, pod3 object.Object
+		ctx                          context.Context
+		cancel                       context.CancelFunc
 	)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithCancel(logr.NewContext(context.Background(), logger))
-		pod = &unstructured.Unstructured{}
+		pod = object.New()
 		content, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(podn)
 		pod.SetUnstructuredContent(content)
 		pod.SetGroupVersionKind(schema.GroupVersionKind{
@@ -81,13 +86,62 @@ var _ = Describe("Controller", func() {
 		view = object.NewViewObject("view")
 		object.SetName(view, "default", "viewname")
 		object.SetContent(view, map[string]any{"testannotation": "test-value"})
+
+		// for the join tests
+		pod1 = object.NewViewObject("pod")
+		object.SetContent(pod1, map[string]any{
+			"spec": map[string]any{
+				"image":  "image1",
+				"parent": "dep1",
+			},
+		})
+		object.SetName(pod1, "default", "pod1")
+		pod1.SetLabels(map[string]string{"app": "app1"})
+
+		pod2 = object.NewViewObject("pod")
+		object.SetContent(pod2, map[string]any{
+			"spec": map[string]any{
+				"image":  "image2",
+				"parent": "dep1",
+			},
+		})
+		object.SetName(pod2, "other", "pod2")
+		pod2.SetLabels(map[string]string{"app": "app2"})
+
+		pod3 = object.NewViewObject("pod")
+		object.SetContent(pod3, map[string]any{
+			"spec": map[string]any{
+				"image":  "image1",
+				"parent": "dep2",
+			},
+		})
+		object.SetName(pod3, "default", "pod3")
+		pod3.SetLabels(map[string]string{"app": "app1"})
+
+		dep1 = object.NewViewObject("dep")
+		object.SetContent(dep1, map[string]any{
+			"spec": map[string]any{
+				"replicas": int64(3),
+			},
+		})
+		object.SetName(dep1, "default", "dep1")
+		dep1.SetLabels(map[string]string{"app": "app1"})
+
+		dep2 = object.NewViewObject("dep")
+		object.SetContent(dep2, map[string]any{
+			"spec": map[string]any{
+				"replicas": int64(1),
+			},
+		})
+		object.SetName(dep2, "default", "dep2")
+		dep2.SetLabels(map[string]string{"app": "app2"})
 	})
 
 	AfterEach(func() {
 		cancel()
 	})
 
-	Describe("With self-referential Controllers", func() {
+	Describe("With Controllers using simple aggregation pipelines", func() {
 		It("should generate watch requests on the target view", func() {
 			jsonData := `
 '@aggregate':
@@ -122,14 +176,14 @@ var _ = Describe("Controller", func() {
 
 			// Create controller overriding the request processor
 			request := Request{}
-			c, err := New(mgr, config, Options{
+			c, err := New("test", mgr, config, Options{
 				Processor: func(_ context.Context, _ *Controller, req Request) error {
 					request = req
 					return nil
 				},
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(c.GetName()).To(Equal(config.Target.Resource.String(mgr)))
+			Expect(c.GetName()).To(Equal("test"))
 
 			// push a view object via the view cache
 			vcache := mgr.GetCompositeCache().GetViewCache()
@@ -181,16 +235,16 @@ var _ = Describe("Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
-			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
-
 			// Create controller
-			c, err := New(mgr, config, Options{})
+			c, err := New("test", mgr, config, Options{})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(c.GetName()).To(Equal(config.Target.Resource.String(mgr)))
+			Expect(c.GetName()).To(Equal("test"))
 
 			// Obtain the viewcache
 			vcache := mgr.GetCompositeCache().GetViewCache()
 			Expect(vcache).NotTo(BeNil())
+
+			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
 
 			// Push a view object via the view cache
 			err = vcache.Add(view)
@@ -265,9 +319,9 @@ target:
 			err = yaml.Unmarshal([]byte(yamlData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
-			c, err := New(mgr, config, Options{})
+			c, err := New("test", mgr, config, Options{})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(c.GetName()).To(Equal("core/v1:Pod"))
+			Expect(c.GetName()).To(Equal("test"))
 
 			// push a pod via the fakeRuntimeCache.Add function (the tracker would not
 			// work since the split client takes all watches from the cache, not the
@@ -302,6 +356,362 @@ target:
 			}, timeout, retryInterval).Should(BeTrue())
 		})
 	})
+
+	Describe("With complex Controllers", func() {
+		It("should implement a controller with a join pipeline", func() {
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			yamlData := `
+# This will create a simple replicaset (rs image), with the joining pods and deployments on
+# "pod.spec.parent == dep.name && pod.metadata.namespace == dep.metadata.namespace" condition, with
+# the image taken from the pod.spec and the replica count from dep.spec.replicas. Name and
+# namespace are the same as those of the deployment.
+#
+sources:
+  - kind: pod
+  - kind: dep
+pipeline:
+  '@join':
+    '@and':
+      - '@eq':
+        - $.dep.metadata.name
+        - $.pod.spec.parent
+      - '@eq':
+          - $.dep.metadata.namespace
+          - $.pod.metadata.namespace
+  '@aggregate':
+    - '@project':
+        "$.metadata": "$.dep.metadata"
+        spec:
+          image: $.pod.spec.image
+          replicas: $.dep.spec.replicas
+target:
+  kind: rs
+  type: Updater`
+			var config Config
+			err = yaml.Unmarshal([]byte(yamlData), &config)
+			Expect(err).NotTo(HaveOccurred())
+
+			log.V(1).Info("Create controller")
+			c, err := New("test", mgr, config, Options{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.GetName()).To(Equal("test"))
+
+			log.V(1).Info("Starting the manager")
+			go func() { mgr.Start(ctx) }()
+
+			log.V(1).Info("Obtain the viewcache")
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			Expect(vcache).NotTo(BeNil())
+
+			log.V(1).Info("Push objects view the cache")
+			for _, o := range []object.Object{pod1, pod2, pod3, dep1} {
+				err = vcache.Add(o)
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			log.V(1).Info("Create a viewcache watcher")
+			watcher, err := vcache.Watch(ctx, object.NewViewObjectList("rs"))
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should obtain one object in the rs view: pod1-dep1
+			var rs1 object.Object
+			Eventually(func() bool {
+				event, ok := tryWatchWatcher(watcher, interval)
+				if !ok {
+					return false
+				}
+
+				rs1, err = getRuntimeObjFromCache(ctx, vcache, "rs", event.Object)
+				if err != nil {
+					return false
+
+				}
+
+				return true
+			}, timeout, retryInterval).Should(BeTrue())
+
+			// should be a single object only
+			Eventually(func() bool {
+				list := object.NewViewObjectList("rs")
+				err := vcache.List(ctx, list)
+				Expect(err).NotTo(HaveOccurred())
+
+				return len(list.Items) == 1
+			}, timeout, retryInterval).Should(BeTrue())
+
+			Expect(rs1).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "rs",
+					"metadata": map[string]any{
+						"name":      "dep1",
+						"namespace": "default",
+						"labels": map[string]any{
+							"app": "app1",
+						},
+					},
+					"spec": map[string]any{
+						"replicas": int64(3),
+						"image":    "image1",
+					},
+				},
+			}))
+
+			log.V(1).Info("Add dep2 to the cache")
+			err = vcache.Add(dep2)
+
+			// Should obtain one object in the rs view: pod3-dep2
+			var rs2 object.Object
+			Eventually(func() bool {
+				event, ok := tryWatchWatcher(watcher, interval)
+				if !ok {
+					return false
+				}
+
+				// we may re-get the first object
+				if event.Type != watch.Added {
+					return false
+				}
+
+				rs2, err = getRuntimeObjFromCache(ctx, vcache, "rs", event.Object)
+				if err != nil {
+					return false
+
+				}
+
+				// if rs2.GetNamespace() != "default" || rs2.GetName() != "dep2" {
+				// 	return false
+				// }
+
+				return true
+			}, timeout, retryInterval).Should(BeTrue())
+
+			// Should be two objects
+			Eventually(func() bool {
+				list := object.NewViewObjectList("rs")
+				err := vcache.List(ctx, list)
+				Expect(err).NotTo(HaveOccurred())
+
+				return len(list.Items) == 2
+			}, timeout, retryInterval).Should(BeTrue())
+
+			Expect(rs2).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "rs",
+					"metadata": map[string]any{
+						"name":      "dep2",
+						"namespace": "default",
+						"labels": map[string]any{
+							"app": "app2",
+						},
+					},
+					"spec": map[string]any{
+						"replicas": int64(1),
+						"image":    "image1",
+					},
+				},
+			}))
+
+			log.V(1).Info("move dep1 into the \"other\" namespace")
+			// this must not be a cache.Update as object's namespacedname changes
+			log.V(1).Info("Delete the old dep1 object")
+			err = vcache.Delete(dep1)
+
+			// Should should first remove rs pod1-dep1
+			Eventually(func() bool {
+				event, ok := tryWatchWatcher(watcher, interval)
+				if !ok {
+					return false
+				}
+
+				if event.Type != watch.Deleted {
+					return false
+				}
+
+				m, err := meta.Accessor(event.Object)
+				if err != nil {
+					return false
+				}
+				return m.GetNamespace() == "default" && m.GetName() == "dep1"
+			}, timeout, retryInterval).Should(BeTrue())
+
+			// should be 1 object
+			Eventually(func() bool {
+				list := object.NewViewObjectList("rs")
+				err := vcache.List(ctx, list)
+				Expect(err).NotTo(HaveOccurred())
+
+				return len(list.Items) == 1
+			}, timeout, retryInterval).Should(BeTrue())
+
+			log.V(1).Info("Re-add dep1 with the new namespace")
+			dep1.SetNamespace("other")
+			err = vcache.Add(dep1)
+
+			// Should obtain one object in the rs view: pod1-dep1
+			var rs3 object.Object
+			Eventually(func() bool {
+				event, ok := tryWatchWatcher(watcher, interval)
+				if !ok {
+					return false
+				}
+
+				if event.Type != watch.Added {
+					return false
+				}
+
+				rs3, err = getRuntimeObjFromCache(ctx, vcache, "rs", event.Object)
+				if err != nil {
+					return false
+
+				}
+
+				return true
+			}, timeout, retryInterval).Should(BeTrue())
+
+			Expect(rs3).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "rs",
+					"metadata": map[string]any{
+						"name":      "dep1",
+						"namespace": "other",
+						"labels": map[string]any{
+							"app": "app1",
+						},
+					},
+					"spec": map[string]any{
+						"replicas": int64(3),
+						"image":    "image2",
+					},
+				},
+			}))
+		})
+
+		FIt("should implement 2 controller chain with complex pipelines", func() {
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			// Start manager late
+			go func() { mgr.Start(ctx) }()
+
+			// 1. create replicasets by joining on the "app" label
+			// 2. write the rs name back into the pod as the annotation "rs-name"
+
+			yamlData1 := `
+sources:
+  - kind: pod
+  - kind: dep
+pipeline:
+  '@join':
+    '@eq': ["$.pod.metadata.labels.app", "$.dep.metadata.labels.app"]
+  '@aggregate':
+    - '@project':
+        metadata:
+          name:
+           "@concat":
+             - "$.dep.metadata.namespace"
+             - ":"
+             - "$.dep.metadata.name"
+             - "-"
+             - "$.pod.metadata.namespace"
+             - ":"
+             - "$.pod.metadata.name"
+          namespace: "$.dep.metadata.namespace"
+        spec:
+          podName: "$.pod.metadata.name"
+target:
+  kind: rs
+  type: Updater`
+			var config1 Config
+			err = yaml.Unmarshal([]byte(yamlData1), &config1)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create controller1
+			_, err = New("rs", mgr, config1, Options{})
+			Expect(err).NotTo(HaveOccurred())
+
+			yamlData2 := `
+sources:
+  - kind: rs
+  - kind: pod
+pipeline:
+  '@join':
+    '@eq': ["$.rs.spec.podName", "$.pod.metadata.name"]
+  '@aggregate':
+    - '@project':
+        metadata:
+          name: $.pod.metadata.name
+          namespace: $.pod.metadata.namespace
+          annotations:
+            rs-name: "$.rs.metadata.name"
+target:
+  kind: pod
+  type: Patcher`
+			var config2 Config
+			err = yaml.Unmarshal([]byte(yamlData2), &config2)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create controller2
+			_, err = New("pod-patcher", mgr, config2, Options{})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Obtain the viewcache
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			Expect(vcache).NotTo(BeNil())
+
+			// Push objects view the cache
+			for _, o := range []object.Object{pod1, dep1, dep2} {
+				err = vcache.Add(o)
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			// Create a viewcache watcher for the kind rs
+			watcher, err := vcache.Watch(ctx, object.NewViewObjectList("pod"))
+			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(func() bool {
+				event, ok := tryWatchWatcher(watcher, interval)
+				if !ok {
+					return false
+				}
+
+				pod, err = getRuntimeObjFromCache(ctx, vcache, "pod", event.Object)
+				if err != nil {
+					return false
+
+				}
+
+				// we get all the pod watch events: eventually one should have the
+				// new annotation
+				if pod.GetNamespace() != "default" || pod.GetName() != "pod1" {
+					return false
+				}
+				anns := pod.GetAnnotations()
+				if len(anns) != 1 {
+					return false
+				}
+
+				rsName, ok := anns["rs-name"]
+				return ok && rsName == "default:dep1-default:pod1"
+
+			}, timeout, retryInterval).Should(BeTrue())
+
+			// should be a single object only
+			Eventually(func() bool {
+				list := object.NewViewObjectList("rs")
+				err := vcache.List(ctx, list)
+				Expect(err).NotTo(HaveOccurred())
+
+				return len(list.Items) == 1
+			}, timeout, retryInterval).Should(BeTrue())
+		})
+	})
 })
 
 func tryWatchReq(watcher chan Request, d time.Duration) (Request, bool) {
@@ -320,4 +730,23 @@ func tryWatchWatcher(watcher watch.Interface, d time.Duration) (watch.Event, boo
 	case <-time.After(d):
 		return watch.Event{}, false
 	}
+}
+
+func getRuntimeObjFromCache(ctx context.Context, c runtimeCache.Cache, kind string, obj runtime.Object) (object.Object, error) {
+	m, err := meta.Accessor(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	key := types.NamespacedName{
+		Namespace: m.GetNamespace(),
+		Name:      m.GetName(),
+	}
+	g := object.NewViewObject(kind)
+	err = c.Get(ctx, key, g)
+	if err != nil {
+		return nil, err
+	}
+
+	return g.DeepCopy(), nil
 }

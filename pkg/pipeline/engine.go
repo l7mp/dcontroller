@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/go-logr/logr"
@@ -35,24 +36,26 @@ func Normalize(eng Engine, content Unstructured) (object.Object, error) {
 	// metadata: must exist
 	meta, ok := content["metadata"]
 	if !ok {
-		return nil, NewInvalidObjectError("no .metadata in object")
+		return nil, NewInvalidObjectError("no metadata in object")
 	}
 	metaMap, ok := meta.(Unstructured)
 	if !ok {
-		return nil, NewInvalidObjectError("invalid .metadata in object")
+		return nil, NewInvalidObjectError("invalid metadata in object")
 	}
 
 	// name must be defined
 	name, ok := metaMap["name"]
 	if !ok {
-		return nil, NewInvalidObjectError("missing .metadata.name")
+		return nil, NewInvalidObjectError("missing /metadata/name")
 	}
 	if reflect.ValueOf(name).Kind() != reflect.String {
-		return nil, NewInvalidObjectError(".metadata.name must be a string")
+		return nil, NewInvalidObjectError(fmt.Sprintf("metadata/name must be a string "+
+			"(current value %q)", name))
+
 	}
 	nameStr := name.(string)
 	if nameStr == "" {
-		return nil, NewInvalidObjectError("empty .metadata.name in aggregation result")
+		return nil, NewInvalidObjectError("empty metadata/name in aggregation result")
 	}
 	obj.SetName(nameStr)
 
@@ -62,7 +65,8 @@ func Normalize(eng Engine, content Unstructured) (object.Object, error) {
 		obj.SetNamespace("")
 	} else {
 		if reflect.ValueOf(namespace).Kind() != reflect.String {
-			return nil, NewInvalidObjectError(".metadata.namespace must be a string")
+			return nil, NewInvalidObjectError(fmt.Sprintf("metadata/namespace must be "+
+				"a string (current value %q)", namespace))
 		}
 		namespaceStr := namespace.(string)
 		obj.SetNamespace(namespaceStr)
