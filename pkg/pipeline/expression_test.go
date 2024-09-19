@@ -401,6 +401,79 @@ var _ = Describe("Expressions", func() {
 			Expect(d["y"]).To(Equal(Unstructured{"z": Unstructured{"c": int64(2)}}))
 		})
 
+		It("should deserialize and evaluate a standard root ref JSONPath expression as a right value", func() {
+			jsonData := `{"a":"$"}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			d, ok := res.(Unstructured)
+			Expect(ok).To(BeTrue())
+			Expect(d).To(HaveKey("a"))
+			Expect(d["a"]).To(Equal(obj1.UnstructuredContent()))
+		})
+
+		It("should deserialize and evaluate a non-standard root ref JSONPath expression as a right value", func() {
+			jsonData := `{"a":"$."}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			d, ok := res.(Unstructured)
+			Expect(ok).To(BeTrue())
+			Expect(d).To(HaveKey("a"))
+			Expect(d["a"]).To(Equal(obj1.UnstructuredContent()))
+		})
+
+		It("should deserialize and evaluate a root ref JSONPath expression as a left value", func() {
+			jsonData := `{"$.":{"a":"b"}}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			d, ok := res.(Unstructured)
+			Expect(ok).To(BeTrue())
+			Expect(d).To(Equal(map[string]any{"a": "b"}))
+		})
+
+		It("should err for a root ref JSONPath expression trying to copy a non-map right value", func() {
+			jsonData := `{"$.":"a"}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
+			_, err = exp.Evaluate(ctx)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should deserialize and evaluate a JSONpath copy expression", func() {
+			jsonData := `{"$.": {"a":1}}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			d, ok := res.(Unstructured)
+			Expect(ok).To(BeTrue())
+			Expect(d).To(Equal(map[string]any{"a": int64(1)}))
+		})
+
 		It("should deserialize and evaluate a setter with multiple JSONPath expressions", func() {
 			jsonData := `{"$.spec.y":"aaa","$.spec.b.d":12}`
 			var exp Expression
@@ -1079,6 +1152,21 @@ var _ = Describe("Expressions", func() {
 		// @filter
 		It("should evaluate a @filter expression on a literal list", func() {
 			jsonData := `{"@filter":[{"@eq": ["$$",12]}, [12, 23]]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			vs, err := asList(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vs).To(Equal([]any{int64(12)}))
+		})
+
+		It("should evaluate a @filter expression with a non-standard root ref on a literal list", func() {
+			jsonData := `{"@filter":[{"@eq": ["$$.",12]}, [12, 23]]}`
 			var exp Expression
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())

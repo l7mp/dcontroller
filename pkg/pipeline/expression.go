@@ -174,7 +174,6 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 					errors.New("argument must be a map"))
 			}
 			ret = vs
-
 		} else {
 			// map stored as a Literal
 			if reflect.ValueOf(e.Literal).Kind() != reflect.Map {

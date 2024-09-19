@@ -12,6 +12,13 @@ func (e *Expression) GetJSONPath(ctx evalCtx, key string) (any, error) {
 		return key, nil
 	}
 
+	// handle root ref "$." that is not handled by ojg/jp for some reason
+	if key == "$." {
+		key = "$" // $ "$" will be stripped, plain "" is accepted as a root ref
+	} else if key == "$$." {
+		key = "$$" // $ "$$" will be stripped, plain "" is accepted as a root ref
+	}
+
 	// $... is object
 	subject := ctx.object
 	// $$... is local subject (@map, @filter, etc.)
@@ -39,6 +46,25 @@ func (e *Expression) SetJSONPath(ctx evalCtx, key string, value, data any) error
 			return NewExpressionError(e.Op, e.Raw, err)
 		}
 		value = res
+	}
+
+	// copy: if key is a JSONpath root ref and the result is a map, overwrite the entire map
+	if d, ok := data.(Unstructured); ok && key == "$." {
+		if val, ok := value.(Unstructured); ok {
+			// cannot just overwrite the map as this would not affect the caller, we
+			// have to remove all existing keys and copy new keys
+			for k := range val {
+				delete(d, k)
+			}
+			for k, v := range val {
+				d[k] = v
+			}
+			return nil
+		}
+		return NewExpressionError(e.Op, e.Raw,
+			fmt.Errorf("JSONPath expression error: cannot set root key \"$.\" to "+
+				"value %q of type %T, only map types can be copied",
+				value, value))
 	}
 
 	// if not a JSONpath, just set it as is
