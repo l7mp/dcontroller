@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	ctrlmanager "sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
@@ -23,9 +24,9 @@ import (
 )
 
 var _ = Describe("Integration test:", Ordered, func() {
-	// write ClusterIP into an annotation for services running in the default namespace
+	// write service type into an annotation for services running in the default namespace
 	Context("When applying a self-referencial controller", Ordered, Label("managed"), func() {
-		const annotationName = "cluster-ip"
+		const annotationName = "service-type"
 		var (
 			ctrlCtx    context.Context
 			ctrlCancel context.CancelFunc
@@ -98,6 +99,7 @@ var _ = Describe("Integration test:", Ordered, func() {
 
 		It("should let a controller to be attached to the manager", func() {
 			yamlData := `
+name: svc-annotator
 sources:
   - apiGroup: ""
     kind: Service
@@ -108,7 +110,7 @@ pipeline:
           name: "$.metadata.name"
           namespace: "$.metadata.namespace"
           annotations:
-            "cluster-ip": "$.spec.clusterIP"
+            "service-type": "$.spec.type"
 target:
   apiGroup: ""
   kind: Service
@@ -118,7 +120,7 @@ target:
 			var config controller.Config
 			Expect(yaml.Unmarshal([]byte(yamlData), &config)).NotTo(HaveOccurred())
 
-			c, err := controller.New("svc-annotator", mgr, config, controller.Options{})
+			c, err := controller.New(mgr, config, controller.Options{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.GetName()).To(Equal("svc-annotator"))
 		})
@@ -141,13 +143,40 @@ target:
 					return false
 				}
 
-				clusterIP, ok, err := unstructured.NestedString(get.Object, "spec", "clusterIP")
+				serviceType, ok, err := unstructured.NestedString(get.Object, "spec", "type")
 				if err != nil || !ok {
 					return false
 				}
 
 				anns := get.GetAnnotations()
-				return len(anns) > 0 && anns[annotationName] == clusterIP
+				return len(anns) > 0 && anns[annotationName] == serviceType
+			}, timeout, interval).Should(BeTrue())
+		})
+
+		It("should adjust the annotation when the service type is manually updated", func() {
+			ctrl.Log.Info("updating service service")
+
+			_, err := ctrlutil.CreateOrUpdate(ctrlCtx, k8sClient, svc, func() error {
+				return unstructured.SetNestedField(svc.UnstructuredContent(), "NodePort", "spec", "type")
+			})
+			Expect(err).Should(Succeed())
+
+			get := object.New()
+			get.SetGroupVersionKind(gvk)
+			key := client.ObjectKeyFromObject(svc)
+			Eventually(func() bool {
+				// if err := mgr.GetClient().Get(ctx, key, get); err != nil && apierrors.IsNotFound(err) {
+				if err := k8sClient.Get(ctx, key, get); err != nil && apierrors.IsNotFound(err) {
+					setupLog.Info("could not query starting manager")
+					return false
+				}
+
+				if get.GetName() != key.Name || get.GetNamespace() != key.Namespace {
+					return false
+				}
+
+				anns := get.GetAnnotations()
+				return len(anns) > 0 && anns[annotationName] == "NodePort"
 			}, timeout, interval).Should(BeTrue())
 		})
 	})
