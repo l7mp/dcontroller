@@ -24,6 +24,8 @@ const WatcherBufferSize int = 1024
 
 // ViewConf is the basic view definition.
 type Config struct {
+	// Name is the unique name of the controller.
+	Name string
 	// The base resource(s) the controller watches.
 	Sources []Source `json:"sources"`
 	// Pipeline is an aggregation pipeline applied to base objects.
@@ -55,12 +57,7 @@ type Controller struct {
 // New registers a new controller given by the source resource(s) the controller watches, a target
 // resource the controller sends its output, and a processing pipeline to process the base
 // resources into target resources.
-func New(name string, mgr runtimeManager.Manager, config Config, opts Options) (*Controller, error) {
-	processor := processRequest
-	if opts.Processor != nil {
-		processor = opts.Processor
-	}
-
+func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, error) {
 	// sanity check
 	if len(config.Sources) == 0 {
 		return nil, errors.New("no source")
@@ -73,6 +70,17 @@ func New(name string, mgr runtimeManager.Manager, config Config, opts Options) (
 
 	if len(config.Sources) > 1 && config.Pipeline.Join == nil {
 		return nil, errors.New("controllers defined on multiple base resources must specify a Join in the pipeline")
+	}
+
+	// opts
+	processor := processRequest
+	if opts.Processor != nil {
+		processor = opts.Processor
+	}
+
+	name := config.Name
+	if name == "" {
+		return nil, errors.New("empty name in controller config")
 	}
 
 	logger := mgr.GetLogger()
@@ -107,7 +115,7 @@ func New(name string, mgr runtimeManager.Manager, config Config, opts Options) (
 		s := &config.Sources[i]
 		gvk, err := s.GetGVK(mgr)
 		if err != nil {
-			return nil, fmt.Errorf("controller: cannot obtain GVK for source %s: %w",
+			return nil, fmt.Errorf("cannot obtain GVK for source %s: %w",
 				util.Stringify(s), err)
 		}
 
@@ -117,19 +125,19 @@ func New(name string, mgr runtimeManager.Manager, config Config, opts Options) (
 			Reconciler:         reconciler,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("controller: cannot create runtime controller for resource %s: %w",
+			return nil, fmt.Errorf("cannot create runtime controller for resource %s: %w",
 				gvk.String(), err)
 		}
 
 		// Set up the watch
 		src, err := NewSource(mgr, s).GetSource()
 		if err != nil {
-			return nil, fmt.Errorf("controller: cannot create runtime source for resource %s: %w",
+			return nil, fmt.Errorf("cannot create runtime source for resource %s: %w",
 				gvk.String(), err)
 		}
 
 		if err := ctrl.Watch(src); err != nil {
-			return nil, fmt.Errorf("controller: cannot watch resource %s: %w",
+			return nil, fmt.Errorf("cannot watch resource %s: %w",
 				gvk.String(), err)
 		}
 
@@ -142,7 +150,7 @@ func New(name string, mgr runtimeManager.Manager, config Config, opts Options) (
 		logger.WithName("pipeline").WithValues("controller", c.name, "kind/view", c.kind))
 
 	if err := mgr.Add(c); err != nil {
-		return nil, fmt.Errorf("controller: cannot schedule controller %s: %w",
+		return nil, fmt.Errorf("cannot schedule controller %s: %w",
 			c.name, err)
 	}
 
@@ -185,7 +193,7 @@ func processRequest(ctx context.Context, c *Controller, req Request) error {
 
 	if req.EventType == cache.Added || req.EventType == cache.Updated || req.EventType == cache.Replaced {
 		if err := c.manager.GetClient().Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
-			return fmt.Errorf("controller: object %s/%s disappeared for Add/Update event: %w",
+			return fmt.Errorf("object %s/%s disappeared for Add/Update event: %w",
 				req.GVK, client.ObjectKeyFromObject(obj), err)
 		}
 	}
@@ -197,7 +205,7 @@ func processRequest(ctx context.Context, c *Controller, req Request) error {
 	// Process the delta through the pipeline
 	deltas, err := c.config.Pipeline.Evaluate(c.engine, delta)
 	if err != nil {
-		return fmt.Errorf("controller: error evaluating pipeline for object %s/%s: %w",
+		return fmt.Errorf("error evaluating pipeline for object %s/%s: %w",
 			req.GVK, client.ObjectKeyFromObject(obj), err)
 	}
 
@@ -207,7 +215,7 @@ func processRequest(ctx context.Context, c *Controller, req Request) error {
 			"delta-type", d.Type, "object", object.Dump(delta.Object))
 
 		if err := c.target.Write(ctx, d); err != nil {
-			return fmt.Errorf("controller: cannot update target %s for delta %s: %w",
+			return fmt.Errorf("cannot update target %s for delta %s: %w",
 				req.GVK, d.String(), err)
 		}
 	}

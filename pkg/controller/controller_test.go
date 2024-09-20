@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -154,6 +155,7 @@ var _ = Describe("Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			config := Config{
+				Name: "test",
 				Sources: []Source{{
 					Resource: Resource{
 						Kind: "view",
@@ -176,7 +178,7 @@ var _ = Describe("Controller", func() {
 
 			// Create controller overriding the request processor
 			request := Request{}
-			c, err := New("test", mgr, config, Options{
+			c, err := New(mgr, config, Options{
 				Processor: func(_ context.Context, _ *Controller, req Request) error {
 					request = req
 					return nil
@@ -217,6 +219,7 @@ var _ = Describe("Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			config := Config{
+				Name: "test",
 				Sources: []Source{{
 					Resource: Resource{
 						Kind: "view",
@@ -236,7 +239,7 @@ var _ = Describe("Controller", func() {
 			Expect(mgr).NotTo(BeNil())
 
 			// Create controller
-			c, err := New("test", mgr, config, Options{})
+			c, err := New(mgr, config, Options{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.GetName()).To(Equal("test"))
 
@@ -302,14 +305,19 @@ var _ = Describe("Controller", func() {
 			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
 
 			yamlData := `
+name: test
 sources:
   - apiGroup: ""
     kind: Pod
 pipeline:
   '@aggregate':
     - '@project':
-        "$.metadata.name": "$.metadata.namespace"
-        "$.metadata.namespace": "default"
+        metadata:
+          name: "$.metadata.name"
+          namespace: "$.metadata.namespace"
+          annotations:
+            containerNames:
+              '@concat': [ '@map': ["$$.name", $.spec.containers] ]
 target:
   apiGroup: ""
   kind: Pod
@@ -319,30 +327,54 @@ target:
 			err = yaml.Unmarshal([]byte(yamlData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
-			c, err := New("test", mgr, config, Options{})
+			c, err := New(mgr, config, Options{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.GetName()).To(Equal("test"))
 
-			// push a pod via the fakeRuntimeCache.Add function (the tracker would not
-			// work since the split client takes all watches from the cache, not the
-			// tracker)
-			rcache := mgr.GetRuntimeCache()
-			err = rcache.Add(pod)
-			Expect(err).NotTo(HaveOccurred())
-
-			// this should induce an event on the pod itself
+			// Add the object to the fake runtime client object tracker, that's how the
+			// controller's target will be able to modify it
+			tracker := mgr.GetObjectTracker()
 			gvr := schema.GroupVersionResource{
 				Group:    "",
 				Version:  "v1",
 				Resource: "pods", // Resource does not equal Kind!
 			}
+			err = tracker.Add(pod)
+			Expect(err).NotTo(HaveOccurred())
 
-			tracker := mgr.GetObjectTracker()
-			// get := object.New()
+			// sanity check
+			Eventually(func() bool {
+				_, err := tracker.Get(gvr, "testns", "testpod")
+				fmt.Println(err)
+				return err == nil
+			}, timeout, retryInterval).Should(BeTrue())
+
+			// Then push the object via the fakeRuntimeCache.Add function (the tracker
+			// would not work since the split client takes all watches from the cache,
+			// not the tracker)
+			rcache := mgr.GetRuntimeCache()
+			err = rcache.Add(pod)
+			Expect(err).NotTo(HaveOccurred())
+
+			// sanity check
+			gvk := schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod", // Resource does not equal Kind!
+			}
+			// sanity check
+			Eventually(func() bool {
+				g := object.New()
+				g.SetGroupVersionKind(gvk)
+				object.SetName(g, "testns", "testpod")
+				err := rcache.Get(ctx, client.ObjectKeyFromObject(g), g)
+				return err == nil
+			}, timeout, retryInterval).Should(BeTrue())
+
+			// Check whether the controller updated the object
 			var get *corev1.Pod
 			Eventually(func() bool {
-				// namespace->name, "default"->namespace
-				g, err := tracker.Get(gvr, "default", "testns")
+				g, err := tracker.Get(gvr, "testns", "testpod")
 				if err != nil {
 					return false
 				}
@@ -352,7 +384,65 @@ target:
 				if !ok {
 					return false
 				}
-				return get.GetName() == "testns" && get.GetNamespace() == "default"
+
+				anns := get.GetAnnotations()
+				if anns == nil {
+					return false
+				}
+				a, ok := anns["containerNames"]
+				if !ok {
+					return false
+				}
+				return a == "nginx"
+			}, timeout, retryInterval).Should(BeTrue())
+
+			// add a new container
+
+			pod1 := object.New()
+			content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(get)
+			Expect(err).NotTo(HaveOccurred())
+			pod1.SetUnstructuredContent(content)
+			pod1.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			})
+
+			pod2 := object.DeepCopy(pod1)
+			cs, ok, err := unstructured.NestedSlice(pod2.Object, "spec", "containers")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			cs = append(cs, map[string]any{"name": "envoy", "image": "envoy"})
+			err = unstructured.SetNestedSlice(pod2.Object, cs, "spec", "containers")
+			Expect(err).NotTo(HaveOccurred())
+
+			err = tracker.Update(gvr, pod2, "testns")
+			Expect(err).NotTo(HaveOccurred())
+
+			err = rcache.Update(pod1, pod2)
+			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(func() bool {
+				g, err := tracker.Get(gvr, "testns", "testpod")
+				if err != nil {
+					return false
+				}
+				// for some strange reason we get a structured object back
+				ok := false
+				get, ok = g.(*corev1.Pod)
+				if !ok {
+					return false
+				}
+
+				anns := get.GetAnnotations()
+				if anns == nil {
+					return false
+				}
+				a, ok := anns["containerNames"]
+				if !ok {
+					return false
+				}
+				return a == "nginxenvoy"
 			}, timeout, retryInterval).Should(BeTrue())
 		})
 
@@ -364,6 +454,7 @@ target:
 			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
 
 			yamlData := `
+name: test
 pipeline:
   '@aggregate':
     - '@project':
@@ -377,7 +468,7 @@ target:
 			err = yaml.Unmarshal([]byte(yamlData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = New("test", mgr, config, Options{})
+			_, err = New(mgr, config, Options{})
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -389,6 +480,7 @@ target:
 			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
 
 			yamlData := `
+name: test
 sources:
   - apiGroup: ""
     kind: Pod
@@ -401,7 +493,7 @@ pipeline:
 			err = yaml.Unmarshal([]byte(yamlData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = New("test", mgr, config, Options{})
+			_, err = New(mgr, config, Options{})
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -441,6 +533,7 @@ target:
 # the image taken from the pod.spec and the replica count from dep.spec.replicas. Name and
 # namespace are the same as those of the deployment.
 #
+name: test
 sources:
   - kind: pod
   - kind: dep
@@ -467,7 +560,7 @@ target:
 			Expect(err).NotTo(HaveOccurred())
 
 			log.V(1).Info("Create controller")
-			c, err := New("test", mgr, config, Options{})
+			c, err := New(mgr, config, Options{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.GetName()).To(Equal("test"))
 
@@ -676,6 +769,7 @@ target:
 			// 2. write the rs name back into the pod as the annotation "rs-name"
 
 			yamlData1 := `
+name: rs
 sources:
   - kind: pod
   - kind: dep
@@ -705,10 +799,11 @@ target:
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create controller1
-			_, err = New("rs", mgr, config1, Options{})
+			_, err = New(mgr, config1, Options{})
 			Expect(err).NotTo(HaveOccurred())
 
 			yamlData2 := `
+name: pod-patcher
 sources:
   - kind: rs
   - kind: pod
@@ -730,7 +825,7 @@ target:
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create controller2
-			_, err = New("pod-patcher", mgr, config2, Options{})
+			_, err = New(mgr, config2, Options{})
 			Expect(err).NotTo(HaveOccurred())
 
 			// Obtain the viewcache

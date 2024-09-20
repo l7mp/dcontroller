@@ -117,7 +117,7 @@ func (c *FakeRuntimeCache) List(ctx context.Context, list client.ObjectList, opt
 func (c *FakeRuntimeCache) Add(obj any) error {
 	u, ok := obj.(object.Object)
 	if !ok {
-		return errors.New("Add: object must be a list")
+		return errors.New("Add: object must be an unstuctured object")
 	}
 
 	if err := c.Store.Add(u); err != nil {
@@ -135,14 +135,14 @@ func (c *FakeRuntimeCache) Add(obj any) error {
 }
 
 func (c *FakeRuntimeCache) Update(oldObj, newObj any) error {
-	u1, ok := newObj.(object.Object)
+	u1, ok := oldObj.(object.Object)
 	if !ok {
-		return errors.New("Add: oldObj object must be a list")
+		return errors.New("Add: oldObj object must be an unstuctured object")
 	}
 
-	u2, ok := oldObj.(object.Object)
+	u2, ok := newObj.(object.Object)
 	if !ok {
-		return errors.New("Add: newObj object must be a list")
+		return errors.New("Add: newObj object must be an unstuctured object")
 	}
 
 	if err := c.Store.Update(u2); err != nil {

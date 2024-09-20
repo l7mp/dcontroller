@@ -1,7 +1,6 @@
 package controller
 
 import (
-	// corev1 "k8s.io/api/core/v1"
 	"context"
 	"errors"
 	"fmt"
@@ -202,6 +201,9 @@ func (t *target) Write(ctx context.Context, delta cache.Delta) error {
 		return err
 	}
 
+	// make a private copy of the Object
+	delta.Object = object.DeepCopy(delta.Object)
+
 	// make sure delta object gets the correct GVK applied
 	delta.Object.SetGroupVersionKind(gvk)
 
@@ -242,12 +244,27 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 		t.log.V(4).Info("update-patch", "event-type", delta.Type,
 			"key", client.ObjectKeyFromObject(delta.Object).String(),
 			"patch", object.Dump(delta.Object))
-		patch, err := json.Marshal(delta.Object.UnstructuredContent())
+
+		obj := object.DeepCopy(delta.Object)
+		patchContent := obj.UnstructuredContent()
+
+		patch, err := json.Marshal(patchContent)
 		if err != nil {
 			return err
 		}
 
-		return c.Patch(ctx, delta.Object, client.RawPatch(types.StrategicMergePatchType, patch))
+		result := object.New()
+		result.SetGroupVersionKind(obj.GroupVersionKind())
+		result.SetName(obj.GetName())
+		result.SetNamespace(obj.GetNamespace())
+
+		// TODO: strategic merge patch fails with error "unable to find api field in struct
+		// Unstructured for the json field \"metadata\""}"
+		// return c.Patch(ctx, result, client.RawPatch(types.StrategicMergePatchType, patch))
+
+		// fall back to simple merge patches
+		return c.Patch(ctx, result, client.RawPatch(types.MergePatchType, patch))
+
 	case cache.Deleted:
 		// apply the patch locally so that we fully control the behavior
 		patch := removeNested(delta.Object.UnstructuredContent())
