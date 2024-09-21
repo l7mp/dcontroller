@@ -6,30 +6,42 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	runtimePredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	runtimeSource "sigs.k8s.io/controller-runtime/pkg/source"
 
+	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
 	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
 	"hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/object"
+	"hsnlab/dcontroller-runtime/pkg/predicate"
 	"hsnlab/dcontroller-runtime/pkg/util"
 )
 
-type Resource struct {
-	Group   *string `json:"apiGroup,omitempty"`
-	Version *string `json:"version,omitempty"`
-	Kind    string  `json:"kind"`
+type Resource interface {
+	fmt.Stringer
+	GetGVK() (schema.GroupVersionKind, error)
 }
 
-func (r *Resource) String(mgr runtimeManager.Manager) string {
-	gvk, err := r.GetGVK(mgr)
+type resource struct {
+	mgr      runtimeManager.Manager
+	resource opv1a1.Resource
+}
+
+func NewResource(mgr runtimeManager.Manager, r opv1a1.Resource) Resource {
+	return &resource{
+		mgr:      mgr,
+		resource: r,
+	}
+}
+
+func (r *resource) String() string {
+	gvk, err := r.GetGVK()
 	if err != nil {
 		return ""
 	}
@@ -41,28 +53,28 @@ func (r *Resource) String(mgr runtimeManager.Manager) string {
 	return fmt.Sprintf("%s/%s:%s", gr, gvk.Version, gvk.Kind)
 }
 
-func (r *Resource) GetGVK(mgr runtimeManager.Manager) (schema.GroupVersionKind, error) {
-	if r.Kind == "" {
+func (r *resource) GetGVK() (schema.GroupVersionKind, error) {
+	if r.resource.Kind == "" {
 		return schema.GroupVersionKind{}, fmt.Errorf("empty Kind in %s", util.Stringify(*r))
 	}
 
-	if r.Group == nil || *r.Group == viewv1a1.GroupVersion.Group {
+	if r.resource.Group == nil || *r.resource.Group == viewv1a1.GroupVersion.Group {
 		// this will be a View, version is enforced
-		return GetGVKByGroupKind(mgr, schema.GroupKind{Group: viewv1a1.GroupVersion.Group, Kind: r.Kind})
+		return r.getGVKByGroupKind(schema.GroupKind{Group: viewv1a1.GroupVersion.Group, Kind: r.resource.Kind})
 	}
 
 	// this will be a standard Kubernetes object
-	if r.Version == nil {
-		return GetGVKByGroupKind(mgr, schema.GroupKind{Group: *r.Group, Kind: r.Kind})
+	if r.resource.Version == nil {
+		return r.getGVKByGroupKind(schema.GroupKind{Group: *r.resource.Group, Kind: r.resource.Kind})
 	}
 	return schema.GroupVersionKind{
-		Group:   *r.Group,
-		Version: *r.Version,
-		Kind:    r.Kind,
+		Group:   *r.resource.Group,
+		Version: *r.resource.Version,
+		Kind:    r.resource.Kind,
 	}, nil
 }
 
-func GetGVKByGroupKind(m runtimeManager.Manager, gr schema.GroupKind) (schema.GroupVersionKind, error) {
+func (r *resource) getGVKByGroupKind(gr schema.GroupKind) (schema.GroupVersionKind, error) {
 	if gr.Group == viewv1a1.GroupVersion.Group {
 		return schema.GroupVersionKind{
 			Group:   viewv1a1.GroupVersion.Group,
@@ -72,7 +84,7 @@ func GetGVKByGroupKind(m runtimeManager.Manager, gr schema.GroupKind) (schema.Gr
 	}
 
 	// standard Kubernetes object
-	mapper := m.GetRESTMapper()
+	mapper := r.mgr.GetRESTMapper()
 	gvk, err := mapper.KindFor(schema.GroupVersionResource{Group: gr.Group, Resource: gr.Kind})
 	if err != nil {
 		return schema.GroupVersionKind{}, fmt.Errorf("cannot find GVK for %s: %w", gr, err)
@@ -81,36 +93,38 @@ func GetGVKByGroupKind(m runtimeManager.Manager, gr schema.GroupKind) (schema.Gr
 	return gvk, nil
 }
 
-type Source struct {
+// Source is a generic watch source that knows how to create controller runtime sources.
+type Source interface {
 	Resource
-	Namespace     *string               `json:"namespace,omitempty"`
-	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
-	Predicate     *Predicate            `json:"predicate,omitempty"`
+	GetSource() (runtimeSource.TypedSource[Request], error)
+	fmt.Stringer
 }
 
 type source struct {
-	*Source
-	manager runtimeManager.Manager
-	log     logr.Logger
+	Resource
+	mgr    runtimeManager.Manager
+	source opv1a1.Source
+	log    logr.Logger
 }
 
-func NewSource(mgr runtimeManager.Manager, s *Source) *source {
+func NewSource(mgr runtimeManager.Manager, s opv1a1.Source) Source {
 	src := &source{
-		manager: mgr,
-		Source:  s,
+		mgr:      mgr,
+		source:   s,
+		Resource: NewResource(mgr, s.Resource),
 	}
 
-	log := mgr.GetLogger().WithName("source").WithValues("name", s.Resource.String(mgr))
+	log := mgr.GetLogger().WithName("source").WithValues("name", src.Resource.String())
 	src.log = log
 
 	return src
 }
 
-func (s *source) String() string { return s.Resource.String(s.manager) }
+func (s *source) String() string { return s.Resource.String() }
 
 func (s *source) GetSource() (runtimeSource.TypedSource[Request], error) {
 	// gvk to watch
-	gvk, err := s.GetGVK(s.manager)
+	gvk, err := s.GetGVK()
 	if err != nil {
 		return nil, err
 	}
@@ -119,70 +133,64 @@ func (s *source) GetSource() (runtimeSource.TypedSource[Request], error) {
 	obj.GetObjectKind().SetGroupVersionKind(gvk)
 
 	// prepare the predicate
-	ps := []predicate.TypedPredicate[client.Object]{}
-	if s.Predicate != nil {
-		p, err := s.Predicate.ToPredicate()
+	ps := []runtimePredicate.TypedPredicate[client.Object]{}
+	if s.source.Predicate != nil {
+		p, err := predicate.FromPredicate(*s.source.Predicate)
 		if err != nil {
 			return nil, err
 		}
 		ps = append(ps, p)
 	}
 
-	if s.LabelSelector != nil {
-		lp, err := predicate.LabelSelectorPredicate(*s.LabelSelector)
+	if s.source.LabelSelector != nil {
+		lp, err := predicate.FromLabelSelector(*s.source.LabelSelector)
 		if err != nil {
 			return nil, err
 		}
 		ps = append(ps, lp)
 	}
 
-	if s.Namespace != nil {
-		np := predicate.NewPredicateFuncs(func(object client.Object) bool {
-			return object.GetNamespace() == *s.Namespace
-		})
-		ps = append(ps, np)
+	if s.source.Namespace != nil {
+		ps = append(ps, predicate.FromNamespace(*s.source.Namespace))
 	}
 
 	// generic handler
-	src := runtimeSource.TypedKind(s.manager.GetCache(), obj, EventHandler[client.Object]{}, ps...)
+	src := runtimeSource.TypedKind(s.mgr.GetCache(), obj, EventHandler[client.Object]{}, ps...)
 
 	s.log.V(4).Info("watch source: ready", "GVK", gvk.String(), "predicate-num", len(ps))
 
 	return src, nil
 }
 
-type TargetType string
-
-const (
-	Updater TargetType = "Updater"
-	Patcher TargetType = "Patcher"
-)
-
-type Target struct {
+// Target is a generic writer that knows how to create controller runtime objects in a target resource.
+type Target interface {
 	Resource
-	Type TargetType `json:"type,omitempty"`
+	Write(context.Context, cache.Delta) error
+	fmt.Stringer
 }
 
 type target struct {
-	*Target
-	manager runtimeManager.Manager
-	log     logr.Logger
+	Resource
+	mgr    runtimeManager.Manager
+	target opv1a1.Target
+	log    logr.Logger
 }
 
-func NewTarget(mgr runtimeManager.Manager, t *Target) *target {
+func NewTarget(mgr runtimeManager.Manager, t opv1a1.Target) Target {
 	target := &target{
-		manager: mgr,
-		Target:  t,
+		Resource: NewResource(mgr, t.Resource),
+		mgr:      mgr,
+		target:   t,
 	}
 
-	log := mgr.GetLogger().WithName("target").WithValues("name", t.Resource.String(mgr))
+	log := mgr.GetLogger().WithName("target").WithValues("name", target.Resource.String())
 	target.log = log
 
 	return target
 }
 
 func (t *target) String() string {
-	return fmt.Sprintf("%s<type:%s>", t.Resource.String(t.manager), t.Type)
+	return fmt.Sprintf("%s<type:%s>", t.Resource.String(), t.target.Type)
 }
 
 // Write enforces a delta on a target. The behavior depends on the target type:
@@ -196,7 +204,7 @@ func (t *target) Write(ctx context.Context, delta cache.Delta) error {
 	}
 
 	// gvk to watch
-	gvk, err := t.GetGVK(t.manager)
+	gvk, err := t.GetGVK()
 	if err != nil {
 		return err
 	}
@@ -207,18 +215,18 @@ func (t *target) Write(ctx context.Context, delta cache.Delta) error {
 	// make sure delta object gets the correct GVK applied
 	delta.Object.SetGroupVersionKind(gvk)
 
-	switch t.Type {
+	switch t.target.Type {
 	case "Updater", "":
 		return t.update(ctx, delta)
 	case "Patcher":
 		return t.patch(ctx, delta)
 	default:
-		return fmt.Errorf("unknown target type: %s", t.Type)
+		return fmt.Errorf("unknown target type: %s", t.target.Type)
 	}
 }
 
 func (t *target) update(ctx context.Context, delta cache.Delta) error {
-	c := t.manager.GetClient()
+	c := t.mgr.GetClient()
 
 	switch delta.Type {
 	case cache.Added:
@@ -237,7 +245,7 @@ func (t *target) update(ctx context.Context, delta cache.Delta) error {
 }
 
 func (t *target) patch(ctx context.Context, delta cache.Delta) error {
-	c := t.manager.GetClient()
+	c := t.mgr.GetClient()
 
 	switch delta.Type {
 	case cache.Added, cache.Updated, cache.Replaced:
@@ -254,7 +262,7 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 		oldObj.SetGroupVersionKind(delta.Object.GroupVersionKind())
 		oldObj.SetName(delta.Object.GetName())
 		oldObj.SetNamespace(delta.Object.GetNamespace())
-		if err := t.manager.GetClient().Get(ctx, client.ObjectKeyFromObject(oldObj), oldObj); err != nil {
+		if err := c.Get(ctx, client.ObjectKeyFromObject(oldObj), oldObj); err != nil {
 			return err
 		}
 
@@ -287,6 +295,7 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 			"patch", util.Stringify(patch), "raw-patch", string(b))
 
 		return c.Patch(context.Background(), delta.Object, client.RawPatch(types.StrategicMergePatchType, b))
+
 	default:
 		t.log.V(2).Info("target: ignoring delta", "type", delta.Type)
 

@@ -14,6 +14,7 @@ import (
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
 	"hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/object"
 	"hsnlab/dcontroller-runtime/pkg/pipeline"
@@ -21,18 +22,6 @@ import (
 )
 
 const WatcherBufferSize int = 1024
-
-// ViewConf is the basic view definition.
-type Config struct {
-	// Name is the unique name of the controller.
-	Name string
-	// The base resource(s) the controller watches.
-	Sources []Source `json:"sources"`
-	// Pipeline is an aggregation pipeline applied to base objects.
-	Pipeline pipeline.Pipeline `json:"pipeline"`
-	// The target resource the results are to be added.
-	Target Target `json:"target"`
-}
 
 type ProcessorFunc func(ctx context.Context, c *Controller, req Request) error
 type Options struct {
@@ -45,9 +34,10 @@ var _ runtimeManager.Runnable = &Controller{}
 // implementation
 type Controller struct {
 	name, kind  string
-	config      Config
-	target      *target
-	manager     runtimeManager.Manager
+	config      opv1a1.Controller
+	sources     []Source
+	target      Target
+	mgr         runtimeManager.Manager
 	watcher     chan Request
 	engine      pipeline.Engine
 	processor   ProcessorFunc
@@ -57,13 +47,13 @@ type Controller struct {
 // New registers a new controller given by the source resource(s) the controller watches, a target
 // resource the controller sends its output, and a processing pipeline to process the base
 // resources into target resources.
-func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, error) {
+func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*Controller, error) {
 	// sanity check
 	if len(config.Sources) == 0 {
 		return nil, errors.New("no source")
 	}
 
-	emptyTarget := Target{}
+	emptyTarget := opv1a1.Target{}
 	if config.Target == emptyTarget {
 		return nil, errors.New("no target")
 	}
@@ -91,7 +81,9 @@ func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, 
 	c := &Controller{
 		name:      name,
 		kind:      config.Target.Resource.Kind, // the kind of the target
-		manager:   mgr,
+		mgr:       mgr,
+		target:    NewTarget(mgr, config.Target),
+		sources:   []Source{},
 		config:    config,
 		watcher:   make(chan Request, WatcherBufferSize),
 		processor: processor,
@@ -100,20 +92,20 @@ func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, 
 	}
 
 	// Create the reconciler
-	c.target = NewTarget(c.manager, &c.config.Target)
 	reconciler := NewControllerReconciler(mgr, c)
 
 	srcs := []string{}
 	for _, s := range config.Sources {
-		srcs = append(srcs, s.Resource.String(mgr))
+		source := NewSource(mgr, s)
+		c.sources = append(c.sources, source)
+		srcs = append(srcs, source.String())
 	}
 	c.log.Info("creating", "sources", fmt.Sprintf("[%s]", strings.Join(srcs, ",")))
 
 	on := true
 	baseviews := []schema.GroupVersionKind{}
-	for i := range config.Sources {
-		s := &config.Sources[i]
-		gvk, err := s.GetGVK(mgr)
+	for _, s := range c.sources {
+		gvk, err := s.GetGVK()
 		if err != nil {
 			return nil, fmt.Errorf("cannot obtain GVK for source %s: %w",
 				util.Stringify(s), err)
@@ -130,7 +122,7 @@ func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, 
 		}
 
 		// Set up the watch
-		src, err := NewSource(mgr, s).GetSource()
+		src, err := s.GetSource()
 		if err != nil {
 			return nil, fmt.Errorf("cannot create runtime source for resource %s: %w",
 				gvk.String(), err)
@@ -141,7 +133,7 @@ func New(mgr runtimeManager.Manager, config Config, opts Options) (*Controller, 
 				gvk.String(), err)
 		}
 
-		c.log.V(2).Info("watching resource", "GVK", s.String(mgr))
+		c.log.V(2).Info("watching resource", "GVK", s.String())
 
 		baseviews = append(baseviews, gvk)
 	}
@@ -192,7 +184,7 @@ func processRequest(ctx context.Context, c *Controller, req Request) error {
 	obj.SetName(req.Name)
 
 	if req.EventType == cache.Added || req.EventType == cache.Updated || req.EventType == cache.Replaced {
-		if err := c.manager.GetClient().Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+		if err := c.mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
 			return fmt.Errorf("object %s/%s disappeared for Add/Update event: %w",
 				req.GVK, client.ObjectKeyFromObject(obj), err)
 		}

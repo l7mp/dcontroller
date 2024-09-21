@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	// viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
+	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
 
 	"hsnlab/dcontroller-runtime/pkg/controller"
 	"hsnlab/dcontroller-runtime/pkg/manager"
@@ -117,7 +118,7 @@ target:
   type: Patcher
 `
 
-			var config controller.Config
+			var config opv1a1.Controller
 			Expect(yaml.Unmarshal([]byte(yamlData), &config)).NotTo(HaveOccurred())
 
 			c, err := controller.New(mgr, config, controller.Options{})

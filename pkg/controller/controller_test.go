@@ -24,6 +24,7 @@ import (
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/yaml"
 
+	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
 	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
 	"hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/manager"
@@ -60,9 +61,9 @@ var (
 	}
 )
 
-func TestView(t *testing.T) {
+func TestController(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "View")
+	RunSpecs(t, "Controller")
 }
 
 var _ = Describe("Controller", func() {
@@ -154,16 +155,16 @@ var _ = Describe("Controller", func() {
 			err := yaml.Unmarshal([]byte(jsonData), &p)
 			Expect(err).NotTo(HaveOccurred())
 
-			config := Config{
+			config := opv1a1.Controller{
 				Name: "test",
-				Sources: []Source{{
-					Resource: Resource{
+				Sources: []opv1a1.Source{{
+					Resource: opv1a1.Resource{
 						Kind: "view",
 					},
 				}},
 				Pipeline: p,
-				Target: Target{
-					Resource: Resource{
+				Target: opv1a1.Target{
+					Resource: opv1a1.Resource{
 						Kind: "view",
 					},
 					Type: "Patcher",
@@ -218,16 +219,16 @@ var _ = Describe("Controller", func() {
 			err := yaml.Unmarshal([]byte(jsonData), &p)
 			Expect(err).NotTo(HaveOccurred())
 
-			config := Config{
+			config := opv1a1.Controller{
 				Name: "test",
-				Sources: []Source{{
-					Resource: Resource{
+				Sources: []opv1a1.Source{{
+					Resource: opv1a1.Resource{
 						Kind: "view",
 					},
 				}},
 				Pipeline: p,
-				Target: Target{
-					Resource: Resource{
+				Target: opv1a1.Target{
+					Resource: opv1a1.Resource{
 						Kind: "view",
 					},
 					Type: "Patcher",
@@ -323,7 +324,7 @@ target:
   kind: Pod
   type: Patcher`
 
-			var config Config
+			var config opv1a1.Controller
 			err = yaml.Unmarshal([]byte(yamlData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -464,7 +465,7 @@ target:
   kind: Pod
   type: Patcher`
 
-			var config Config
+			var config opv1a1.Controller
 			err = yaml.Unmarshal([]byte(yamlData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -489,7 +490,7 @@ pipeline:
     - '@project':
         "$.metadata": "$.metadata"`
 
-			var config Config
+			var config opv1a1.Controller
 			err = yaml.Unmarshal([]byte(yamlData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -515,7 +516,7 @@ target:
   kind: Pod
   type: Patcher`
 
-			var config Config
+			var config opv1a1.Controller
 			err = yaml.Unmarshal([]byte(yamlData), &config)
 			Expect(err).To(HaveOccurred())
 		})
@@ -555,7 +556,7 @@ pipeline:
 target:
   kind: rs
   type: Updater`
-			var config Config
+			var config opv1a1.Controller
 			err = yaml.Unmarshal([]byte(yamlData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -794,7 +795,7 @@ pipeline:
 target:
   kind: rs
   type: Updater`
-			var config1 Config
+			var config1 opv1a1.Controller
 			err = yaml.Unmarshal([]byte(yamlData1), &config1)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -820,7 +821,7 @@ pipeline:
 target:
   kind: pod
   type: Patcher`
-			var config2 Config
+			var config2 opv1a1.Controller
 			err = yaml.Unmarshal([]byte(yamlData2), &config2)
 			Expect(err).NotTo(HaveOccurred())
 

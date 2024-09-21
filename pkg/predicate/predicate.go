@@ -1,10 +1,11 @@
-package controller
+package predicate
 
 import (
 	encodingjson "encoding/json"
 	"errors"
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -16,6 +17,24 @@ var _ encodingjson.Unmarshaler = &Predicate{}
 
 type Interface interface {
 	ToPredicate() (predicate.TypedPredicate[client.Object], error)
+}
+
+// FromPredicate converts a seriaized Predicate into a native controller runtime predicate.
+func FromPredicate(predicate Predicate) (predicate.TypedPredicate[client.Object], error) {
+	return predicate.ToPredicate()
+}
+
+// FromPredicate creates converts a seriaized label selector into a native controller runtime label
+// selector predicate.
+func FromLabelSelector(labelSelector metav1.LabelSelector) (predicate.TypedPredicate[client.Object], error) {
+	return predicate.LabelSelectorPredicate(labelSelector)
+}
+
+// FromPredicate returns a namespace selector predicate from a namespace.
+func FromNamespace(namespace string) predicate.TypedPredicate[client.Object] {
+	return predicate.NewPredicateFuncs(func(object client.Object) bool {
+		return object.GetNamespace() == namespace
+	})
 }
 
 type BasicPredicate string
@@ -113,38 +132,3 @@ func (cp *BoolPredicate) ToPredicate() (predicate.TypedPredicate[client.Object],
 
 	return nil, errors.New("invalid bool predicate")
 }
-
-// // these to are useless but simplify testing
-// func MarshalBasicPredicate(p predicate.Predicate) ([]byte, error) {
-// 	var pw BasicPredicate
-
-// 	switch p.(type) {
-// 	case predicate.GenerationChangedPredicate:
-// 		t := PredType("GenerationChanged")
-// 		pw = BasicPredicate{PredType: &t}
-// 	case predicate.ResourceVersionChangedPredicate:
-// 		t := PredType("ResourceVersionChanged")
-// 		pw = BasicPredicate{PredType: &t}
-// 	case predicate.LabelChangedPredicate:
-// 		t := PredType("LabelChanged")
-// 		pw = BasicPredicate{PredType: &t}
-// 	case predicate.AnnotationChangedPredicate:
-// 		t := PredType("AnnotationChanged")
-// 		pw = BasicPredicate{PredType: &t}
-// 	case predicate.Funcs:
-// 		return nil, errors.New("cannot parse predicate functions")
-// 	default:
-// 		return nil, fmt.Errorf("unsupported predicate type: %T", p)
-// 	}
-
-// 	return json.Marshal(pw)
-// }
-
-// func UnmarshalPredicate(data []byte) (predicate.Predicate, error) {
-// 	var pw BasicPredicate
-// 	err := json.Unmarshal(data, &pw)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return pw.ToPredicate()
-// }

@@ -16,6 +16,7 @@ import (
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
 	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
 	"hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/manager"
@@ -81,7 +82,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(mgr).NotTo(BeNil())
 
 			// Register source
-			s := Source{Resource: Resource{Kind: "view"}}
+			s := opv1a1.Source{Resource: opv1a1.Resource{Kind: "view"}}
 
 			// Get view cache
 			vcache := mgr.GetCompositeCache().GetViewCache()
@@ -96,7 +97,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a source
-			src, err := NewSource(mgr, &s).GetSource()
+			src, err := NewSource(mgr, s).GetSource()
 			Expect(err).NotTo(HaveOccurred())
 
 			// Watch the source
@@ -211,11 +212,13 @@ var _ = Describe("Reconciler", func() {
 
 			// Register source
 			group, version := "", "v1"
-			s := Source{Resource: Resource{
-				Group:   &group,
-				Version: &version,
-				Kind:    "Pod",
-			}}
+			s := opv1a1.Source{
+				Resource: opv1a1.Resource{
+					Group:   &group,
+					Version: &version,
+					Kind:    "Pod",
+				},
+			}
 
 			// Get view cache
 			vcache := mgr.GetCompositeCache().GetViewCache()
@@ -230,7 +233,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a source
-			src, err := NewSource(mgr, &s).GetSource()
+			src, err := NewSource(mgr, s).GetSource()
 			Expect(err).NotTo(HaveOccurred())
 
 			// Watch the source
@@ -264,7 +267,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(mgr).NotTo(BeNil())
 
 			// Register source
-			target := NewTarget(mgr, &Target{Resource: Resource{Kind: "view"}})
+			target := NewTarget(mgr, opv1a1.Target{Resource: opv1a1.Resource{Kind: "view"}})
 
 			// Start the manager
 			// go mgr.Start(ctx) // will stop with a context cancelled erro
@@ -323,11 +326,13 @@ var _ = Describe("Reconciler", func() {
 
 			// Register target
 			group, version := "", "v1"
-			target := NewTarget(mgr, &Target{Resource: Resource{
-				Group:   &group,
-				Version: &version,
-				Kind:    "Pod",
-			}})
+			target := NewTarget(mgr, opv1a1.Target{
+				Resource: opv1a1.Resource{
+					Group:   &group,
+					Version: &version,
+					Kind:    "Pod",
+				},
+			})
 
 			// Push a view object to the target
 			err = target.Write(ctx, cache.Delta{Type: cache.Added, Object: pod2})
@@ -410,7 +415,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(mgr).NotTo(BeNil())
 
 			// Register source
-			target := NewTarget(mgr, &Target{Resource: Resource{Kind: "view"}, Type: "Patcher"})
+			target := NewTarget(mgr, opv1a1.Target{Resource: opv1a1.Resource{Kind: "view"}, Type: "Patcher"})
 
 			// Start the manager
 			// go mgr.Start(ctx) // will stop with a context cancelled erro
@@ -475,8 +480,8 @@ var _ = Describe("Reconciler", func() {
 
 			// Register target
 			group, version := "", "v1"
-			target := NewTarget(mgr, &Target{
-				Resource: Resource{
+			target := NewTarget(mgr, opv1a1.Target{
+				Resource: opv1a1.Resource{
 					Group:   &group,
 					Version: &version,
 					Kind:    "Pod",
