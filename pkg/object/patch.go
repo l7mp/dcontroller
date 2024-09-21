@@ -3,6 +3,10 @@ package object
 import (
 	"fmt"
 	"reflect"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
 )
 
 // Patch performs an in-place patch.
@@ -114,4 +118,34 @@ func deepCopy(value any) any {
 	default:
 		return v
 	}
+}
+
+func ApplyStrategicMergePatch(original, patch *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	originalData, err := runtime.Encode(unstructured.UnstructuredJSONScheme, original)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println("777777777777777777777777777777777")
+	fmt.Println(string(originalData))
+
+	patchData, err := runtime.Encode(unstructured.UnstructuredJSONScheme, patch)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println("777777777777777777777777777777777")
+	fmt.Println(string(patchData))
+
+	patchedData, err := strategicpatch.StrategicMergePatch(originalData, patchData, &unstructured.Unstructured{})
+	if err != nil {
+		return nil, err
+	}
+
+	patched := &unstructured.Unstructured{}
+	if err := runtime.DecodeInto(unstructured.UnstructuredJSONScheme, patchedData, patched); err != nil {
+		return nil, err
+	}
+
+	return patched, nil
 }

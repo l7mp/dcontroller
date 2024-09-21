@@ -245,25 +245,25 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 			"key", client.ObjectKeyFromObject(delta.Object).String(),
 			"patch", object.Dump(delta.Object))
 
-		obj := object.DeepCopy(delta.Object)
-		patchContent := obj.UnstructuredContent()
-
-		patch, err := json.Marshal(patchContent)
+		patch, err := json.Marshal(object.DeepCopy(delta.Object).UnstructuredContent())
 		if err != nil {
 			return err
 		}
 
-		result := object.New()
-		result.SetGroupVersionKind(obj.GroupVersionKind())
-		result.SetName(obj.GetName())
-		result.SetNamespace(obj.GetNamespace())
+		oldObj := object.New()
+		oldObj.SetGroupVersionKind(delta.Object.GroupVersionKind())
+		oldObj.SetName(delta.Object.GetName())
+		oldObj.SetNamespace(delta.Object.GetNamespace())
+		if err := t.manager.GetClient().Get(ctx, client.ObjectKeyFromObject(oldObj), oldObj); err != nil {
+			return err
+		}
 
 		// TODO: strategic merge patch fails with error "unable to find api field in struct
 		// Unstructured for the json field \"metadata\""}"
 		// return c.Patch(ctx, result, client.RawPatch(types.StrategicMergePatchType, patch))
 
 		// fall back to simple merge patches
-		return c.Patch(ctx, result, client.RawPatch(types.MergePatchType, patch))
+		return c.Patch(ctx, oldObj, client.RawPatch(types.MergePatchType, patch))
 
 	case cache.Deleted:
 		// apply the patch locally so that we fully control the behavior
