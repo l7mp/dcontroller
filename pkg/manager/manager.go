@@ -12,13 +12,6 @@ import (
 	"hsnlab/dcontroller-runtime/pkg/cache"
 )
 
-// Options allows to pass options into the Manager constructor.
-type Options struct {
-	manager.Options
-	// Manager can be used to set a controller-runtime Manager to wrap.
-	Manager manager.Manager
-}
-
 // Manager is a wrapper around the controller-runtime Manager. The main difference is a custom
 // split cache: only native objects are loaded from the API server (via the cache), view objects
 // always go to a special view cache. The client returned by the GetClient call is smart enough to
@@ -29,50 +22,53 @@ type Manager struct {
 }
 
 // New creates a new manager
-func New(config *rest.Config, options Options) (*Manager, error) {
-	logger := options.Options.Logger
+func New(mgr manager.Manager, config *rest.Config, options manager.Options) (*Manager, error) {
+	logger := options.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
 	}
 
-	mgr := options.Manager
-	if options.Manager == nil {
-		// override the cache created by the base manager with the composite cache
-		if options.NewCache == nil {
-			options.NewCache = func(config *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
-				return cache.NewCompositeCache(config, cache.Options{
-					Options: opts,
-					Logger:  logger,
-				})
-			}
-		}
-
-		// override the client created by the base manager with the manager's custom split client
-		if options.NewClient == nil {
-			// make sure unstructured objects are served through the cache (the default
-			// is to obtain them directly from the API server)
-			options.Client = client.Options{
-				Cache: &client.CacheOptions{
-					Unstructured: true,
-				},
-			}
-			// this, apparently, only affects the Writer of the split client!
-			options.NewClient = NewCompositeClient
-		}
-
-		m, err := manager.New(config, options.Options)
-		if err != nil {
-			return nil, err
-		}
-		mgr = m
-
-		// pass the composite cache in to the client
-		c, ok := mgr.GetClient().(*compositeClient)
-		if !ok {
-			return nil, errors.New("cache must be a composite client")
-		}
-		c.setCache(mgr.GetCache())
+	// If runtime manager is provided by the caller, use that
+	if mgr != nil {
+		return &Manager{Manager: mgr}, nil
 	}
+
+	// Otherwise create a new manager and override the cache and the client to be created by
+	// the base manager
+	if options.NewCache == nil {
+		options.NewCache = func(config *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
+			return cache.NewCompositeCache(config, cache.Options{
+				Options: opts,
+				Logger:  logger,
+			})
+		}
+	}
+
+	// override the client created by the base manager with the manager's custom split client
+	if options.NewClient == nil {
+		// make sure unstructured objects are served through the cache (the default
+		// is to obtain them directly from the API server)
+		options.Client = client.Options{
+			Cache: &client.CacheOptions{
+				Unstructured: true,
+			},
+		}
+		// this, apparently, only affects the Writer of the split client!
+		options.NewClient = NewCompositeClient
+	}
+
+	m, err := manager.New(config, options)
+	if err != nil {
+		return nil, err
+	}
+	mgr = m
+
+	// pass the composite cache in to the client
+	c, ok := mgr.GetClient().(*compositeClient)
+	if !ok {
+		return nil, errors.New("cache must be a composite client")
+	}
+	c.setCache(mgr.GetCache())
 
 	return &Manager{Manager: mgr}, nil
 }

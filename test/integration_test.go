@@ -28,12 +28,17 @@ import (
 
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
 )
 
 var _ = fmt.Sprintf("%d", 1)
@@ -56,6 +61,7 @@ var (
 
 	// Globals
 	cfg              *rest.Config
+	scheme           *runtime.Scheme = runtime.NewScheme()
 	k8sClient        client.Client
 	testEnv          *envtest.Environment
 	ctx              context.Context
@@ -77,6 +83,13 @@ var _ = BeforeSuite(func() {
 
 	ctx, cancel = context.WithCancel(context.Background())
 
+	err := clientgoscheme.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = discoveryv1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = opv1a1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		// CRDDirectoryPaths: []string{
@@ -87,14 +100,13 @@ var _ = BeforeSuite(func() {
 		AttachControlPlaneOutput: true,
 	}
 
-	var err error
 	// cfg is defined in this file globally.
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
 	// a spearate client whose client.Reader does not go through the caches
-	k8sClient, err = client.New(cfg, client.Options{})
+	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 

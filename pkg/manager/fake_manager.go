@@ -74,9 +74,7 @@ func NewFakeManager(opts manager.Options, objs ...client.Object) (*FakeManager, 
 		compositeCache: compositeCache,
 	}, logger)
 
-	mgr, err := New(nil, Options{
-		Manager: fakeRuntimeManager,
-	})
+	mgr, err := New(fakeRuntimeManager, nil, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +96,7 @@ func (m *FakeManager) GetRuntimeClient() client.WithWatch        { return m.fake
 func (m *FakeManager) GetCompositeCache() *ccache.CompositeCache { return m.compositeCache }
 func (m *FakeManager) GetObjectTracker() testing.ObjectTracker   { return m.tracker }
 
-// /////// FakeRuntimeManager
+// FakeRuntimeManager
 type Runnable interface {
 	manager.Runnable
 	GetName() string

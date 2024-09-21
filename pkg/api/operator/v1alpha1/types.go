@@ -7,14 +7,6 @@ import (
 	"hsnlab/dcontroller-runtime/pkg/predicate"
 )
 
-// Operator is a set of related controllers with a unique name.
-type Operator struct {
-	// Name is the unique name of the operator.
-	Name string `json:"name"`
-	// The set of controllers run by this opeator.
-	Controllers []Controller `json:"conterollers"`
-}
-
 // Controller is a translator that processes a set of base resources via a declarative pipeline
 // into a delta on the target resource. A controller is defined by a name, a set of sources, a
 // processing pipeline and a target.
@@ -24,6 +16,9 @@ type Controller struct {
 	// The base resource(s) the controller watches.
 	Sources []Source `json:"sources"`
 	// Pipeline is an aggregation pipeline applied to base objects.
+	//
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Pipeline pipeline.Pipeline `json:"pipeline"`
 	// The target resource the results are to be added.
 	Target Target `json:"target"`
@@ -31,22 +26,32 @@ type Controller struct {
 
 // Resource specifies a resource by the GVK.
 type Resource struct {
-	Group   *string `json:"apiGroup,omitempty"`
+	// Group is the API group. Default is "view.dcontroller.io".
+	Group *string `json:"apiGroup,omitempty"`
+	// Version is the version of the resource. Optional.
 	Version *string `json:"version,omitempty"`
-	Kind    string  `json:"kind"`
+	// Kind is the type of the resource. Mandatory.
+	Kind string `json:"kind"`
 }
 
 // Source is a watch source that feeds deltas into the controller.
 type Source struct {
-	Resource
-	Namespace     *string               `json:"namespace,omitempty"`
+	Resource `json:",inline"`
+	// Namespace, if given, restricts the source to generate events only from the given namespace.
+	Namespace *string `json:"namespace,omitempty"`
+	// LabelSelector is an optional label selector to filter events on this source.
 	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
-	Predicate     *predicate.Predicate  `json:"predicate,omitempty"`
+	// Predicate is a controller runtime predicate for filtering events on this source..
+	//
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Predicate *predicate.Predicate `json:"predicate,omitempty"`
 }
 
 // Target is the target reource type in which the controller writes.
 type Target struct {
-	Resource
+	Resource `json:",inline"`
+	// Type is the type of the target.
 	Type TargetType `json:"type,omitempty"`
 }
 

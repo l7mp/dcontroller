@@ -41,8 +41,8 @@ type BasicPredicate string
 type BoolPredicate map[string]([]Predicate)
 
 type Predicate struct {
-	*BasicPredicate
-	*BoolPredicate
+	*BasicPredicate `json:",inline"`
+	*BoolPredicate  `json:",inline"`
 }
 
 func (p *Predicate) ToPredicate() (predicate.TypedPredicate[client.Object], error) {

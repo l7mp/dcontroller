@@ -12,19 +12,19 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	ctrlmanager "sigs.k8s.io/controller-runtime/pkg/manager"
+	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
 	// viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
 	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
+	"hsnlab/dcontroller-runtime/pkg/manager"
 
 	"hsnlab/dcontroller-runtime/pkg/controller"
-	"hsnlab/dcontroller-runtime/pkg/manager"
 	"hsnlab/dcontroller-runtime/pkg/object"
 )
 
-var _ = Describe("Integration test:", Ordered, func() {
+var _ = Describe("Controller test:", Ordered, func() {
 	// write service type into an annotation for services running in the default namespace
 	Context("When applying a self-referencial controller", Ordered, Label("managed"), func() {
 		const annotationName = "service-type"
@@ -33,41 +33,18 @@ var _ = Describe("Integration test:", Ordered, func() {
 			ctrlCancel context.CancelFunc
 			svc        object.Object
 			gvk        schema.GroupVersionKind
-			mgr        *manager.Manager
+			mgr        runtimeManager.Manager
 		)
 
 		BeforeAll(func() {
 			ctrlCtx, ctrlCancel = context.WithCancel(context.Background())
-			svc = &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": "v1",
-					"kind":       "Service",
-					"metadata": map[string]interface{}{
-						"name":      "service",
-						"namespace": "default",
-					},
-					"spec": map[string]interface{}{
-						"selector": map[string]interface{}{
-							"app": "example",
-						},
-						"ports": []interface{}{
-							map[string]interface{}{
-								"protocol":   "TCP",
-								"port":       80,
-								"targetPort": 8080,
-							},
-						},
-						"type": "ClusterIP",
-					},
-				},
-			}
+			svc = testSvc.DeepCopy()
 			gvk = schema.GroupVersionKind{
 				Group:   "",
 				Version: "v1",
 				Kind:    "Service",
 			}
 			svc.SetGroupVersionKind(gvk)
-
 		})
 
 		AfterAll(func() {
@@ -75,16 +52,14 @@ var _ = Describe("Integration test:", Ordered, func() {
 		})
 
 		It("should create and start a manager succcessfully", func() {
-			setupLog.Info("setting up congroller manager")
-			m, err := manager.New(cfg, manager.Options{
-				Options: ctrlmanager.Options{
-					LeaderElection:         false, // disable leader-election
-					HealthProbeBindAddress: "0",   // disable health-check
-					Metrics: metricsserver.Options{
-						BindAddress: "0", // disable the metrics server
-					},
-					Logger: logger,
+			setupLog.Info("setting up controller manager")
+			m, err := manager.New(nil, cfg, runtimeManager.Options{
+				LeaderElection:         false, // disable leader-election
+				HealthProbeBindAddress: "0",   // disable health-check
+				Metrics: metricsserver.Options{
+					BindAddress: "0", // disable the metrics server
 				},
+				Logger: logger,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			mgr = m

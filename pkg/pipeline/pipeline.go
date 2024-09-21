@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"encoding/json"
 	"fmt"
 	"hsnlab/dcontroller-runtime/pkg/cache"
 	"hsnlab/dcontroller-runtime/pkg/util"
@@ -8,8 +9,8 @@ import (
 
 // Pipeline is an optional join followed by an aggregation.
 type Pipeline struct {
-	*Join
-	*Aggregation
+	*Join        `json:",inline"`
+	*Aggregation `json:",inline"`
 }
 
 func (p *Pipeline) String() string {
@@ -68,6 +69,19 @@ func (p *Pipeline) Evaluate(eng Engine, delta cache.Delta) ([]cache.Delta, error
 		"object", ObjectKey(delta.Object), "result", util.Stringify(res))
 
 	return res, nil
+}
+
+func (p *Pipeline) DeepCopyInto(d *Pipeline) {
+	j, err := json.Marshal(p)
+	if err != nil {
+		d = nil
+		return
+	}
+
+	if err := json.Unmarshal(j, d); err != nil {
+		d = nil
+		return
+	}
 }
 
 func collapseDeltas(ds []cache.Delta) []cache.Delta {
