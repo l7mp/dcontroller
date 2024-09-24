@@ -26,8 +26,7 @@ func (a *Aggregation) String() string {
 func (a *Aggregation) Evaluate(eng Engine, delta cache.Delta) ([]cache.Delta, error) {
 	res, err := eng.EvaluateAggregation(a, delta)
 	if err != nil {
-		return nil, NewAggregationError(a.String(),
-			fmt.Errorf("aggregation error: %w", err))
+		return nil, NewAggregationError(fmt.Errorf("aggregation error: %w", err))
 	}
 
 	return res, nil

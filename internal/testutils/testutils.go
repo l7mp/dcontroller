@@ -1,9 +1,9 @@
-package integration
+package testutils
 
 import "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 var (
-	testSvc = &unstructured.Unstructured{
+	TestSvc = &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "v1",
 			"kind":       "Service",
@@ -27,7 +27,7 @@ var (
 		},
 	}
 
-	testEndpointSlice = &unstructured.Unstructured{
+	TestEndpointSlice = &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "discovery.k8s.io/v1",
 			"kind":       "EndpointSlice",

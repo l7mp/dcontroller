@@ -123,15 +123,11 @@ var _ = Describe("Aggregations", func() {
 								"name": {
 									Op:      "@string",
 									Literal: "$.metadata.name",
-									Raw:     "\"$.metadata.name\"",
 								},
 							},
-							Raw: "{\"name\":\"$.metadata.name\"}",
 						},
 					},
-					Raw: "{\"metadata\":{\"name\":\"$.metadata.name\"}}",
 				},
-				Raw: ag.Expressions[0].Raw,
 			}))
 
 			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: objs[0]})

@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/util/json"
-
-	"hsnlab/dcontroller-runtime/pkg/util"
 )
+
+const ExpressionDumpMaxLevel = 10
 
 type Unstructured = map[string]any
 
@@ -24,12 +23,11 @@ type Expression struct {
 	Op      string
 	Arg     *Expression
 	Literal any
-	Raw     string
 }
 
 func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 	if len(e.Op) == 0 {
-		return nil, NewInvalidArgumentsError(fmt.Sprintf("empty operator in expession %q", e.Raw))
+		return nil, NewInvalidArgumentsError(fmt.Sprintf("empty operator in expession %q", e.String()))
 	}
 
 	switch e.Op {
@@ -46,7 +44,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 		v, err := asBool(lit)
 		if err != nil {
-			return nil, NewExpressionError(e.Op, e.Raw, err)
+			return nil, NewExpressionError(e, err)
 		}
 
 		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", v)
@@ -66,7 +64,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 		v, err := asInt(lit)
 		if err != nil {
-			return nil, NewExpressionError(e.Op, e.Raw, err)
+			return nil, NewExpressionError(e, err)
 		}
 
 		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", v)
@@ -86,7 +84,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 		v, err := asFloat(lit)
 		if err != nil {
-			return nil, NewExpressionError(e.Op, e.Raw, err)
+			return nil, NewExpressionError(e, err)
 		}
 
 		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", v)
@@ -106,7 +104,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 		str, err := asString(lit)
 		if err != nil {
-			return nil, NewExpressionError(e.Op, e.Raw, err)
+			return nil, NewExpressionError(e, err)
 		}
 
 		ret, err := e.GetJSONPath(ctx, str)
@@ -129,8 +127,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 			vs, ok := v.([]any)
 			if !ok {
-				return nil, NewExpressionError("@list", e.Raw,
-					errors.New("argument must be a list"))
+				return nil, NewExpressionError(e, errors.New("argument must be a list"))
 			}
 
 			ret = vs
@@ -138,7 +135,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			// literal lists stored in Literal
 			vs, ok := e.Literal.([]Expression)
 			if !ok {
-				return nil, NewExpressionError("@list", e.Raw,
+				return nil, NewExpressionError(e,
 					errors.New("argument must be an expression list"))
 			}
 
@@ -170,20 +167,18 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			// must be Unstructured
 			vs, ok := v.(Unstructured)
 			if !ok {
-				return nil, NewExpressionError("@dict", e.Raw,
-					errors.New("argument must be a map"))
+				return nil, NewExpressionError(e, errors.New("argument must be a map"))
 			}
 			ret = vs
 		} else {
 			// map stored as a Literal
 			if reflect.ValueOf(e.Literal).Kind() != reflect.Map {
-				return nil, NewExpressionError("@dict", e.Raw,
-					errors.New("argument must be a map literal"))
+				return nil, NewExpressionError(e, errors.New("argument must be a map literal"))
 			}
 
 			vm, ok := e.Literal.(map[string]Expression)
 			if !ok {
-				return nil, NewExpressionError("@dict", e.Raw,
+				return nil, NewExpressionError(e,
 					errors.New("argument must be a string->expression map"))
 			}
 
@@ -195,7 +190,8 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				}
 				err = exp.SetJSONPath(ctx, k, res, ret)
 				if err != nil {
-					return nil, NewExpressionError("@dict", e.Raw, err)
+					return nil, NewExpressionError(e,
+						fmt.Errorf("could not deference JSON \"set\" expression: %w", err))
 				}
 			}
 		}
@@ -211,12 +207,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@filter":
 			args, err := asExpOrList(e.Arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 
 			}
 
 			if len(args) != 2 {
-				return nil, NewExpressionError(e.Op, e.Raw,
+				return nil, NewExpressionError(e,
 					errors.New("invalid arguments: expected 2 arguments"))
 			}
 
@@ -243,7 +239,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 				b, err := asBool(res)
 				if err != nil {
-					return nil, NewExpressionError(e.Op, e.Raw,
+					return nil, NewExpressionError(e,
 						fmt.Errorf("expected conditional expression to "+
 							"evaluate to boolean: %w", err))
 				}
@@ -260,12 +256,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@any": // @in: [exp, list]
 			args, err := asExpOrList(e.Arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 
 			}
 
 			if len(args) != 2 {
-				return nil, NewExpressionError(e.Op, e.Raw,
+				return nil, NewExpressionError(e,
 					errors.New("invalid arguments: expected 2 arguments"))
 			}
 
@@ -292,7 +288,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 				b, err := asBool(res)
 				if err != nil {
-					return nil, NewExpressionError(e.Op, e.Raw,
+					return nil, NewExpressionError(e,
 						fmt.Errorf("expected conditional expression to "+
 							"evaluate to boolean: %w", err))
 				}
@@ -309,12 +305,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@all": // @in: [exp, list]
 			args, err := asExpOrList(e.Arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 
 			}
 
 			if len(args) != 2 {
-				return nil, NewExpressionError(e.Op, e.Raw,
+				return nil, NewExpressionError(e,
 					errors.New("invalid arguments: expected 2 arguments"))
 			}
 
@@ -341,7 +337,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 				b, err := asBool(res)
 				if err != nil {
-					return nil, NewExpressionError(e.Op, e.Raw,
+					return nil, NewExpressionError(e,
 						fmt.Errorf("expected conditional expression to "+
 							"evaluate to boolean: %w", err))
 				}
@@ -358,12 +354,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@none": // @in: [exp, list]
 			args, err := asExpOrList(e.Arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 
 			}
 
 			if len(args) != 2 {
-				return nil, NewExpressionError(e.Op, e.Raw,
+				return nil, NewExpressionError(e,
 					errors.New("invalid arguments: expected 2 arguments"))
 			}
 
@@ -390,7 +386,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 				b, err := asBool(res)
 				if err != nil {
-					return nil, NewExpressionError(e.Op, e.Raw,
+					return nil, NewExpressionError(e,
 						fmt.Errorf("expected conditional expression to "+
 							"evaluate to boolean: %w", err))
 				}
@@ -407,7 +403,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@map":
 			args, err := asExpOrList(e.Arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			// function
@@ -473,7 +469,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 	// operators
 	// evaluate subexpression
 	if e.Arg == nil {
-		return nil, NewExpressionError(e.Op, e.Raw, errors.New("empty argument list"))
+		return nil, NewExpressionError(e, errors.New("empty argument list"))
 	}
 
 	arg, err := e.Arg.Evaluate(ctx)
@@ -497,7 +493,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@not":
 			arg, err := asBool(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			v := !arg
@@ -508,13 +504,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@eq":
 			args, err := asList(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 
 			}
 
 			if len(args) != 2 {
-				return nil, NewExpressionError(e.Op, e.Raw,
-					errors.New("expected 2 arguments"))
+				return nil, NewExpressionError(e, errors.New("expected 2 arguments"))
 			}
 
 			v := reflect.DeepEqual(args[0], args[1])
@@ -525,7 +520,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@and":
 			args, err := asBoolList(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			v := true
@@ -540,7 +535,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@or":
 			args, err := asBoolList(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			v := false
@@ -556,7 +551,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@lt":
 			is, fs, kind, err := asBinaryIntOrFloatList(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			if kind == reflect.Int64 {
@@ -572,7 +567,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@lte":
 			is, fs, kind, err := asBinaryIntOrFloatList(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			if kind == reflect.Int64 {
@@ -588,7 +583,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@gt":
 			is, fs, kind, err := asBinaryIntOrFloatList(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			if kind == reflect.Int64 {
@@ -604,7 +599,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@gte":
 			is, fs, kind, err := asBinaryIntOrFloatList(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			if kind == reflect.Int64 {
@@ -620,12 +615,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@selector": // [selector, labels]
 			args, err := asList(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 
 			}
 
 			if len(args) != 2 {
-				return nil, NewExpressionError(e.Op, e.Raw,
+				return nil, NewExpressionError(e,
 					errors.New("invalid arguments: expected 2 arguments"))
 			}
 
@@ -635,14 +630,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 			selector, err := asObject(args[0])
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw,
-					fmt.Errorf("invalid label selector: %w", err))
+				return nil, NewExpressionError(e, fmt.Errorf("invalid label selector: %w", err))
 			}
 
 			labels, err := asObject(args[1])
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw,
-					fmt.Errorf("invalid label set: %w", err))
+				return nil, NewExpressionError(e, fmt.Errorf("invalid label set: %w", err))
 			}
 
 			// arguments
@@ -653,9 +646,8 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 
 			v, err := asBool(res)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw,
-					fmt.Errorf("expected label selector expression to "+
-						"evaluate to boolean: %w", err))
+				return nil, NewExpressionError(e, fmt.Errorf("expected label selector expression to "+
+					"evaluate to boolean: %w", err))
 			}
 
 			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
@@ -665,7 +657,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@abs":
 			f, err := asFloat(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			v := math.Abs(f)
@@ -675,7 +667,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@ceil":
 			f, err := asFloat(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			v := math.Ceil(f)
@@ -685,7 +677,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@floor":
 			f, err := asFloat(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			v := math.Floor(f)
@@ -696,7 +688,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@sum":
 			is, fs, kind, err := asIntOrFloatList(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			var v any
@@ -720,7 +712,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@len":
 			args, err := asList(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 
 			}
 
@@ -731,19 +723,18 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@in": // @in: [elem, list]
 			args, err := asList(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 
 			}
 
 			if len(args) != 2 {
-				return nil, NewExpressionError(e.Op, e.Raw,
-					errors.New("expected 2 arguments"))
+				return nil, NewExpressionError(e, errors.New("expected 2 arguments"))
 			}
 
 			elem := args[0]
 			list, err := asList(args[1])
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			v := false
@@ -760,7 +751,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		case "@concat":
 			args, err := asStringList(arg)
 			if err != nil {
-				return nil, NewExpressionError(e.Op, e.Raw, err)
+				return nil, NewExpressionError(e, err)
 			}
 
 			v := ""
@@ -773,7 +764,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			return v, nil
 
 		default:
-			return nil, NewExpressionError(e.Op, e.Raw, errors.New("unknown op"))
+			return nil, NewExpressionError(e, errors.New("unknown op"))
 		}
 	}
 
@@ -814,38 +805,39 @@ func unpackList(a any) []any {
 }
 
 func (e *Expression) UnmarshalJSON(b []byte) error {
+	// cut raw content
 	// try to unmarshal as a bool terminal expression
 	bv := false
 	if err := json.Unmarshal(b, &bv); err == nil {
-		*e = Expression{Op: "@bool", Literal: bv, Raw: string(b)}
+		*e = Expression{Op: "@bool", Literal: bv}
 		return nil
 	}
 
 	// try to unmarshal as an int terminal expression
 	var iv int64 = 0
 	if err := json.Unmarshal(b, &iv); err == nil {
-		*e = Expression{Op: "@int", Literal: iv, Raw: string(b)}
+		*e = Expression{Op: "@int", Literal: iv}
 		return nil
 	}
 
 	// try to unmarshal as a float terminal expression
 	fv := 0.0
 	if err := json.Unmarshal(b, &fv); err == nil {
-		*e = Expression{Op: "@float", Literal: fv, Raw: string(b)}
+		*e = Expression{Op: "@float", Literal: fv}
 		return nil
 	}
 
 	// try to unmarshal as a string terminal expression
 	sv := ""
 	if err := json.Unmarshal(b, &sv); err == nil && sv != "" {
-		*e = Expression{Op: "@string", Literal: sv, Raw: string(b)}
+		*e = Expression{Op: "@string", Literal: sv}
 		return nil
 	}
 
 	// try to unmarshal as a literal list expression
 	mv := []Expression{}
 	if err := json.Unmarshal(b, &mv); err == nil {
-		*e = Expression{Op: "@list", Literal: mv, Raw: string(b)}
+		*e = Expression{Op: "@list", Literal: mv}
 		return nil
 	}
 
@@ -861,77 +853,213 @@ func (e *Expression) UnmarshalJSON(b []byte) error {
 			}
 			if string(op[0]) == "@" {
 				exp := cv[op]
-				*e = Expression{Op: op, Arg: &exp, Raw: string(b)}
+				*e = Expression{Op: op, Arg: &exp}
 				return nil
 			}
 		}
 
 		// literal map: store as exp with op @dict and map as Literal
-		*e = Expression{Op: "@dict", Literal: cv, Raw: string(b)}
+		*e = Expression{Op: "@dict", Literal: cv}
 		return nil
 	}
 
 	return NewUnmarshalError("expression", string(b))
 }
 
-func (e *Expression) String() string {
-	// literals
+func (e *Expression) MarshalJSON() ([]byte, error) {
 	switch e.Op {
 	case "@any":
-		return fmt.Sprintf("<any>{%#v}", util.Stringify(e.Literal))
+		return json.Marshal(e.Literal)
+
 	case "@bool":
 		if e.Arg != nil {
-			return fmt.Sprintf("<bool>{%s}", e.Arg.String())
+			return json.Marshal(e.Arg)
 		}
 		v, err := asBool(e.Literal)
 		if err != nil {
-			return "<invalid>"
+			return []byte(""), err
 		}
-		return fmt.Sprintf("<bool>{%t}", v)
+		return json.Marshal(v)
+
 	case "@int":
 		if e.Arg != nil {
-			return fmt.Sprintf("<int>{%s}", e.Arg.String())
+			return json.Marshal(e.Arg)
 		}
 		v, err := asInt(e.Literal)
 		if err != nil {
-			return "<invalid>"
+			return []byte(""), err
 		}
-		return fmt.Sprintf("<int>{%d}", v)
+		return json.Marshal(v)
+
 	case "@float":
 		if e.Arg != nil {
-			return fmt.Sprintf("<float>{%s}", e.Arg.String())
+			return json.Marshal(e.Arg)
 		}
 		v, err := asFloat(e.Literal)
 		if err != nil {
-			return "<invalid>"
+			return []byte(""), err
 		}
-		return fmt.Sprintf("<float>{%f}", v)
+		return json.Marshal(v)
+
 	case "@string":
 		if e.Arg != nil {
-			return fmt.Sprintf("<string>{%s}", e.Arg.String())
+			return json.Marshal(e.Arg)
 		}
 		v, err := asString(e.Literal)
 		if err != nil {
-			return "<invalid>"
+			return []byte(""), err
 		}
-		return fmt.Sprintf("<string>{%q}", v)
+		return json.Marshal(v)
+
 	case "@list":
 		if e.Arg != nil {
-			return fmt.Sprintf("<list>{%s}", e.Arg.String())
+			return json.Marshal(e.Arg)
 		}
 		es, ok := e.Literal.([]Expression)
 		if !ok {
-			return "<invalid>"
+			return []byte(""), fmt.Errorf("invalid expression list: %#v", e)
 		}
-		return fmt.Sprintf("<list>[%s]", strings.Join(util.Map(
-			func(exp Expression) string { return exp.String() }, es,
-		), ","))
+		return json.Marshal(es)
+
 	case "@dict":
 		if e.Arg != nil {
-			return fmt.Sprintf("<dict>{%s}", e.Arg.String())
+			// can this ever happen?
+			return json.Marshal(e.Arg)
 		}
-		return fmt.Sprintf("<dict>{%s}", util.Stringify(e.Literal))
-	}
 
-	return fmt.Sprintf("%s:[%s]", e.Op, e.Arg.String())
+		es, ok := e.Literal.(map[string]Expression)
+		if !ok {
+			return []byte(""), fmt.Errorf("invalid expression map: %#v", e)
+		}
+		// this is terribly stupid but here we go
+		em := map[string]*Expression{}
+		for k, v := range es {
+			v := v
+			em[k] = &v
+		}
+		return json.Marshal(em)
+
+	default:
+		// everything else is a valid op
+		if e.Op[0] != '@' {
+			return []byte(""), fmt.Errorf("expected an op starting with @, got %#v", e)
+		}
+
+		ret := map[string]*Expression{e.Op: e.Arg}
+		return json.Marshal(ret)
+	}
+	// return []byte(""), fmt.Errorf("failed to JSON marshal expression %#v", e)
 }
+
+func (e *Expression) String() string {
+	b, err := json.Marshal(e)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// func (e *Expression) string(level int) string {
+// 	if level >= ExpressionDumpMaxLevel {
+// 		return "..."
+// 	}
+
+// 	// literals
+// 	switch e.Op {
+// 	case "@any":
+// 		return fmt.Sprintf("%#v", e.Literal)
+// 	case "@bool":
+// 		if e.Arg != nil {
+// 			return e.Arg.string(level + 1)
+// 		}
+// 		v, err := asBool(e.Literal)
+// 		if err != nil {
+// 			return "<invalid>"
+// 		}
+// 		return fmt.Sprintf("%t", v)
+// 	case "@int":
+// 		if e.Arg != nil {
+// 			return e.Arg.string(level + 1)
+// 		}
+// 		v, err := asInt(e.Literal)
+// 		if err != nil {
+// 			return "<invalid>"
+// 		}
+// 		return fmt.Sprintf("%d", v)
+// 	case "@float":
+// 		if e.Arg != nil {
+// 			return e.Arg.string(level + 1)
+// 		}
+// 		v, err := asFloat(e.Literal)
+// 		if err != nil {
+// 			return "<invalid>"
+// 		}
+// 		return fmt.Sprintf("%.3f", v)
+// 	case "@string":
+// 		if e.Arg != nil {
+// 			return e.Arg.string(level + 1)
+// 		}
+// 		v, err := asString(e.Literal)
+// 		if err != nil {
+// 			return "<invalid>"
+// 		}
+// 		return fmt.Sprintf("%s", v)
+// 	case "@list":
+// 		if e.Arg != nil {
+// 			return e.Arg.string(level + 1)
+// 		}
+// 		es, ok := e.Literal.([]Expression)
+// 		if !ok {
+// 			return "<invalid>"
+// 		}
+// 		return fmt.Sprintf("%s", strings.Join(util.Map(
+// 			func(exp Expression) string { return exp.string(level + 1) }, es,
+// 		), ","))
+// 	case "@dict":
+// 		if e.Arg != nil {
+// 			return fmt.Sprintf("{%s}", e.Arg.string(level+1))
+// 		}
+// 		return fmt.Sprintf("{%s}", stringifier(e.Literal, level+1))
+// 	}
+
+// 	return fmt.Sprintf("%s:[%s]", e.Op, e.Arg.string(level+1))
+// }
+
+// func stringify(arg any) string {
+// 	return stringifier(arg, 0)
+// }
+
+// func stringifier(arg any, level int) string {
+// 	if level >= ExpressionDumpMaxLevel {
+// 		return "..."
+// 	}
+
+// 	switch v := arg.(type) {
+// 	case Expression:
+// 		return v.string(level + 1)
+// 	case *Expression:
+// 		return v.string(level + 1)
+// 	case bool, int64, float64, string:
+// 		return fmt.Sprintf("%s", v)
+// 	case []any:
+// 		ret := []string{}
+// 		for _, item := range v {
+// 			ret = append(ret, stringifier(item, level+1))
+// 		}
+// 		return fmt.Sprintf("[%s]", strings.Join(ret, ","))
+// 	case map[string]Expression:
+// 		ret := []string{}
+// 		for key, value := range v {
+// 			ret = append(ret, fmt.Sprintf("%s:%s", key, value.string(level+1)))
+// 		}
+// 		return fmt.Sprintf("{%s}", strings.Join(ret, ","))
+// 	case map[string]any:
+// 		ret := []string{}
+// 		for key, value := range v {
+// 			ret = append(ret, fmt.Sprintf("%s:%s", key, stringifier(value, level+1)))
+// 		}
+// 		return fmt.Sprintf("{%s}", strings.Join(ret, ","))
+// 	default:
+// 		return fmt.Sprintf("%s", v)
+// 	}
+// }

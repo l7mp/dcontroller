@@ -361,6 +361,26 @@ var _ = Describe("Joins", func() {
 			Expect(delta.Object.UnstructuredContent()["pod"]).To(Equal(pod2.UnstructuredContent()))
 			Expect(delta.Object.UnstructuredContent()["dep"]).To(Equal(dep1.UnstructuredContent()))
 		})
+
+		// 		FIt("parse a complex join expression from yaml", func() {
+		// 			jsonData := `
+		// "@join":
+		//   "@and":
+		//     - '@eq':
+		//         - $.Service.metadata.name
+		//         - '$["EndpointSlice"]["metadata"]["labels"]["kubernetes.io/service-name"]'
+		//     - '@eq':
+		//         - $.Service.metadata.namespace
+		//         - $.EndpointSlice.metadata.namespace`
+
+		// 			var j Join
+		// 			err := yaml.Unmarshal([]byte(jsonData), &j)
+		// 			Expect(err).NotTo(HaveOccurred())
+
+		// 			logger.Info(fmt.Sprintf("%v", j))
+		// 			logger.Info(j.String())
+		// 			Expect(false).To(BeTrue())
+		// 		})
 	})
 })
 

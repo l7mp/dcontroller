@@ -18,22 +18,24 @@ func NewUnmarshalError(kind, content string) ErrUnmarshal {
 
 type ErrExpression = error
 
-func NewExpressionError(kind, content string, err error) ErrExpression {
-	return fmt.Errorf("failed to evaluate %s expression %q: %w", kind, content, err)
+func NewExpressionError(e *Expression, err error) ErrExpression {
+	return fmt.Errorf("failed to evaluate %s expression %s: %w", e.Op, e.String(), err)
 }
+
+// func NewExpressionError(kind, content string, err error) ErrExpression {
+// 	return fmt.Errorf("failed to evaluate %s expression %q: %w", kind, content, err)
+// }
 
 type ErrAggregation = error
 
-func NewAggregationError(content string, err error) ErrAggregation {
-	return fmt.Errorf("failed to evaluate aggregation on expression %q: %w",
-		content, err)
+func NewAggregationError(err error) ErrAggregation {
+	return fmt.Errorf("failed to evaluate aggregation expression: %w", err)
 }
 
 type ErrJoin = error
 
-func NewJoinError(content string, err error) ErrJoin {
-	return fmt.Errorf("failed to evaluate join on expression %q: %w",
-		content, err)
+func NewJoinError(err error) ErrJoin {
+	return fmt.Errorf("failed to evaluate join expression: %w", err)
 }
 
 type ErrInvalidObject = error

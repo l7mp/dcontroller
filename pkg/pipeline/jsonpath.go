@@ -29,7 +29,7 @@ func (e *Expression) GetJSONPath(ctx evalCtx, key string) (any, error) {
 	}
 	ret, err := GetJSONPathExp(key, subject)
 	if err != nil {
-		return nil, NewExpressionError(e.Op, e.Raw, err)
+		return nil, NewExpressionError(e, err)
 	}
 	return ret, nil
 }
@@ -43,7 +43,7 @@ func (e *Expression) SetJSONPath(ctx evalCtx, key string, value, data any) error
 	if str, ok := value.(string); ok {
 		res, err := e.GetJSONPath(ctx, str)
 		if err != nil {
-			return NewExpressionError(e.Op, e.Raw, err)
+			return NewExpressionError(e, err)
 		}
 		value = res
 	}
@@ -61,10 +61,8 @@ func (e *Expression) SetJSONPath(ctx evalCtx, key string, value, data any) error
 			}
 			return nil
 		}
-		return NewExpressionError(e.Op, e.Raw,
-			fmt.Errorf("JSONPath expression error: cannot set root key \"$.\" to "+
-				"value %q of type %T, only map types can be copied",
-				value, value))
+		return NewExpressionError(e, fmt.Errorf("JSONPath expression error: cannot set root "+
+			"key \"$.\" to value %q of type %T, only map types can be copied", value, value))
 	}
 
 	// if not a JSONpath, just set it as is
@@ -75,9 +73,8 @@ func (e *Expression) SetJSONPath(ctx evalCtx, key string, value, data any) error
 
 	// then call the low-level set util
 	if err := SetJSONPathExp(key, value, data); err != nil {
-		return NewExpressionError(e.Op, e.Raw,
-			fmt.Errorf("JSONPath expression error: cannot set key %q to value %q: %w",
-				key, value, err))
+		return NewExpressionError(e, fmt.Errorf("JSONPath expression error: cannot set "+
+			"key %q to value %q: %w", key, value, err))
 	}
 
 	return nil

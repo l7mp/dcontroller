@@ -65,7 +65,7 @@ var _ = Describe("Expressions", func() {
 			var exp Expression
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exp).To(Equal(Expression{Op: "@bool", Literal: true, Raw: jsonData}))
+			Expect(exp).To(Equal(Expression{Op: "@bool", Literal: true}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)
@@ -80,7 +80,7 @@ var _ = Describe("Expressions", func() {
 			var exp Expression
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exp).To(Equal(Expression{Op: "@int", Literal: int64(10), Raw: jsonData}))
+			Expect(exp).To(Equal(Expression{Op: "@int", Literal: int64(10)}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)
@@ -95,7 +95,7 @@ var _ = Describe("Expressions", func() {
 			var exp Expression
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exp).To(Equal(Expression{Op: "@float", Literal: 10.12, Raw: jsonData}))
+			Expect(exp).To(Equal(Expression{Op: "@float", Literal: 10.12}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)
@@ -110,7 +110,7 @@ var _ = Describe("Expressions", func() {
 			var exp Expression
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exp).To(Equal(Expression{Op: "@string", Literal: "a10", Raw: jsonData}))
+			Expect(exp).To(Equal(Expression{Op: "@string", Literal: "a10"}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)
@@ -231,7 +231,7 @@ var _ = Describe("Expressions", func() {
 
 		It("should evaluate a JSONPath expression", func() {
 			jsonPath := "$.metadata.name"
-			exp := Expression{Op: "@string", Literal: jsonPath, Raw: jsonPath}
+			exp := Expression{Op: "@string", Literal: jsonPath}
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)
@@ -245,7 +245,7 @@ var _ = Describe("Expressions", func() {
 			var exp Expression
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exp).To(Equal(Expression{Op: "@string", Literal: "$.spec.a", Raw: jsonData}))
+			Expect(exp).To(Equal(Expression{Op: "@string", Literal: "$.spec.a"}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)
@@ -259,7 +259,7 @@ var _ = Describe("Expressions", func() {
 			var exp Expression
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exp).To(Equal(Expression{Op: "@string", Literal: "$[\"spec\"][\"a\"]", Raw: jsonData}))
+			Expect(exp).To(Equal(Expression{Op: "@string", Literal: "$[\"spec\"][\"a\"]"}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)
@@ -273,7 +273,7 @@ var _ = Describe("Expressions", func() {
 			var exp Expression
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exp).To(Equal(Expression{Op: "@string", Literal: "$.metadata.namespace", Raw: jsonData}))
+			Expect(exp).To(Equal(Expression{Op: "@string", Literal: "$.metadata.namespace"}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)
@@ -287,7 +287,7 @@ var _ = Describe("Expressions", func() {
 			var exp Expression
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exp).To(Equal(Expression{Op: "@string", Literal: "$.spec.b", Raw: jsonData}))
+			Expect(exp).To(Equal(Expression{Op: "@string", Literal: "$.spec.b"}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)
@@ -301,7 +301,7 @@ var _ = Describe("Expressions", func() {
 			var exp Expression
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(exp).To(Equal(Expression{Op: "@string", Literal: "$", Raw: jsonData}))
+			Expect(exp).To(Equal(Expression{Op: "@string", Literal: "$"}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
 			res, err := exp.Evaluate(ctx)
@@ -330,7 +330,6 @@ var _ = Describe("Expressions", func() {
 			Expect(exp).To(Equal(Expression{
 				Op:      "@string",
 				Literal: "$.spec[?(@.name == 'name1')].b",
-				Raw:     jsonData,
 			}))
 
 			ctx := evalCtx{object: obj2.UnstructuredContent(), log: logger}
@@ -525,8 +524,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(exp).To(Equal(Expression{
 				Op:  "@isnil",
-				Arg: &Expression{Op: "@int", Literal: int64(1), Raw: "1"},
-				Raw: jsonData,
+				Arg: &Expression{Op: "@int", Literal: int64(1)},
 			}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
@@ -543,10 +541,8 @@ var _ = Describe("Expressions", func() {
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(exp).To(Equal(Expression{
-				Op: "@exists",
-				Arg: &Expression{Op: "@string", Literal: "$.metadata.annotations.ann",
-					Raw: `"$.metadata.annotations.ann"`},
-				Raw: jsonData,
+				Op:  "@exists",
+				Arg: &Expression{Op: "@string", Literal: "$.metadata.annotations.ann"},
 			}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
@@ -564,8 +560,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(exp).To(Equal(Expression{
 				Op:  "@not",
-				Arg: &Expression{Op: "@bool", Literal: false, Raw: "false"},
-				Raw: jsonData,
+				Arg: &Expression{Op: "@bool", Literal: false},
 			}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
@@ -586,12 +581,10 @@ var _ = Describe("Expressions", func() {
 				Arg: &Expression{
 					Op: "@list",
 					Literal: []Expression{
-						{Op: "@int", Literal: int64(10), Raw: "10"},
-						{Op: "@int", Literal: int64(10), Raw: "10"},
+						{Op: "@int", Literal: int64(10)},
+						{Op: "@int", Literal: int64(10)},
 					},
-					Raw: "[10, 10]",
 				},
-				Raw: jsonData,
 			}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
@@ -614,9 +607,7 @@ var _ = Describe("Expressions", func() {
 				Arg: &Expression{
 					Op:      "@int",
 					Literal: int64(10),
-					Raw:     "10",
 				},
-				Raw: jsonData,
 			}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
@@ -638,27 +629,21 @@ var _ = Describe("Expressions", func() {
 						Arg: &Expression{
 							Op: "@list",
 							Literal: []Expression{
-								{Op: "@int", Literal: int64(10), Raw: "10"},
-								{Op: "@int", Literal: int64(10), Raw: "10"},
+								{Op: "@int", Literal: int64(10)},
+								{Op: "@int", Literal: int64(10)},
 							},
-							Raw: "[10, 10]",
 						},
-						Raw: `{"@eq": [10, 10]}`,
 					}, {
 						Op: "@lt",
 						Arg: &Expression{
 							Op: "@list",
 							Literal: []Expression{
-								{Op: "@int", Literal: int64(1), Raw: "1"},
-								{Op: "@int", Literal: int64(2), Raw: "2"},
+								{Op: "@int", Literal: int64(1)},
+								{Op: "@int", Literal: int64(2)},
 							},
-							Raw: "[1, 2]",
 						},
-						Raw: `{"@lt": [1, 2]}`,
 					}},
-					Raw: "[{\"@eq\": [10, 10]}, {\"@lt\": [1, 2]}]",
 				},
-				Raw: jsonData,
 			}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
@@ -681,14 +666,11 @@ var _ = Describe("Expressions", func() {
 					Arg: &Expression{
 						Op: "@list",
 						Literal: []Expression{
-							{Op: "@int", Literal: int64(10), Raw: "10"},
-							{Op: "@int", Literal: int64(10), Raw: "10"},
+							{Op: "@int", Literal: int64(10)},
+							{Op: "@int", Literal: int64(10)},
 						},
-						Raw: "[10,10]",
 					},
-					Raw: `{"@eq":[10,10]}`,
 				},
-				Raw: jsonData,
 			}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
@@ -894,13 +876,11 @@ var _ = Describe("Expressions", func() {
 				Arg: &Expression{
 					Op: "@list",
 					Literal: []Expression{
-						{Op: "@int", Raw: "1", Literal: int64(1)},
-						{Op: "@int", Raw: "2", Literal: int64(2)},
-						{Op: "@int", Raw: "3", Literal: int64(3)},
+						{Op: "@int", Literal: int64(1)},
+						{Op: "@int", Literal: int64(2)},
+						{Op: "@int", Literal: int64(3)},
 					},
-					Raw: "[1,2,3]",
 				},
-				Raw: jsonData,
 			}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
@@ -923,14 +903,12 @@ var _ = Describe("Expressions", func() {
 					"dummy": Expression{
 						Op: "@list",
 						Literal: []Expression{
-							{Op: "@int", Raw: "1", Literal: int64(1)},
-							{Op: "@int", Raw: "2", Literal: int64(2)},
-							{Op: "@int", Raw: "3", Literal: int64(3)},
+							{Op: "@int", Literal: int64(1)},
+							{Op: "@int", Literal: int64(2)},
+							{Op: "@int", Literal: int64(3)},
 						},
-						Raw: "[1,2,3]",
 					},
 				},
-				Raw: jsonData,
 			}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
@@ -1326,16 +1304,14 @@ var _ = Describe("Expressions", func() {
 			Expect(exp).To(Equal(Expression{
 				Op: "@dict",
 				Literal: map[string]Expression{
-					"a": Expression{Op: "@int", Raw: "1", Literal: int64(1)},
+					"a": Expression{Op: "@int", Literal: int64(1)},
 					"b": Expression{
-						Op:  "@dict",
-						Raw: "{\"c\":\"x\"}",
+						Op: "@dict",
 						Literal: map[string]Expression{
-							"c": Expression{Op: "@string", Raw: "\"x\"", Literal: "x"},
+							"c": Expression{Op: "@string", Literal: "x"},
 						},
 					},
 				},
-				Raw: jsonData,
 			}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}
@@ -1354,19 +1330,17 @@ var _ = Describe("Expressions", func() {
 
 			Expect(exp.Op).To(Equal("@dict"))
 			Expect(reflect.ValueOf(exp.Literal).MapIndex(reflect.ValueOf("a")).Interface().(Expression)).
-				To(Equal(Expression{Op: "@float", Raw: "1.1", Literal: 1.1}))
+				To(Equal(Expression{Op: "@float", Literal: 1.1}))
 			Expect(reflect.ValueOf(exp.Literal).MapIndex(reflect.ValueOf("b")).Interface().(Expression)).
 				To(Equal(Expression{
 					Op: "@sum",
 					Arg: &Expression{
 						Op: "@list",
 						Literal: []Expression{
-							{Op: "@int", Raw: "1", Literal: int64(1)},
-							{Op: "@int", Raw: "2", Literal: int64(2)},
+							{Op: "@int", Literal: int64(1)},
+							{Op: "@int", Literal: int64(2)},
 						},
-						Raw: "[1,2]",
 					},
-					Raw: `{"@sum":[1,2]}`,
 				}))
 			Expect(reflect.ValueOf(exp.Literal).MapIndex(reflect.ValueOf("c")).Interface().(Expression)).
 				To(Equal(Expression{
@@ -1374,12 +1348,10 @@ var _ = Describe("Expressions", func() {
 					Arg: &Expression{
 						Op: "@list",
 						Literal: []Expression{
-							{Op: "@string", Raw: `"ab"`, Literal: "ab"},
-							{Op: "@string", Raw: `"ba"`, Literal: "ba"},
+							{Op: "@string", Literal: "ab"},
+							{Op: "@string", Literal: "ba"},
 						},
-						Raw: "[\"ab\",\"ba\"]",
 					},
-					Raw: `{"@concat":["ab","ba"]}`,
 				}))
 
 			ctx := evalCtx{object: obj1.UnstructuredContent(), log: logger}

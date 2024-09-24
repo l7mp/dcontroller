@@ -103,13 +103,13 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 
 		o, err := eng.evalAggregation(a, object.DeepCopy(delta.Object))
 		if err != nil {
-			return nil, NewAggregationError(a.String(),
+			return nil, NewAggregationError(
 				fmt.Errorf("processing event %q: could not evaluate aggregation for new object %s: %w",
 					delta.Type, ObjectKey(delta.Object), err))
 		}
 
 		if err := eng.baseViewStore[gvk].Add(delta.Object); err != nil {
-			return nil, NewAggregationError(a.String(),
+			return nil, NewAggregationError(
 				fmt.Errorf("processing event %q: could not add object %s to store: %w",
 					delta.Type, ObjectKey(delta.Object), err))
 		}
@@ -122,7 +122,7 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 
 		delDeltas, err := eng.evaluateAggregation(a, cache.Delta{Type: cache.Deleted, Object: delta.Object})
 		if err != nil {
-			return nil, NewAggregationError(a.String(), err)
+			return nil, NewAggregationError(err)
 		}
 		delDelta := cache.NilDelta
 		if len(delDeltas) == 1 {
@@ -131,7 +131,7 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 
 		addDeltas, err := eng.evaluateAggregation(a, cache.Delta{Type: cache.Added, Object: delta.Object})
 		if err != nil {
-			return nil, NewAggregationError(a.String(), err)
+			return nil, NewAggregationError(err)
 		}
 		addDelta := cache.NilDelta
 		if len(addDeltas) == 1 {
@@ -159,7 +159,7 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 	case cache.Deleted:
 		old, ok, err := eng.baseViewStore[gvk].GetByKey(ObjectKey(delta.Object).String())
 		if err != nil {
-			return nil, NewAggregationError(a.String(), err)
+			return nil, NewAggregationError(err)
 		}
 		if !ok {
 			eng.log.V(4).Info("aggregation: ignoring delete event for an unknown object",
@@ -171,13 +171,13 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 
 		o, err := eng.evalAggregation(a, object.DeepCopy(old))
 		if err != nil {
-			return nil, NewAggregationError(a.String(),
+			return nil, NewAggregationError(
 				fmt.Errorf("processing event %q: could not evaluate aggregation for deleted object %s: %w",
 					delta.Type, ObjectKey(delta.Object), err))
 		}
 
 		if err := eng.baseViewStore[gvk].Delete(old); err != nil {
-			return nil, NewAggregationError(a.String(),
+			return nil, NewAggregationError(
 				fmt.Errorf("procesing event %q: could not delete object %s from store: %w",
 					delta.Type, ObjectKey(delta.Object), err))
 		}
@@ -222,7 +222,7 @@ func (eng *defaultEngine) evalAggregation(a *Aggregation, obj object.Object) (ob
 
 func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured, error) {
 	if e.Arg == nil {
-		return nil, NewAggregationError(e.String(),
+		return nil, NewAggregationError(
 			fmt.Errorf("no expression found in aggregation stage %s", e.String()))
 	}
 
@@ -235,7 +235,7 @@ func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured
 
 		b, err := asBool(res)
 		if err != nil {
-			return nil, NewAggregationError(e.String(),
+			return nil, NewAggregationError(
 				fmt.Errorf("expected conditional expression to "+
 					"evaluate to boolean: %w", err))
 		}
@@ -258,7 +258,7 @@ func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured
 
 		v, err := asObject(res)
 		if err != nil {
-			return nil, NewAggregationError(e.String(), err)
+			return nil, NewAggregationError(err)
 		}
 
 		eng.log.V(5).Info("eval ready", "expression", e.String(), "result", v)
@@ -266,7 +266,7 @@ func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured
 		return v, nil
 
 	default:
-		return nil, NewAggregationError(e.String(),
+		return nil, NewAggregationError(
 			errors.New("unknown aggregation stage"))
 	}
 }
@@ -299,13 +299,13 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 	case cache.Added:
 		os, err := eng.evalJoin(j, delta.Object)
 		if err != nil {
-			return nil, NewJoinError(j.String(),
+			return nil, NewJoinError(
 				fmt.Errorf("processing event %q: could not evaluate join for new object %s: %w",
 					delta.Type, ObjectKey(delta.Object), err))
 		}
 
 		if err := eng.baseViewStore[gvk].Add(delta.Object); err != nil {
-			return nil, NewJoinError(j.String(),
+			return nil, NewJoinError(
 				fmt.Errorf("processing event %q: could not add object %s to store: %w",
 					delta.Type, ObjectKey(delta.Object), err))
 		}
@@ -320,12 +320,12 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 
 		delDeltas, err := eng.evaluateJoin(j, cache.Delta{Type: cache.Deleted, Object: delta.Object})
 		if err != nil {
-			return nil, NewJoinError(j.String(), err)
+			return nil, NewJoinError(err)
 		}
 
 		addDeltas, err := eng.evaluateJoin(j, cache.Delta{Type: cache.Added, Object: delta.Object})
 		if err != nil {
-			return nil, NewJoinError(j.String(), err)
+			return nil, NewJoinError(err)
 		}
 
 		// consolidate: objects both in the deleted and added cache are updated
@@ -337,7 +337,7 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 	case cache.Deleted:
 		old, ok, err := eng.baseViewStore[gvk].GetByKey(ObjectKey(delta.Object).String())
 		if err != nil {
-			return nil, NewJoinError(j.String(), err)
+			return nil, NewJoinError(err)
 		}
 		if !ok {
 			eng.log.V(4).Info("join: ignoring delete event for an unknown object",
@@ -349,13 +349,13 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 
 		os, err := eng.evalJoin(j, old)
 		if err != nil {
-			return nil, NewJoinError(j.String(),
+			return nil, NewJoinError(
 				fmt.Errorf("procesing event %q: could not evaluate join for deleted object %s: %w",
 					delta.Type, ObjectKey(delta.Object), err))
 		}
 
 		if err := eng.baseViewStore[gvk].Delete(old); err != nil {
-			return nil, NewJoinError(j.String(),
+			return nil, NewJoinError(
 				fmt.Errorf("procesing event %q: could not delete object %s from store: %w",
 					delta.Type, ObjectKey(delta.Object), err))
 		}
@@ -399,12 +399,12 @@ func (eng *defaultEngine) evalJoin(j *Join, obj object.Object) ([]object.Object,
 		// evalutate conditional expression on the input
 		res, err := j.Expression.Evaluate(evalCtx{object: input, log: eng.log})
 		if err != nil {
-			return nil, false, NewExpressionError(j.Expression.Op, j.Expression.Raw, err)
+			return nil, false, NewExpressionError(&j.Expression, err)
 		}
 
 		arg, err := asBool(res)
 		if err != nil {
-			return nil, false, NewExpressionError(j.Expression.Op, j.Expression.Raw, err)
+			return nil, false, NewExpressionError(&j.Expression, err)
 		}
 
 		if !arg {
@@ -419,7 +419,7 @@ func (eng *defaultEngine) evalJoin(j *Join, obj object.Object) ([]object.Object,
 		return newObj.DeepCopy(), true, nil
 	})
 	if err != nil {
-		return nil, NewExpressionError(j.Expression.Op, j.Expression.Raw, err)
+		return nil, NewExpressionError(&j.Expression, err)
 	}
 
 	eng.log.V(5).Info("eval ready", "expression", j.String(), "result", res)

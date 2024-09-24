@@ -4,17 +4,19 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: opeators.operator.dcontroller.io
+  name: operators.dcontroller.io
 spec:
-  group: operator.dcontroller.io
+  group: dcontroller.io
   names:
     categories:
     - dcontroller
-    kind: Opeator
-    listKind: OpeatorList
-    plural: opeators
-    singular: opeator
-  scope: Namespaced
+    kind: Operator
+    listKind: OperatorList
+    plural: operators
+    shortNames:
+    - operators
+    singular: operator
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: length(.spec.controllers)
@@ -29,9 +31,6 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: |-
-          Operator is an abstraction of a basic unit of automation, a set of related controllers working
-          on a single shared view of system resources.
         properties:
           apiVersion:
             description: |-

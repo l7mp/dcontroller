@@ -21,8 +21,7 @@ func (j *Join) String() string {
 func (j *Join) Evaluate(eng Engine, delta cache.Delta) ([]cache.Delta, error) {
 	res, err := eng.EvaluateJoin(j, delta)
 	if err != nil {
-		return nil, NewAggregationError(j.String(),
-			fmt.Errorf("join error: %w", err))
+		return nil, NewJoinError(err)
 	}
 
 	return res, nil

@@ -15,12 +15,12 @@ func isList(d any) bool {
 
 func asList(d any) ([]any, error) {
 	if !isList(d) {
-		return nil, fmt.Errorf("argument is not a list: %#v", d)
+		return nil, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
 	ret, ok := d.([]any)
 	if !ok {
-		return nil, fmt.Errorf("failed to convert argument into a list: %#v", d)
+		return nil, fmt.Errorf("failed to convert argument into a list: %s", util.Stringify(d))
 	}
 
 	return ret, nil
@@ -34,12 +34,12 @@ func asBool(d any) (bool, error) {
 	if reflect.ValueOf(d).Kind() == reflect.Bool {
 		return reflect.ValueOf(d).Bool(), nil
 	}
-	return false, fmt.Errorf("argument is not a boolean: %#v", d)
+	return false, fmt.Errorf("argument is not a boolean: %s", util.Stringify(d))
 }
 
 func asBoolList(d any) ([]bool, error) {
 	if !isList(d) {
-		return []bool{}, fmt.Errorf("argument is not a list: %#v", d)
+		return []bool{}, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
 	dv := reflect.ValueOf(d)
@@ -75,17 +75,17 @@ func asString(d any) (string, error) {
 	if reflect.ValueOf(d).Kind() == reflect.String {
 		return reflect.ValueOf(d).String(), nil
 	}
-	return "", fmt.Errorf("argument is not a string: %#v", d)
+	return "", fmt.Errorf("argument is not a string: %s", util.Stringify(d))
 }
 
 func asStringList(d any) ([]string, error) {
 	if !isList(d) {
-		return []string{}, fmt.Errorf("argument is not a list: %#v", d)
+		return []string{}, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
 	dv := reflect.ValueOf(d)
 	if dv.Kind() != reflect.Slice && dv.Kind() != reflect.Array {
-		return []string{}, fmt.Errorf("argument is not a list: %#v", d)
+		return []string{}, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
 	ret := []string{}
@@ -130,12 +130,12 @@ func asInt(d any) (int64, error) {
 		}
 	}
 
-	return 0, fmt.Errorf("argument is not an int: %#v", d)
+	return 0, fmt.Errorf("argument is not an int: %s", util.Stringify(d))
 }
 
 func asIntList(d any) ([]int64, error) {
 	if !isList(d) {
-		return []int64{}, fmt.Errorf("argument is not a list: %#v", d)
+		return []int64{}, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
 	dv := reflect.ValueOf(d)
@@ -183,12 +183,12 @@ func asFloat(d any) (float64, error) {
 		}
 	}
 
-	return 0.0, fmt.Errorf("argument is not a float: %#v", d)
+	return 0.0, fmt.Errorf("argument is not a float: %s", util.Stringify(d))
 }
 
 func asFloatList(d any) ([]float64, error) {
 	if !isList(d) {
-		return []float64{}, fmt.Errorf("argument is not a list: %#v", d)
+		return []float64{}, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
 	dv := reflect.ValueOf(d)
@@ -210,7 +210,7 @@ func asBinaryFloatList(d any) ([]float64, error) {
 	}
 
 	if len(vs) != 2 {
-		return []float64{}, fmt.Errorf("invalid number (%d) of arguments for a binary operator: %q",
+		return []float64{}, fmt.Errorf("invalid number (%d) of arguments for a binary operator: %s",
 			len(vs), util.Stringify(d))
 	}
 
@@ -230,7 +230,7 @@ func asIntOrFloat(d any) (int64, float64, reflect.Kind, error) {
 		return 0, f, reflect.Float64, nil
 	}
 
-	return 0, 0.0, reflect.Invalid, fmt.Errorf("argument is not an int or float: %#v", d)
+	return 0, 0.0, reflect.Invalid, fmt.Errorf("argument is not an int or float: %s", util.Stringify(d))
 }
 
 func asIntOrFloatList(d any) ([]int64, []float64, reflect.Kind, error) {
@@ -303,12 +303,12 @@ func asObject(d any) (Unstructured, error) {
 			return u, nil
 		}
 	}
-	return nil, fmt.Errorf("argument is not an object: %#v", d)
+	return nil, fmt.Errorf("argument is not an object: %s", util.Stringify(d))
 }
 
 func asObjectList(d any) ([]Unstructured, error) {
 	if !isList(d) {
-		return nil, fmt.Errorf("argument is not a list: %#v", d)
+		return nil, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
 	dv := reflect.ValueOf(d)
