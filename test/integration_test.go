@@ -113,6 +113,12 @@ var _ = BeforeSuite(func() {
 
 	setupLog.Info("creating a testing namespace")
 	Expect(k8sClient.Create(ctx, testNs)).Should(Succeed())
+
+	setupLog.Info("creating another testing namespace")
+	otherNs := testNs.DeepCopy()
+	otherNs.SetName("other")
+	otherNs.SetResourceVersion("")
+	Expect(k8sClient.Create(ctx, otherNs)).Should(Succeed())
 })
 
 var _ = AfterSuite(func() {
