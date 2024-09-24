@@ -21,9 +21,9 @@ import (
 	"hsnlab/dcontroller-runtime/pkg/operator"
 )
 
-var _ = Describe("Operator test:", Ordered, func() {
+var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 	// annotate EndpointSlices with the type of the corresponding Service
-	FContext("When creating an endpoint annotator operator", Ordered, Label("operator"), func() {
+	Context("When creating an endpoint annotator operator", Ordered, Label("operator"), func() {
 		const annotationName = "dcontroller.io/service-type"
 		var (
 			ctx                            context.Context
