@@ -14,6 +14,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
+	"hsnlab/dcontroller-runtime/internal/testutils"
 	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
 	"hsnlab/dcontroller-runtime/pkg/object"
 	"hsnlab/dcontroller-runtime/pkg/operator"
@@ -21,7 +22,7 @@ import (
 
 var _ = Describe("Operator test:", Ordered, func() {
 	// annotate EndpointSlices with the type of the corresponding Service
-	Context("When creating an endpoint annotator operator", Ordered, Label("managed"), func() {
+	Context("When creating an endpoint annotator operator", Ordered, Label("operator"), func() {
 		const annotationName = "dcontroller.io/service-type"
 		var (
 			ctx                             context.Context
@@ -32,29 +33,29 @@ var _ = Describe("Operator test:", Ordered, func() {
 		BeforeAll(func() {
 			ctx, cancel = context.WithCancel(context.Background())
 
-			svc1 = testSvc.DeepCopy()
+			svc1 = testutils.TestSvc.DeepCopy()
 			svc1.SetName("test-service-1")
 			svc1.SetNamespace("default")
 
-			svc2 = testSvc.DeepCopy()
+			svc2 = testutils.TestSvc.DeepCopy()
 			svc2.SetName("test-service-2")
 			svc2.SetNamespace("other")
 
-			svc3 = testSvc.DeepCopy()
+			svc3 = testutils.TestSvc.DeepCopy()
 			svc3.SetName("test-service-3")
 			svc3.SetNamespace("default")
 
-			es1 = testEndpointSlice.DeepCopy()
+			es1 = testutils.TestEndpointSlice.DeepCopy()
 			es1.SetName("test-endpointslice-1")
 			es1.SetNamespace("default")
 			es1.SetLabels(map[string]string{"kubernetes.io/service-name": "test-service-1"})
 
-			es2 = testEndpointSlice.DeepCopy()
+			es2 = testutils.TestEndpointSlice.DeepCopy()
 			es2.SetName("test-endpointslice-2")
 			es2.SetNamespace("other")
 			es2.SetLabels(map[string]string{"kubernetes.io/service-name": "test-service-2"})
 
-			es3 = testEndpointSlice.DeepCopy()
+			es3 = testutils.TestEndpointSlice.DeepCopy()
 			es3.SetName("test-endpointslice-3")
 			es3.SetNamespace("default")
 			es3.SetLabels(map[string]string{"kubernetes.io/service-name": "dummy"})
@@ -68,6 +69,7 @@ var _ = Describe("Operator test:", Ordered, func() {
 		It("should create and start the operator controller", func() {
 			setupLog.Info("setting up operator controller")
 			c, err := operator.NewController(cfg, ctrl.Options{
+				Scheme:                 scheme,
 				LeaderElection:         false, // disable leader-election
 				HealthProbeBindAddress: "0",   // disable health-check
 				Metrics: metricsserver.Options{
@@ -89,7 +91,8 @@ var _ = Describe("Operator test:", Ordered, func() {
 			yamlData := `
 name: svc-endpointslice-annotator
 controllers:
-  - sources:
+  - name: svc-endpointslice-annotator
+    sources:
       - apiGroup: ""
         kind: Service
       - apiGroup: "discovery.k8s.io"
@@ -99,7 +102,7 @@ controllers:
         "@and":
           - '@eq':
               - $.Service.metadata.name
-              - $.EndpointSlice.metadata.labels."kubernetes.io/service-name"
+              - '$["EndpointSlice"]["metadata"]["labels"]["kubernetes.io/service-name"]'
           - '@eq':
               - $.Service.metadata.namespace
               - $.EndpointSlice.metadata.namespace
@@ -115,7 +118,6 @@ controllers:
       kind: EndpointSlice
       type: Patcher
 `
-
 			var spec opv1a1.OperatorSpec
 			Expect(yaml.Unmarshal([]byte(yamlData), &spec)).NotTo(HaveOccurred())
 
@@ -139,6 +141,8 @@ controllers:
 
 			ctrl.Log.Info("loading endpointslice")
 			Expect(k8sClient.Create(ctx, es1)).Should(Succeed())
+
+			// time.Sleep(6 * time.Hour)
 
 			Eventually(func() bool {
 				key := client.ObjectKeyFromObject(es1)

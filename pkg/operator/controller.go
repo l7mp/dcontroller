@@ -55,7 +55,7 @@ func NewController(config *rest.Config, options runtimeManager.Options) (Control
 	}
 
 	// Create a manager for this operator
-	mgr, err := runtimeManager.New(config, runtimeManager.Options{Logger: logger})
+	mgr, err := runtimeManager.New(config, options)
 	if err != nil {
 		return nil, fmt.Errorf("failed to to set up manager: %w", err)
 	}
@@ -106,7 +106,10 @@ func (c *controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		c.deleteOperator(req.NamespacedName)
 	}
 
-	operator := c.upsertOperator(&op)
+	operator, err := c.upsertOperator(&op)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
 	// set status
 	op.Status = operator.GetStatus(op.GetGeneration())
@@ -118,8 +121,7 @@ func (c *controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	return reconcile.Result{}, nil
 }
 
-// Start starts the operator controller and starts each operator registered with the controller. It blocks
-
+// Start starts the operator controller and each operator registered with the controller. It blocks
 func (c *controller) Start(ctx context.Context) error {
 	c.log.Info("starting operators")
 
@@ -134,34 +136,53 @@ func (c *controller) Start(ctx context.Context) error {
 	return c.mgr.Start(ctx)
 }
 
-func (c *controller) getOperatorEntry(key types.NamespacedName) *opEntry {
+func (c *controller) startOp(key types.NamespacedName) {
+	e := c.getOperatorEntry(key)
+	if e == nil {
+		return
+	}
+
+	// Store the cancel function into the operator entry
+	ctx, cancel := context.WithCancel(c.ctx)
+	e.cancel = cancel
+
 	c.mu.Lock()
-	op := c.operators[key]
+	c.operators[key] = e
 	c.mu.Unlock()
-	return op
+
+	go e.op.Start(ctx)
 }
 
-func (c *controller) upsertOperator(op *opv1a1.Operator) *operator {
-	key := client.ObjectKeyFromObject(op)
+func (c *controller) upsertOperator(spec *opv1a1.Operator) (*operator, error) {
+	key := client.ObjectKeyFromObject(spec)
+	c.log.V(4).Info("upserting operator", "name", key.String())
+
 	e := c.getOperatorEntry(key)
 
 	// if this is a modification event we first remove old operator and create a new one
-	if e == nil {
+	if e != nil {
 		c.deleteOperator(key)
 	}
-	return c.addOperator(op)
+
+	return c.addOperator(spec)
 }
 
-func (c *controller) addOperator(op *opv1a1.Operator) *operator {
+func (c *controller) addOperator(spec *opv1a1.Operator) (*operator, error) {
+	c.log.V(2).Info("adding operator", "name", client.ObjectKeyFromObject(spec).String())
+
 	// First create a manager for this operator
 	mgr, err := manager.New(nil, c.mgr.GetConfig(), c.options)
 	if err != nil {
-		c.log.Error(err, "failed to create manager for operator", "operator", op.Name)
-		return nil
+		return nil, fmt.Errorf("failed to create manager for operator %s: %w",
+			spec.Name, err)
 	}
 
-	key := client.ObjectKeyFromObject(op)
-	operator := New(mgr, &op.Spec, c.logger)
+	key := client.ObjectKeyFromObject(spec)
+	operator, err := New(mgr, &spec.Spec, c.logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create operator %s: %w",
+			spec.Name, err)
+	}
 
 	c.mu.Lock()
 	c.operators[key] = &opEntry{op: operator}
@@ -172,10 +193,12 @@ func (c *controller) addOperator(op *opv1a1.Operator) *operator {
 		c.startOp(key)
 	}
 
-	return operator
+	return operator, nil
 }
 
 func (c *controller) deleteOperator(k types.NamespacedName) {
+	c.log.V(2).Info("deleting operator", "name", k)
+
 	e := c.getOperatorEntry(k)
 	if e == nil {
 		return
@@ -188,21 +211,9 @@ func (c *controller) deleteOperator(k types.NamespacedName) {
 	delete(c.operators, k)
 }
 
-func (c *controller) startOp(k types.NamespacedName) {
+func (c *controller) getOperatorEntry(key types.NamespacedName) *opEntry {
 	c.mu.Lock()
-	e, ok := c.operators[k]
+	op := c.operators[key]
 	c.mu.Unlock()
-
-	if !ok {
-		return
-	}
-
-	ctx, cancel := context.WithCancel(c.ctx)
-	e.cancel = cancel
-
-	c.mu.Lock()
-	c.operators[k] = e
-	c.mu.Unlock()
-
-	go e.op.Start(ctx)
+	return op
 }

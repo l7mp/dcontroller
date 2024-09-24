@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	// viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
+	"hsnlab/dcontroller-runtime/internal/testutils"
 	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
 	"hsnlab/dcontroller-runtime/pkg/manager"
 
@@ -26,7 +27,7 @@ import (
 
 var _ = Describe("Controller test:", Ordered, func() {
 	// write service type into an annotation for services running in the default namespace
-	Context("When applying a self-referencial controller", Ordered, Label("managed"), func() {
+	Context("When applying a self-referencial controller", Ordered, Label("controller"), func() {
 		const annotationName = "service-type"
 		var (
 			ctrlCtx    context.Context
@@ -38,7 +39,7 @@ var _ = Describe("Controller test:", Ordered, func() {
 
 		BeforeAll(func() {
 			ctrlCtx, ctrlCancel = context.WithCancel(context.Background())
-			svc = testSvc.DeepCopy()
+			svc = testutils.TestSvc.DeepCopy()
 			gvk = schema.GroupVersionKind{
 				Group:   "",
 				Version: "v1",

@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -346,7 +345,7 @@ target:
 			// sanity check
 			Eventually(func() bool {
 				_, err := tracker.Get(gvr, "testns", "testpod")
-				fmt.Println(err)
+				logger.Error(err, "tracker error")
 				return err == nil
 			}, timeout, retryInterval).Should(BeTrue())
 

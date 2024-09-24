@@ -19,6 +19,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -47,7 +48,8 @@ var _ = fmt.Sprintf("%d", 1)
 const (
 	timeout  = time.Second * 10
 	interval = time.Millisecond * 250
-	loglevel = -10
+	// loglevel = -10
+	loglevel = -3
 	//loglevel = -1
 )
 
@@ -92,11 +94,10 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		// CRDDirectoryPaths: []string{
-		// 	filepath.Join("..", "config", "crd", "bases"),
-		// 	filepath.Join("..", "config", "gateway-api-v1.0.0", "crd"),
-		// },
-		// ErrorIfCRDPathMissing:    true,
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "config", "crd", "bases"),
+		},
+		ErrorIfCRDPathMissing:    true,
 		AttachControlPlaneOutput: true,
 	}
 

@@ -3,6 +3,7 @@ package operator
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
@@ -21,21 +22,33 @@ type Operator interface {
 type operator struct {
 	name        string
 	mgr         runtimeManager.Manager
-	op          *opv1a1.OperatorSpec
-	controllers []dcontroller.Controller
+	spec        *opv1a1.OperatorSpec
+	controllers []*dcontroller.Controller
 	logger, log logr.Logger
 }
 
 // NewOperator creates a new operator.
-func New(mgr runtimeManager.Manager, op *opv1a1.OperatorSpec, logger logr.Logger) *operator {
-	return &operator{
-		name:        op.Name,
+func New(mgr runtimeManager.Manager, spec *opv1a1.OperatorSpec, logger logr.Logger) (*operator, error) {
+	op := &operator{
+		name:        spec.Name,
 		mgr:         mgr,
-		op:          op,
-		controllers: []dcontroller.Controller{},
+		spec:        spec,
+		controllers: []*dcontroller.Controller{},
 		logger:      logger,
-		log:         logger.WithName("operator").WithValues("name", op.Name),
+		log:         logger.WithName("operator").WithValues("name", spec.Name),
 	}
+
+	// Create the controllers for the operator (manager.Start() will automatically start them)
+	for _, config := range spec.Controllers {
+		c, err := dcontroller.New(op.mgr, config, dcontroller.Options{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create controller %q: %w",
+				config.Name, err)
+		}
+		op.controllers = append(op.controllers, c)
+	}
+
+	return op, nil
 }
 
 // Start starts the operator. It blocks

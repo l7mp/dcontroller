@@ -126,16 +126,10 @@ func ApplyStrategicMergePatch(original, patch *unstructured.Unstructured) (*unst
 		return nil, err
 	}
 
-	fmt.Println("777777777777777777777777777777777")
-	fmt.Println(string(originalData))
-
 	patchData, err := runtime.Encode(unstructured.UnstructuredJSONScheme, patch)
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println("777777777777777777777777777777777")
-	fmt.Println(string(patchData))
 
 	patchedData, err := strategicpatch.StrategicMergePatch(originalData, patchData, &unstructured.Unstructured{})
 	if err != nil {

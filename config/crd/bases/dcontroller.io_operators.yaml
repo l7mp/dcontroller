@@ -19,9 +19,6 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: length(.spec.controllers)
-      name: ControllerNum
-      type: integetr
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
       type: string
@@ -31,6 +28,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
+        description: // +kubebuilder:printcolumn:name="ControllerNum",type=integer,JSONPath=`length(.spec.controllers)`
         properties:
           apiVersion:
             description: |-

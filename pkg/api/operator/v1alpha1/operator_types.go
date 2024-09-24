@@ -11,12 +11,15 @@ func init() {
 // Operator is an abstraction of a basic unit of automation, a set of related controllers working
 // on a single shared view of system resources.
 //
+// +kubebuilder:rbac:groups="dcontroller.io",resources=operators,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups="dcontroller.io",resources=operators/finalizers;operators/status,verbs=update;patch
+
 // +genclient:nonNamespaced
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:categories=dcontroller
+// +kubebuilder:resource:categories=dcontroller,scope=Cluster,shortName=operators
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
-// +kubebuilder:printcolumn:name="ControllerNum",type=integetr,JSONPath=`length(.spec.controllers)`
+// // +kubebuilder:printcolumn:name="ControllerNum",type=integer,JSONPath=`length(.spec.controllers)`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type Operator struct {
