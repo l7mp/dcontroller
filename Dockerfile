@@ -1,6 +1,6 @@
 ###########
 # Build the manager binary
-FROM golang:1.22-alpine as builder
+FROM docker.io/golang:1.22-alpine as builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -12,9 +12,8 @@ RUN go mod download
 
 # Copy the go source
 COPY main.go main.go
-COPY api/ api/
 COPY internal/ internal/
-COPY pkg/config/ pkg/config/
+COPY pkg/ pkg/
 
 # Build
 COPY .git ./

@@ -28,7 +28,12 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: // +kubebuilder:printcolumn:name="ControllerNum",type=integer,JSONPath=`length(.spec.controllers)`
+        description: |-
+          Operator is an abstraction of a basic unit of automation, a set of related controllers working
+          on a single shared view of system resources.
+
+
+          // +kubebuilder:printcolumn:name="ControllerNum",type=integer,JSONPath=`length(.spec.controllers)`
         properties:
           apiVersion:
             description: |-

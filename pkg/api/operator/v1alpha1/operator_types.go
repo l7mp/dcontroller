@@ -11,9 +11,6 @@ func init() {
 // Operator is an abstraction of a basic unit of automation, a set of related controllers working
 // on a single shared view of system resources.
 //
-// +kubebuilder:rbac:groups="dcontroller.io",resources=operators,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups="dcontroller.io",resources=operators/finalizers;operators/status,verbs=update;patch
-
 // +genclient:nonNamespaced
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:categories=dcontroller,scope=Cluster,shortName=operators

@@ -14,6 +14,7 @@ import (
 	runtimeController "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -178,8 +179,17 @@ func (c *controller) upsertOperator(spec *opv1a1.Operator) (*operator, error) {
 func (c *controller) addOperator(spec *opv1a1.Operator) (*operator, error) {
 	c.log.V(2).Info("adding operator", "name", client.ObjectKeyFromObject(spec).String())
 
+	// disable leader-election, health-check and the metrics server on the embedded manager
+	opts := c.options // shallow copy?
+	opts.LeaderElection = false
+	opts.HealthProbeBindAddress = "0"
+	opts.Metrics = metricsserver.Options{
+		BindAddress: "0",
+	}
+	opts.Logger = c.options.Logger
+
 	// First create a manager for this operator
-	mgr, err := manager.New(nil, c.mgr.GetConfig(), c.options)
+	mgr, err := manager.New(nil, c.mgr.GetConfig(), opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create manager for operator %s: %w",
 			spec.Name, err)
