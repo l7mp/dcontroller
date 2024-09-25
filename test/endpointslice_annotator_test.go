@@ -22,10 +22,11 @@ import (
 	"hsnlab/dcontroller-runtime/pkg/operator"
 )
 
+const serviceTypeAnnotationName = "dcontroller.io/service-type"
+
 var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 	// annotate EndpointSlices with the type of the corresponding Service
 	Context("When creating an endpoint annotator operator", Ordered, Label("operator"), func() {
-		const annotationName = "dcontroller.io/service-type"
 		var (
 			ctx                            context.Context
 			cancel                         context.CancelFunc
@@ -91,7 +92,7 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 
 		It("should let an operator to be attached to the manager", func() {
 			setupLog.Info("reading YAML file")
-			yamlData, err := os.ReadFile("endpointslice_annotator_test.yaml")
+			yamlData, err := os.ReadFile("endpointslice_annotator.yaml")
 			Expect(err).NotTo(HaveOccurred())
 			var op opv1a1.Operator
 			Expect(yaml.Unmarshal([]byte(yamlData), &op)).NotTo(HaveOccurred())
@@ -122,12 +123,12 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 				}
 
 				anns := get.GetAnnotations()
-				return len(anns) > 0 && anns[annotationName] == "ClusterIP"
+				return len(anns) > 0 && anns[serviceTypeAnnotationName] == "ClusterIP"
 			}, timeout, interval).Should(BeTrue())
 		})
 
 		It("should adjust the annotation when the service type is manually updated", func() {
-			ctrl.Log.Info("updating service service")
+			ctrl.Log.Info("updating service")
 			svc := svc1.DeepCopy()
 			_, err := ctrlutil.CreateOrUpdate(ctx, k8sClient, svc, func() error {
 				return unstructured.SetNestedField(svc.UnstructuredContent(), "NodePort", "spec", "type")
@@ -143,11 +144,11 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 				}
 
 				anns = get.GetAnnotations()
-				return len(anns) > 0 && anns[annotationName] == "NodePort"
+				return len(anns) > 0 && anns[serviceTypeAnnotationName] == "NodePort"
 			}, timeout, interval).Should(BeTrue())
 
 			// just to make sure
-			Expect(anns[annotationName]).To(Equal("NodePort"))
+			Expect(anns[serviceTypeAnnotationName]).To(Equal("NodePort"))
 		})
 
 		It("should handle the addition of another EndpointSlice referring to the same Service", func() {
@@ -164,15 +165,15 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 				}
 
 				anns = get.GetAnnotations()
-				return len(anns) > 0 && anns[annotationName] == "NodePort"
+				return len(anns) > 0 && anns[serviceTypeAnnotationName] == "NodePort"
 			}, timeout, interval).Should(BeTrue())
 
 			// just to make sure
-			Expect(anns[annotationName]).To(Equal("NodePort"))
+			Expect(anns[serviceTypeAnnotationName]).To(Equal("NodePort"))
 		})
 
 		It("should update all referring EndpointSlices when the Service changes", func() {
-			ctrl.Log.Info("updating service service")
+			ctrl.Log.Info("updating service")
 			svc := svc1.DeepCopy()
 			_, err := ctrlutil.CreateOrUpdate(ctx, k8sClient, svc, func() error {
 				return unstructured.SetNestedField(svc.UnstructuredContent(), "LoadBalancer", "spec", "type")
@@ -194,8 +195,8 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 				}
 				anns2 := get2.GetAnnotations()
 
-				return len(anns1) > 0 && anns1[annotationName] == "LoadBalancer" &&
-					len(anns2) > 0 && anns2[annotationName] == "LoadBalancer"
+				return len(anns1) > 0 && anns1[serviceTypeAnnotationName] == "LoadBalancer" &&
+					len(anns2) > 0 && anns2[serviceTypeAnnotationName] == "LoadBalancer"
 			}, timeout, interval).Should(BeTrue())
 		})
 
@@ -236,7 +237,7 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 				}
 
 				anns := get.GetAnnotations()
-				return len(anns) > 0 && anns[annotationName] == "ClusterIP"
+				return len(anns) > 0 && anns[serviceTypeAnnotationName] == "ClusterIP"
 			}, timeout, interval).Should(BeTrue())
 		})
 

@@ -28,6 +28,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"go.uber.org/zap/zapcore"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -86,6 +87,8 @@ var _ = BeforeSuite(func() {
 	ctx, cancel = context.WithCancel(context.Background())
 
 	err := clientgoscheme.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = appsv1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 	err = discoveryv1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())

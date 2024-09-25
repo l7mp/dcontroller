@@ -3,7 +3,6 @@ Kind: Operator
 metadata:
   name: svc-endpointslice-annotator
 spec:
-  name: svc-endpointslice-annotator
   controllers:
     - name: svc-endpointslice-annotator
       sources:
