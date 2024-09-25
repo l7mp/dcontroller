@@ -1,0 +1,33 @@
+apiGroup: operator.dcontroller.io/v1alpha1
+Kind: Operator
+metadata:
+  name: svc-endpointslice-annotator
+spec:
+  name: svc-endpointslice-annotator
+  controllers:
+    - name: svc-endpointslice-annotator
+      sources:
+        - apiGroup: ""
+          kind: Service
+        - apiGroup: "discovery.k8s.io"
+          kind: EndpointSlice
+      pipeline:
+        "@join":
+          "@and":
+            - '@eq':
+                - $.Service.metadata.name
+                - '$["EndpointSlice"]["metadata"]["labels"]["kubernetes.io/service-name"]'
+            - '@eq':
+                - $.Service.metadata.namespace
+                - $.EndpointSlice.metadata.namespace
+        "@aggregate":
+          - "@project":
+              metadata:
+                name: "$.EndpointSlice.metadata.name"
+                namespace: "$.EndpointSlice.metadata.namespace"
+                annotations:
+                  "dcontroller.io/service-type": "$.Service.spec.type"
+      target:
+        apiGroup: "discovery.k8s.io"
+        kind: EndpointSlice
+        type: Patcher

@@ -59,6 +59,11 @@ func (op *operator) Start(ctx context.Context) error {
 
 }
 
+// GetManager returns the controller runtime manager associated with the operator.
+func (op *operator) GetManager() runtimeManager.Manager {
+	return op.mgr
+}
+
 // GetStatus populates the operator status with the controller statuses.
 func (op *operator) GetStatus(gen int64) opv1a1.OperatorStatus {
 	cs := []opv1a1.ControllerStatus{}

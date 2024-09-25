@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -89,46 +90,16 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 		})
 
 		It("should let an operator to be attached to the manager", func() {
-			yamlData := `
-name: svc-endpointslice-annotator
-controllers:
-  - name: svc-endpointslice-annotator
-    sources:
-      - apiGroup: ""
-        kind: Service
-      - apiGroup: "discovery.k8s.io"
-        kind: EndpointSlice
-    pipeline:
-      "@join":
-        "@and":
-          - '@eq':
-              - $.Service.metadata.name
-              - '$["EndpointSlice"]["metadata"]["labels"]["kubernetes.io/service-name"]'
-          - '@eq':
-              - $.Service.metadata.namespace
-              - $.EndpointSlice.metadata.namespace
-      "@aggregate":
-        - "@project":
-            metadata:
-              name: "$.EndpointSlice.metadata.name"
-              namespace: "$.EndpointSlice.metadata.namespace"
-              annotations:
-                "dcontroller.io/service-type": "$.Service.spec.type"
-    target:
-      apiGroup: "discovery.k8s.io"
-      kind: EndpointSlice
-      type: Patcher
-`
-			var spec opv1a1.OperatorSpec
-			Expect(yaml.Unmarshal([]byte(yamlData), &spec)).NotTo(HaveOccurred())
+			setupLog.Info("reading YAML file")
+			yamlData, err := os.ReadFile("endpointslice_annotator_test.yaml")
+			Expect(err).NotTo(HaveOccurred())
+			var op opv1a1.Operator
+			Expect(yaml.Unmarshal([]byte(yamlData), &op)).NotTo(HaveOccurred())
 
 			setupLog.Info("adding new operator")
-			op := &opv1a1.Operator{}
-			op.SetName("svc-endpointslice-annotator")
-			op.Spec = spec
-			Expect(k8sClient.Create(ctx, op)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, &op)).Should(Succeed())
 
-			key := client.ObjectKeyFromObject(op)
+			key := client.ObjectKeyFromObject(&op)
 			Eventually(func() bool {
 				get := &opv1a1.Operator{}
 				err := k8sClient.Get(ctx, key, get)
@@ -290,6 +261,15 @@ controllers:
 				}
 				return len(get.GetAnnotations()) == 0
 			}, timeout, interval).Should(BeTrue())
+		})
+
+		It("should delete the objects added", func() {
+			ctrl.Log.Info("deleting objects")
+			Expect(k8sClient.Delete(ctx, svc2)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, es1)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, es2)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, es3)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, es4)).Should(Succeed())
 		})
 	})
 })
