@@ -53,8 +53,7 @@ func (c *ViewCache) RegisterCacheForKind(gvk schema.GroupVersionKind) error {
 	defer c.mu.Unlock()
 
 	if _, exists := c.caches[gvk]; exists {
-		// race condition: someone already registered the cache while we were waiting on
-		// the lock - ignore
+		c.log.V(8).Info("refusing to register cache for GVK %s: cache already exists", "gvk", gvk)
 		return nil
 	}
 
@@ -102,7 +101,8 @@ func (c *ViewCache) RegisterInformerForKind(gvk schema.GroupVersionKind) error {
 	defer c.mu.Unlock()
 
 	if _, exists := c.informers[gvk]; exists {
-		return fmt.Errorf("informer is already registered for GVK %s", gvk)
+		c.log.V(8).Info("refusing to register informer for GVK %s: informer already exists", "gvk", gvk)
+		return nil
 	}
 
 	informer := NewViewCacheInformer(gvk, cache, c.logger)

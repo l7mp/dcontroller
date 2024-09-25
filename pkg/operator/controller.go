@@ -54,6 +54,10 @@ func NewController(config *rest.Config, options runtimeManager.Options) (Control
 		options.Logger = logger
 	}
 
+	// Disable global controller name uniquness test
+	off := true
+	options.Controller.SkipNameValidation = &off
+
 	// Create a manager for this operator
 	mgr, err := runtimeManager.New(config, options)
 	if err != nil {
