@@ -11,8 +11,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"hsnlab/dcontroller-runtime/pkg/cache"
-	"hsnlab/dcontroller-runtime/pkg/util"
+	"hsnlab/dcontroller/pkg/cache"
+	"hsnlab/dcontroller/pkg/util"
 )
 
 type Reconciler = reconcile.TypedReconciler[Request]

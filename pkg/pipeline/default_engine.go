@@ -9,9 +9,9 @@ import (
 	"github.com/go-logr/logr"
 	toolscache "k8s.io/client-go/tools/cache"
 
-	"hsnlab/dcontroller-runtime/pkg/cache"
-	"hsnlab/dcontroller-runtime/pkg/object"
-	"hsnlab/dcontroller-runtime/pkg/util"
+	"hsnlab/dcontroller/pkg/cache"
+	"hsnlab/dcontroller/pkg/object"
+	"hsnlab/dcontroller/pkg/util"
 )
 
 var ObjectKey = toolscache.MetaObjectToName

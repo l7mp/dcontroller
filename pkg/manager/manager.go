@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"hsnlab/dcontroller-runtime/pkg/cache"
+	"hsnlab/dcontroller/pkg/cache"
 )
 
 // Manager is a wrapper around the controller-runtime Manager. The main difference is a custom

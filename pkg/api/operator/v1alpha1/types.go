@@ -3,8 +3,8 @@ package v1alpha1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"hsnlab/dcontroller-runtime/pkg/pipeline"
-	"hsnlab/dcontroller-runtime/pkg/predicate"
+	"hsnlab/dcontroller/pkg/pipeline"
+	"hsnlab/dcontroller/pkg/predicate"
 )
 
 // Controller is a translator that processes a set of base resources via a declarative pipeline

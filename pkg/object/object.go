@@ -6,7 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
+	viewv1a1 "hsnlab/dcontroller/pkg/api/view/v1alpha1"
 )
 
 type Object = *unstructured.Unstructured

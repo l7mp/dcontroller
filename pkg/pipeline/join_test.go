@@ -7,9 +7,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/json"
 
-	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
-	"hsnlab/dcontroller-runtime/pkg/cache"
-	"hsnlab/dcontroller-runtime/pkg/object"
+	viewv1a1 "hsnlab/dcontroller/pkg/api/view/v1alpha1"
+	"hsnlab/dcontroller/pkg/cache"
+	"hsnlab/dcontroller/pkg/object"
 )
 
 var _ = Describe("Joins", func() {

@@ -20,8 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	ccache "hsnlab/dcontroller-runtime/pkg/cache"
-	"hsnlab/dcontroller-runtime/pkg/object"
+	ccache "hsnlab/dcontroller/pkg/cache"
+	"hsnlab/dcontroller/pkg/object"
 )
 
 const (

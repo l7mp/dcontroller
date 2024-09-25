@@ -18,8 +18,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
-	"hsnlab/dcontroller-runtime/pkg/manager"
+	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
+	"hsnlab/dcontroller/pkg/manager"
 )
 
 var _ Controller = &controller{}
@@ -59,6 +59,7 @@ func NewController(config *rest.Config, options runtimeManager.Options) (Control
 	if err != nil {
 		return nil, fmt.Errorf("failed to to set up manager: %w", err)
 	}
+
 	controller := &controller{
 		Client:    mgr.GetClient(),
 		mgr:       mgr,
@@ -72,6 +73,9 @@ func NewController(config *rest.Config, options runtimeManager.Options) (Control
 	c, err := runtimeController.New("operator-controller", mgr, runtimeController.Options{
 		Reconciler: controller,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to to set up operator controller: %w", err)
+	}
 
 	if err := c.Watch(
 		source.Kind[client.Object](

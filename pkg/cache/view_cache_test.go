@@ -9,8 +9,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
-	"hsnlab/dcontroller-runtime/pkg/object"
+	viewv1a1 "hsnlab/dcontroller/pkg/api/view/v1alpha1"
+	"hsnlab/dcontroller/pkg/object"
 )
 
 const (

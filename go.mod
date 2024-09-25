@@ -1,4 +1,4 @@
-module hsnlab/dcontroller-runtime
+module hsnlab/dcontroller
 
 go 1.22.0
 

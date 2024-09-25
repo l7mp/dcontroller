@@ -3,8 +3,8 @@ package pipeline
 import (
 	"encoding/json"
 	"fmt"
-	"hsnlab/dcontroller-runtime/pkg/cache"
-	"hsnlab/dcontroller-runtime/pkg/util"
+	"hsnlab/dcontroller/pkg/cache"
+	"hsnlab/dcontroller/pkg/util"
 )
 
 // Pipeline is an optional join followed by an aggregation.

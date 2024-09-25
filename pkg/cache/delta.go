@@ -6,7 +6,7 @@ import (
 	toolscache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"hsnlab/dcontroller-runtime/pkg/object"
+	"hsnlab/dcontroller/pkg/object"
 )
 
 type DeltaType = toolscache.DeltaType

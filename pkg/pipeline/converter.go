@@ -3,9 +3,10 @@ package pipeline
 import (
 	"errors"
 	"fmt"
-	"hsnlab/dcontroller-runtime/pkg/util"
 	"reflect"
 	"strconv"
+
+	"hsnlab/dcontroller/pkg/util"
 )
 
 func isList(d any) bool {

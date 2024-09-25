@@ -15,11 +15,11 @@ import (
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
-	"hsnlab/dcontroller-runtime/pkg/cache"
-	"hsnlab/dcontroller-runtime/pkg/object"
-	"hsnlab/dcontroller-runtime/pkg/pipeline"
-	"hsnlab/dcontroller-runtime/pkg/util"
+	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
+	"hsnlab/dcontroller/pkg/cache"
+	"hsnlab/dcontroller/pkg/object"
+	"hsnlab/dcontroller/pkg/pipeline"
+	"hsnlab/dcontroller/pkg/util"
 )
 
 const WatcherBufferSize int = 1024

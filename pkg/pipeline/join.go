@@ -2,7 +2,7 @@ package pipeline
 
 import (
 	"fmt"
-	"hsnlab/dcontroller-runtime/pkg/cache"
+	"hsnlab/dcontroller/pkg/cache"
 )
 
 const joinOp = "@join"

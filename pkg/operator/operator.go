@@ -8,8 +8,8 @@ import (
 	"github.com/go-logr/logr"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 
-	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
-	dcontroller "hsnlab/dcontroller-runtime/pkg/controller"
+	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
+	dcontroller "hsnlab/dcontroller/pkg/controller"
 )
 
 var _ Operator = &operator{}

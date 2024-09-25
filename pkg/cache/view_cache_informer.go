@@ -3,7 +3,7 @@ package cache
 import (
 	"errors"
 	"fmt"
-	"hsnlab/dcontroller-runtime/pkg/object"
+	"hsnlab/dcontroller/pkg/object"
 	"sync"
 	"sync/atomic"
 	"time"

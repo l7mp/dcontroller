@@ -16,13 +16,12 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
-	// viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
-	"hsnlab/dcontroller-runtime/internal/testutils"
-	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
-	"hsnlab/dcontroller-runtime/pkg/manager"
+	"hsnlab/dcontroller/internal/testutils"
+	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
+	"hsnlab/dcontroller/pkg/manager"
 
-	"hsnlab/dcontroller-runtime/pkg/controller"
-	"hsnlab/dcontroller-runtime/pkg/object"
+	"hsnlab/dcontroller/pkg/controller"
+	"hsnlab/dcontroller/pkg/object"
 )
 
 var _ = Describe("Controller test:", Ordered, func() {

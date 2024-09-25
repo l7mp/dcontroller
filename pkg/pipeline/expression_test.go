@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/yaml"
 
-	"hsnlab/dcontroller-runtime/pkg/object"
+	"hsnlab/dcontroller/pkg/object"
 )
 
 var emptyView = []GVK{}

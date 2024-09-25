@@ -23,12 +23,12 @@ import (
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/yaml"
 
-	opv1a1 "hsnlab/dcontroller-runtime/pkg/api/operator/v1alpha1"
-	viewv1a1 "hsnlab/dcontroller-runtime/pkg/api/view/v1alpha1"
-	"hsnlab/dcontroller-runtime/pkg/cache"
-	"hsnlab/dcontroller-runtime/pkg/manager"
-	"hsnlab/dcontroller-runtime/pkg/object"
-	"hsnlab/dcontroller-runtime/pkg/pipeline"
+	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
+	viewv1a1 "hsnlab/dcontroller/pkg/api/view/v1alpha1"
+	"hsnlab/dcontroller/pkg/cache"
+	"hsnlab/dcontroller/pkg/manager"
+	"hsnlab/dcontroller/pkg/object"
+	"hsnlab/dcontroller/pkg/pipeline"
 )
 
 const (
