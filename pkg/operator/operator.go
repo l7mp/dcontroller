@@ -28,14 +28,14 @@ type operator struct {
 }
 
 // NewOperator creates a new operator.
-func New(mgr runtimeManager.Manager, spec *opv1a1.OperatorSpec, logger logr.Logger) (*operator, error) {
+func New(mgr runtimeManager.Manager, name string, spec *opv1a1.OperatorSpec, logger logr.Logger) (*operator, error) {
 	op := &operator{
-		name:        spec.Name,
+		name:        name,
 		mgr:         mgr,
 		spec:        spec,
 		controllers: []*dcontroller.Controller{},
 		logger:      logger,
-		log:         logger.WithName("operator").WithValues("name", spec.Name),
+		log:         logger.WithName("operator").WithValues("name", name),
 	}
 
 	// Create the controllers for the operator (manager.Start() will automatically start them)

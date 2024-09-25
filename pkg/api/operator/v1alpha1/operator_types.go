@@ -35,9 +35,6 @@ type Operator struct {
 
 // OperatorSpec defines the desired state of an operator.
 type OperatorSpec struct {
-	// Name is the unique name of the operator
-	Name string `json:"name"`
-
 	// Controllers is a list of controllers that collectively implement the operator.
 	//
 	// +kubebuilder:validation:MinItems=1

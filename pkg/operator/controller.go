@@ -178,7 +178,7 @@ func (c *controller) addOperator(spec *opv1a1.Operator) (*operator, error) {
 	}
 
 	key := client.ObjectKeyFromObject(spec)
-	operator, err := New(mgr, &spec.Spec, c.logger)
+	operator, err := New(mgr, spec.GetName(), &spec.Spec, c.logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create operator %s: %w",
 			spec.Name, err)

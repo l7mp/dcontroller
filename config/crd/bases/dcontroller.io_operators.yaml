@@ -167,12 +167,8 @@ spec:
                 maxItems: 24
                 minItems: 1
                 type: array
-              name:
-                description: Name is the unique name of the operator
-                type: string
             required:
             - controllers
-            - name
             type: object
           status:
             description: Status defines the current state of the operator.
