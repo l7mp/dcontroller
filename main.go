@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"hsnlab/dcontroller/internal/buildinfo"
 	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
 	"hsnlab/dcontroller/pkg/operator"
 )
@@ -73,7 +74,7 @@ func main() {
 	ctrl.SetLogger(logger.WithName("dcontroller"))
 	setupLog := logger.WithName("setup")
 
-	buildInfo := BuildInfo{Version: version, CommitHash: commitHash, BuildDate: buildDate}
+	buildInfo := buildinfo.BuildInfo{Version: version, CommitHash: commitHash, BuildDate: buildDate}
 	setupLog.Info(fmt.Sprintf("starting the dcontroller %s", buildInfo.String()))
 
 	c, err := operator.NewController(ctrl.GetConfigOrDie(), ctrl.Options{
