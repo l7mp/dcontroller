@@ -59,9 +59,15 @@ var _ = Describe("Converters", func() {
 			Expect(v).To(Equal("foo"))
 		})
 		It("should err for invalid string", func() {
-			var x any = 12
+			var x any = map[string]any{"a": 12}
 			_, err := asString(x)
 			Expect(err).To(HaveOccurred())
+		})
+		It("should convert to string if possible", func() {
+			var x any = 12
+			v, err := asString(x)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal("12"))
 		})
 		It("should read a string list", func() {
 			var xs any = []any{"a", "x", "12"}

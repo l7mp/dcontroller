@@ -76,6 +76,15 @@ func asString(d any) (string, error) {
 	if reflect.ValueOf(d).Kind() == reflect.String {
 		return reflect.ValueOf(d).String(), nil
 	}
+
+	// convert numeric
+	switch reflect.ValueOf(d).Kind() {
+	case reflect.String:
+		return reflect.ValueOf(d).String(), nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr, reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
+		return fmt.Sprintf("%d", d), nil
+	}
+
 	return "", fmt.Errorf("argument is not a string: %s", util.Stringify(d))
 }
 

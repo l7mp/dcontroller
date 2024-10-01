@@ -873,7 +873,9 @@ func (e *Expression) MarshalJSON() ([]byte, error) {
 
 	case "@bool":
 		if e.Arg != nil {
-			return json.Marshal(e.Arg)
+			// keep the op for a correct round-trip and possible side-effects (conversion)
+			ret := map[string]*Expression{e.Op: e.Arg}
+			return json.Marshal(ret)
 		}
 		v, err := asBool(e.Literal)
 		if err != nil {
@@ -883,7 +885,9 @@ func (e *Expression) MarshalJSON() ([]byte, error) {
 
 	case "@int":
 		if e.Arg != nil {
-			return json.Marshal(e.Arg)
+			// keep the op for a correct round-trip and possible side-effects (conversion)
+			ret := map[string]*Expression{e.Op: e.Arg}
+			return json.Marshal(ret)
 		}
 		v, err := asInt(e.Literal)
 		if err != nil {
@@ -893,7 +897,9 @@ func (e *Expression) MarshalJSON() ([]byte, error) {
 
 	case "@float":
 		if e.Arg != nil {
-			return json.Marshal(e.Arg)
+			// keep the op for a correct round-trip and possible side-effects (conversion)
+			ret := map[string]*Expression{e.Op: e.Arg}
+			return json.Marshal(ret)
 		}
 		v, err := asFloat(e.Literal)
 		if err != nil {
@@ -903,7 +909,9 @@ func (e *Expression) MarshalJSON() ([]byte, error) {
 
 	case "@string":
 		if e.Arg != nil {
-			return json.Marshal(e.Arg)
+			// keep the op for a correct round-trip and possible side-effects (conversion)
+			ret := map[string]*Expression{e.Op: e.Arg}
+			return json.Marshal(ret)
 		}
 		v, err := asString(e.Literal)
 		if err != nil {

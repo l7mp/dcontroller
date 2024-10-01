@@ -251,7 +251,7 @@ func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured
 			v = u
 		}
 
-		eng.log.V(5).Info("eval ready", "expression", e.String(), "result", u)
+		eng.log.V(5).Info("eval ready", "aggregation", e.String(), "result", v)
 
 		return v, nil
 
@@ -266,7 +266,7 @@ func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured
 			return nil, NewAggregationError(err)
 		}
 
-		eng.log.V(5).Info("eval ready", "expression", e.String(), "result", v)
+		eng.log.V(5).Info("eval ready", "aggregation", e.String(), "result", v)
 
 		return v, nil
 

@@ -194,7 +194,7 @@ func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 			ObservedGeneration: gen,
 			LastTransitionTime: metav1.Now(),
 			Reason:             string(opv1a1.ControllerReasonAccepted),
-			Message:            fmt.Sprintf("Controller accpepted"),
+			Message:            fmt.Sprintf("Controller accepted"),
 		}
 	} else {
 		acceptedCondition = metav1.Condition{
