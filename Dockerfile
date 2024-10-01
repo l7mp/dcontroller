@@ -35,7 +35,7 @@ RUN apkArch="$(apk --print-arch)"; \
 FROM gcr.io/distroless/static:nonroot
 
 WORKDIR /
-COPY --from=builder /workspace/bin/manager .
+COPY --from=builder /workspace/bin/dcontroller-manager .
 USER 65532:65532
 
-ENTRYPOINT ["/manager"]
+ENTRYPOINT ["/dcontroller-manager"]

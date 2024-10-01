@@ -1,5 +1,5 @@
-apiGroup: operator.dcontroller.io/v1alpha1
-Kind: Operator
+apiVersion: operator.dcontroller.io/v1alpha1
+kind: Operator
 metadata:
   name: svc-endpointslice-annotator
 spec:

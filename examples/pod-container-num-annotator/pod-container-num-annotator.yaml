@@ -1,0 +1,26 @@
+apiVersion: operator.dcontroller.io/v1alpha1
+kind: Operator
+metadata:
+  name: pod-container-num-annotator
+spec:
+  controllers:
+    - name: pod-container-num-annotator
+      sources:
+        - apiGroup: ""
+          kind: Pod
+      pipeline:
+        "@aggregate":
+          - "@select":
+              - '@eq':
+                  - "$.metadata.namespace": default
+          - "@project":
+              metadata:
+                name: "$.metadata.name"
+                namespace: "$.metadata.namespace"
+                annotations:
+                  "dcontroller.io/container-num":
+                    '@len': ["$.spec.containers"]
+      target:
+        apiGroup: ""
+        kind: Pod
+        type: Patcher

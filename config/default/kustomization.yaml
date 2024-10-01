@@ -1,0 +1,26 @@
+# Adds namespace to all resources.
+namespace: dcontroller-manager-system
+
+# Value of this field is prepended to the
+# names of all resources, e.g. a deployment named
+# "wordpress" becomes "alices-wordpress".
+# Note that it should also match with the prefix (text before '-') of the namespace
+# field above.
+namePrefix: dcontroller-
+
+# Labels to add to all resources and selectors.
+#commonLabels:
+#  someName: someValue
+
+
+# Mount the controller config file for loading manager configurations
+# through a ComponentConfig type
+#- manager_config_patch.yaml
+
+# the following config is for teaching kustomize how to do var substitution
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../crd
+- ../rbac
+- ../manager
