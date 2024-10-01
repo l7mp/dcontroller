@@ -185,6 +185,20 @@ var _ = Describe("Pipelines", func() {
 					},
 				}))
 			})
+
+			It("should handle a @select returning an empty object", func() {
+				jsonData := `
+'@aggregate':
+  - '@select':
+      '@eq': [$.metadata.namespace, "dummy"]`
+				var p Pipeline
+				err := yaml.Unmarshal([]byte(jsonData), &p)
+				Expect(err).NotTo(HaveOccurred())
+
+				deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(deltas).To(HaveLen(0))
+			})
 		})
 
 		Describe("Evaluating pipeline expressions for Update events", func() {

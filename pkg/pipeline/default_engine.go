@@ -114,7 +114,10 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 					delta.Type, ObjectKey(delta.Object), err))
 		}
 
-		ds = []cache.Delta{{Type: cache.Added, Object: o}}
+		ds = []cache.Delta{}
+		if o != nil { // @select shortcuts
+			ds = append(ds, cache.Delta{Type: cache.Added, Object: o})
+		}
 
 	case cache.Updated, cache.Replaced:
 		eng.log.V(6).Info("aggregate: replacing event with a Delete followed by an Add",
@@ -182,7 +185,10 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 					delta.Type, ObjectKey(delta.Object), err))
 		}
 
-		ds = []cache.Delta{{Type: cache.Deleted, Object: o}}
+		ds = []cache.Delta{}
+		if o != nil { // @select shortcuts
+			ds = append(ds, cache.Delta{Type: cache.Deleted, Object: o})
+		}
 
 	default:
 		eng.log.V(4).Info("aggregate: ignoring event", "event-type", delta.Type)
@@ -202,7 +208,6 @@ func (eng *defaultEngine) evalAggregation(a *Aggregation, obj object.Object) (ob
 		}
 
 		content = res
-
 		if content == nil {
 			// @select shortcuts the iteration
 			return nil, nil

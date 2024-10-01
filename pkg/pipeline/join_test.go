@@ -362,7 +362,7 @@ var _ = Describe("Joins", func() {
 			Expect(delta.Object.UnstructuredContent()["dep"]).To(Equal(dep1.UnstructuredContent()))
 		})
 
-		// 		FIt("parse a complex join expression from yaml", func() {
+		// 		It("parse a complex join expression from yaml", func() {
 		// 			jsonData := `
 		// "@join":
 		//   "@and":

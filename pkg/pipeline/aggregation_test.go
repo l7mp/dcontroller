@@ -51,9 +51,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added, Object: objs[0]}))
 
 			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Added, Object: objs[1]})
-			Expect(res).To(HaveLen(1))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(res[0].IsUnchanged()).To(BeTrue())
+			Expect(res).To(HaveLen(0))
 		})
 
 		It("should evaluate a false select expression", func() {
@@ -64,13 +62,11 @@ var _ = Describe("Aggregations", func() {
 
 			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(1))
-			Expect(res[0].IsUnchanged()).To(BeTrue())
+			Expect(res).To(HaveLen(0))
 
 			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[1]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(1))
-			Expect(res[0].IsUnchanged()).To(BeTrue())
+			Expect(res).To(HaveLen(0))
 		})
 
 		It("should evaluate an inverted false select expression", func() {
@@ -100,8 +96,7 @@ var _ = Describe("Aggregations", func() {
 
 			res, err := ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(1))
-			Expect(res[0].IsUnchanged()).To(BeTrue())
+			Expect(res).To(HaveLen(0))
 		})
 	})
 
@@ -393,8 +388,7 @@ var _ = Describe("Aggregations", func() {
 			obj.SetNamespace("test-ns")
 			res, err = ag.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: obj})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(1))
-			Expect(res[0].IsUnchanged()).To(BeTrue())
+			Expect(res).To(HaveLen(0))
 		})
 	})
 })
