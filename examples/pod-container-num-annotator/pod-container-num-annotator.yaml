@@ -1,4 +1,4 @@
-apiVersion: operator.dcontroller.io/v1alpha1
+apiVersion: dcontroller.io/v1alpha1
 kind: Operator
 metadata:
   name: pod-container-num-annotator
@@ -11,8 +11,9 @@ spec:
       pipeline:
         "@aggregate":
           - "@select":
-              - '@eq':
-                  - "$.metadata.namespace": default
+              '@eq':
+                - "$.metadata.namespace"
+                - default
           - "@project":
               metadata:
                 name: "$.metadata.name"
