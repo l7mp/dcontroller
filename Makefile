@@ -94,6 +94,9 @@ chart: helm manifests kustomize
 	$(HELM) package chart/helm -d chart/repo
 	$(HELM) repo index --url $(HELM_URL) chart/repo 
 
+# publish new helm image to github pages
+# git subtree push --prefix chart/repo origin gh-pages
+
 ##@ Deployment
 
 ifndef ignore-not-found
