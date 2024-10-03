@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -293,7 +294,13 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 			"object", client.ObjectKeyFromObject(delta.Object),
 			"patch", util.Stringify(patch), "raw-patch", string(b))
 
-		return c.Patch(context.Background(), delta.Object, client.RawPatch(types.StrategicMergePatchType, b))
+		if err := c.Patch(context.Background(), delta.Object, client.RawPatch(types.StrategicMergePatchType, b)); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return err
+			}
+		}
+
+		return nil
 
 	default:
 		t.log.V(2).Info("target: ignoring delta", "type", delta.Type)
