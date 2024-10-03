@@ -250,8 +250,7 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 	switch delta.Type {
 	case cache.Added, cache.Updated, cache.Replaced:
 		t.log.V(4).Info("update-patch", "event-type", delta.Type,
-			"key", client.ObjectKeyFromObject(delta.Object).String(),
-			"patch", object.Dump(delta.Object))
+			"key", client.ObjectKeyFromObject(delta.Object).String())
 
 		patch, err := json.Marshal(object.DeepCopy(delta.Object).UnstructuredContent())
 		if err != nil {

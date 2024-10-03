@@ -128,4 +128,27 @@ var (
 			},
 		},
 	}
+
+	TestPod = &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "/v1",
+			"kind":       "Pod",
+			"metadata": map[string]any{
+				"name":      "testpod",
+				"namespace": "testnamespace",
+			},
+			"spec": map[string]any{
+				"containers": []any{
+					map[string]any{
+						"name":  "nginx",
+						"image": "nginx",
+					},
+					map[string]any{
+						"name":  "pause",
+						"image": "pause",
+					},
+				},
+			},
+		},
+	}
 )

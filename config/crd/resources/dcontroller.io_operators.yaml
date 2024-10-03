@@ -238,6 +238,10 @@ spec:
                         - type
                         type: object
                       type: array
+                    lastErrors:
+                      items:
+                        type: string
+                      type: array
                     name:
                       type: string
                   required:

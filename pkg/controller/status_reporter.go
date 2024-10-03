@@ -2,67 +2,112 @@ package controller
 
 import (
 	"strings"
+	"time"
+
+	"golang.org/x/time/rate"
 )
 
-const ErrorReporterStackSize = 5
+const (
+	// ErrorReporterStackSize controls the depth of the LIFO error buffer.
+	ErrorReporterStackSize int = 10
 
-type ErrorReporter interface {
-	Push(error) error
-	Top() error
-	Size() int
-	IsEmpty() bool
+	// TrimPrefixSuffixLen contols the number of characters to retain at the prefix and the
+	// suffix of long strings.
+	TrimPrefixSuffixLen = 120
+)
+
+// RateLimit controls the status updater rate-limiter so that the first 3 errors will trigger an
+// update per every 5 seconds.
+func getDefaultRateLimiter() rate.Sometimes {
+	return rate.Sometimes{First: 3, Interval: 5 * time.Second}
 }
 
-type reporter struct {
-	*errorStack
+// Trigger is a thing that knows how to act on an error stack update. Typically the response is to
+// update some error status.
+type Trigger interface {
+	Trigger()
 }
 
-func NewErrorReporter() ErrorReporter {
-	return &reporter{errorStack: &errorStack{errors: []error{}}}
+// errorReporter is the error stack implementatoin
+type errorReporter struct {
+	errorStack  []error
+	ratelimiter rate.Sometimes
+	trigger     Trigger
+	critical    bool // whether a critical error has been reported
 }
 
-func (r *reporter) Push(err error) error { r.errorStack.Push(err); return err }
-
-// errorStack is a simple error stack implementation
-type errorStack struct {
-	errors []error
+func NewErrorReporter(trigger Trigger) *errorReporter {
+	return &errorReporter{errorStack: []error{}, ratelimiter: getDefaultRateLimiter(), trigger: trigger}
 }
 
-func (s *errorStack) Push(err error) {
-	if len(s.errors) == ErrorReporterStackSize {
-		copy(s.errors, s.errors[1:])
-		s.errors[len(s.errors)-1] = err
-		return
+func (s *errorReporter) PushError(err error) error {
+	return s.Push(err, false)
+}
+
+func (s *errorReporter) PushCriticalError(err error) error {
+	s.critical = true
+	return s.Push(err, true)
+}
+
+func (s *errorReporter) Push(err error, critical bool) error {
+	// ask a status update if trigger is set
+	defer s.ratelimiter.Do(func() {
+		if s.trigger != nil {
+			s.trigger.Trigger()
+		}
+	})
+
+	if len(s.errorStack) == ErrorReporterStackSize {
+		copy(s.errorStack, s.errorStack[1:])
+		s.errorStack[len(s.errorStack)-1] = err
+		return err
 	}
-	s.errors = append(s.errors, err)
+	s.errorStack = append(s.errorStack, err)
+	return err
 }
 
-func (s *errorStack) Pop() {
+func (s *errorReporter) Pop() {
 	if s.IsEmpty() {
 		return
 	}
-	s.errors = s.errors[:len(s.errors)-1]
+	s.errorStack = s.errorStack[:len(s.errorStack)-1]
 }
 
-func (s *errorStack) Top() error {
+func (s *errorReporter) Top() error {
 	if s.IsEmpty() {
 		return nil
 	}
-	return s.errors[len(s.errors)-1]
+	return s.errorStack[len(s.errorStack)-1]
 }
 
-func (s *errorStack) Size() int {
-	return len(s.errors)
+func (s *errorReporter) Size() int {
+	return len(s.errorStack)
 }
 
-func (s *errorStack) IsEmpty() bool {
-	return len(s.errors) == 0
+func (s *errorReporter) IsEmpty() bool {
+	return len(s.errorStack) == 0
 }
 
-func (s *errorStack) String() string {
+func (s *errorReporter) IsCritical() bool {
+	return s.critical
+}
+
+func (s *errorReporter) Report() []string {
 	errs := []string{}
-	for _, err := range s.errors {
-		errs = append(errs, err.Error())
+	for _, err := range s.errorStack {
+		errs = append(errs, trim(err.Error()))
 	}
-	return strings.Join(errs, ",")
+	return errs
+}
+
+func (s *errorReporter) String() string {
+	return strings.Join(s.Report(), ",")
+}
+
+func trim(s string) string {
+	if len(s) <= 2*TrimPrefixSuffixLen+5 {
+		return s
+	}
+
+	return s[0:TrimPrefixSuffixLen-1] + "[...]" + s[len(s)-TrimPrefixSuffixLen:]
 }

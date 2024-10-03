@@ -32,7 +32,7 @@ type Delta struct {
 func (d Delta) IsUnchanged() bool { return d.Object == nil }
 
 func (d Delta) String() string {
-	key := ""
+	key := "<empty>"
 	if d.Object != nil {
 		key = client.ObjectKeyFromObject(d.Object).String()
 	}

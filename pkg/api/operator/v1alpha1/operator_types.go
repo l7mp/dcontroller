@@ -57,6 +57,7 @@ type OperatorStatus struct {
 type ControllerStatus struct {
 	Name       string             `json:"name"`
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	LastErrors []string           `json:"lastErrors,omitempty"`
 }
 
 // ControllerConditionType is a type of condition associated with a Controller. This type should be
@@ -67,29 +68,29 @@ type ControllerConditionType string
 // condition type has been raised.
 type ControllerConditionReason string
 
-const (
-	// This condition is true when Controller is syntactically and semantically valid enough to
-	// be able to start.
-	//
-	// Possible reasons for this condition to be True are:
-	//
-	// * "Accepted"
-	//
-	// Possible reasons for this condition to be False are:
-	//
-	// * "Invalid"
-	//
-	// Controllers may raise this condition with other reasons, but should prefer to use the
-	// reasons listed above to improve interoperability.
-	ControllerConditionAccepted ControllerConditionType = "Accepted"
+// const (
+// 	// This condition is true when Controller is syntactically and semantically valid enough to
+// 	// be able to start.
+// 	//
+// 	// Possible reasons for this condition to be True are:
+// 	//
+// 	// * "Accepted"
+// 	//
+// 	// Possible reasons for this condition to be False are:
+// 	//
+// 	// * "Invalid"
+// 	//
+// 	// Controllers may raise this condition with other reasons, but should prefer to use the
+// 	// reasons listed above to improve interoperability.
+// 	ControllerConditionAccepted ControllerConditionType = "Accepted"
 
-	// This reason is used with the "Accepted" condition when the condition is True.
-	ControllerReasonAccepted ControllerConditionReason = "Accepted"
+// 	// This reason is used with the "Accepted" condition when the condition is True.
+// 	ControllerReasonAccepted ControllerConditionReason = "Accepted"
 
-	// This reason is used with the "Accepted" condition when the Controller specification is
-	// not valid.
-	ControllerReasonInvalid ControllerConditionReason = "Invalid"
-)
+// 	// This reason is used with the "Accepted" condition when the Controller specification is
+// 	// not valid.
+// 	ControllerReasonInvalid ControllerConditionReason = "Invalid"
+// )
 
 const (
 	// The Ready condition is set if the Controller is running and actively reconciles
@@ -112,5 +113,9 @@ const (
 
 	// This reason is used with the "Ready" condition when reconciliation has failed for some
 	// input resources.
+	ControllerReasonReconciliationFailed ControllerConditionReason = "ReconciliationFailed"
+
+	// This reason is used with the "Ready" condition when the controller is not ready for
+	// processing events.
 	ControllerReasonNotReady ControllerConditionReason = "NotReady"
 )

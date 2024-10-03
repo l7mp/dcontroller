@@ -28,43 +28,64 @@ type ProcessorFunc func(ctx context.Context, c *Controller, req Request) error
 type Options struct {
 	// Processor allows to override the default request processor of the controller.
 	Processor ProcessorFunc
+	// StatusTrigger can be used to send a status update request.
+	StatusTrigger Trigger
 }
 
 var _ runtimeManager.Runnable = &Controller{}
 
 // implementation
 type Controller struct {
-	name, kind       string
-	config           opv1a1.Controller
-	sources          []Source
-	target           Target
-	mgr              runtimeManager.Manager
-	watcher          chan Request
-	engine           pipeline.Engine
-	processor        ProcessorFunc
-	invalidR, readyR ErrorReporter
-	logger, log      logr.Logger
+	name, kind  string
+	config      opv1a1.Controller
+	sources     []Source
+	target      Target
+	mgr         runtimeManager.Manager
+	watcher     chan Request
+	engine      pipeline.Engine
+	processor   ProcessorFunc
+	errReporter *errorReporter
+	logger, log logr.Logger
 }
 
 // New registers a new controller given by the source resource(s) the controller watches, a target
 // resource the controller sends its output, and a processing pipeline to process the base
 // resources into target resources.
 func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*Controller, error) {
-	invalidR, readyR := NewErrorReporter(), NewErrorReporter()
+	logger := mgr.GetLogger()
+	if logger.GetSink() == nil {
+		logger = logr.Discard()
+	}
+
+	c := &Controller{
+		mgr:         mgr,
+		sources:     []Source{},
+		config:      config,
+		watcher:     make(chan Request, WatcherBufferSize),
+		errReporter: NewErrorReporter(opts.StatusTrigger),
+		logger:      logger,
+	}
+
+	name := config.Name
+	if name == "" {
+		return c, c.errReporter.PushCriticalError(errors.New("invalid controller configuration: empty name"))
+	}
+	c.name = name
+	c.log = logger.WithName("controller").WithValues("name", name)
 
 	// sanity check
 	if len(config.Sources) == 0 {
-		return nil, invalidR.Push(errors.New("no source"))
+		return c, c.errReporter.PushCriticalError(errors.New("invalid controller configuration: no source"))
 	}
 
 	emptyTarget := opv1a1.Target{}
 	if config.Target == emptyTarget {
-		return nil, invalidR.Push(errors.New("no target"))
+		return c, c.errReporter.PushCriticalError(errors.New("invalid controller configuration: no target"))
 	}
 
 	if len(config.Sources) > 1 && config.Pipeline.Join == nil {
-		return nil, invalidR.Push(errors.New("controllers defined on multiple base resources " +
-			"must specify a Join in the pipeline"))
+		return c, c.errReporter.PushCriticalError(errors.New("invalid controller configuration: controllers " +
+			"defined on multiple base resources must specify a Join in the pipeline"))
 	}
 
 	// opts
@@ -73,30 +94,9 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 		processor = opts.Processor
 	}
 
-	name := config.Name
-	if name == "" {
-		return nil, invalidR.Push(errors.New("empty name in controller config"))
-	}
-
-	logger := mgr.GetLogger()
-	if logger.GetSink() == nil {
-		logger = logr.Discard()
-	}
-
-	c := &Controller{
-		name:      name,
-		kind:      config.Target.Resource.Kind, // the kind of the target
-		mgr:       mgr,
-		target:    NewTarget(mgr, config.Target),
-		sources:   []Source{},
-		config:    config,
-		watcher:   make(chan Request, WatcherBufferSize),
-		processor: processor,
-		invalidR:  invalidR,
-		readyR:    readyR,
-		logger:    logger,
-		log:       logger.WithName("controller").WithValues("name", name),
-	}
+	c.kind = config.Target.Resource.Kind // the kind of the target
+	c.target = NewTarget(mgr, config.Target)
+	c.processor = processor
 
 	// Create the reconciler
 	reconciler := NewControllerReconciler(mgr, c)
@@ -114,7 +114,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 	for _, s := range c.sources {
 		gvk, err := s.GetGVK()
 		if err != nil {
-			return nil, readyR.Push(fmt.Errorf("failed to obtain GVK for source %s: %w",
+			return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to obtain GVK for source %s: %w",
 				util.Stringify(s), err))
 		}
 
@@ -124,19 +124,19 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 			Reconciler:         reconciler,
 		})
 		if err != nil {
-			return nil, readyR.Push(fmt.Errorf("failed to create runtime controller for resource %s: %w",
-				gvk.String(), err))
+			return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to create runtime controller "+
+				"for resource %s: %w", gvk.String(), err))
 		}
 
 		// Set up the watch
 		src, err := s.GetSource()
 		if err != nil {
-			return nil, readyR.Push(fmt.Errorf("failed to create runtime source for resource %s: %w",
-				gvk.String(), err))
+			return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to create runtime source for "+
+				"resource %s: %w", gvk.String(), err))
 		}
 
 		if err := ctrl.Watch(src); err != nil {
-			return nil, readyR.Push(fmt.Errorf("failed to watch resource %s: %w",
+			return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to watch resource %s: %w",
 				gvk.String(), err))
 		}
 
@@ -149,7 +149,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 		logger.WithName("pipeline").WithValues("controller", c.name, "kind/view", c.kind))
 
 	if err := mgr.Add(c); err != nil {
-		return nil, readyR.Push(fmt.Errorf("failed to schedule controller %s: %w",
+		return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to schedule controller %s: %w",
 			c.name, err))
 	}
 
@@ -174,7 +174,7 @@ func (c *Controller) Start(ctx context.Context) error {
 
 			if err := c.processor(ctx, c, req); err != nil {
 				err = fmt.Errorf("error processing watch event: %w", err)
-				c.log.Error(c.readyR.Push(err), "error", "request", req)
+				c.log.Error(c.errReporter.PushError(err), "error", "request", req)
 			}
 		case <-ctx.Done():
 			c.log.V(2).Info("controller terminating")
@@ -186,31 +186,9 @@ func (c *Controller) Start(ctx context.Context) error {
 func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 	status := opv1a1.ControllerStatus{Name: c.name}
 
-	acceptedCondition := metav1.Condition{}
-	if c.invalidR.IsEmpty() {
-		acceptedCondition = metav1.Condition{
-			Type:               string(opv1a1.ControllerConditionAccepted),
-			Status:             metav1.ConditionTrue,
-			ObservedGeneration: gen,
-			LastTransitionTime: metav1.Now(),
-			Reason:             string(opv1a1.ControllerReasonAccepted),
-			Message:            fmt.Sprintf("Controller accepted"),
-		}
-	} else {
-		acceptedCondition = metav1.Condition{
-			Type:               string(opv1a1.ControllerConditionAccepted),
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: gen,
-			LastTransitionTime: metav1.Now(),
-			Reason:             string(opv1a1.ControllerReasonInvalid),
-			Message: fmt.Sprintf(fmt.Sprintf("Controller rejected: %s",
-				c.invalidR.Top().Error())),
-		}
-	}
-
-	readyCondition := metav1.Condition{}
-	if c.readyR.IsEmpty() {
-		readyCondition = metav1.Condition{
+	condition := metav1.Condition{}
+	if c.errReporter.IsEmpty() {
+		condition = metav1.Condition{
 			Type:               string(opv1a1.ControllerConditionReady),
 			Status:             metav1.ConditionTrue,
 			ObservedGeneration: gen,
@@ -218,20 +196,31 @@ func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 			Reason:             string(opv1a1.ControllerReasonReady),
 			Message:            fmt.Sprintf("Controller is up and running"),
 		}
-	} else {
-		readyCondition = metav1.Condition{
+	} else if c.errReporter.IsCritical() {
+		condition = metav1.Condition{
 			Type:               string(opv1a1.ControllerConditionReady),
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: gen,
 			LastTransitionTime: metav1.Now(),
 			Reason:             string(opv1a1.ControllerReasonNotReady),
-			Message: fmt.Sprintf(fmt.Sprintf("Reconciliation error: %s",
-				c.readyR.Top().Error())),
+			Message:            fmt.Sprintf(fmt.Sprintf("Controller failed to start due to a critcal error")),
+		}
+
+	} else {
+		condition = metav1.Condition{
+			Type:               string(opv1a1.ControllerConditionReady),
+			Status:             metav1.ConditionUnknown,
+			ObservedGeneration: gen,
+			LastTransitionTime: metav1.Now(),
+			Reason:             string(opv1a1.ControllerReasonReconciliationFailed),
+			Message:            fmt.Sprintf(fmt.Sprintf("Controller seems functional but there were reconciliation errors")),
 		}
 	}
 
-	conditions := []metav1.Condition{acceptedCondition, readyCondition}
+	conditions := []metav1.Condition{condition}
 	status.Conditions = conditions
+
+	status.LastErrors = c.errReporter.Report()
 
 	return status
 }
@@ -245,8 +234,8 @@ func processRequest(ctx context.Context, c *Controller, req Request) error {
 
 	if req.EventType == cache.Added || req.EventType == cache.Updated || req.EventType == cache.Replaced {
 		if err := c.mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
-			return c.readyR.Push(fmt.Errorf("object %s/%s disappeared for Add/Update event: %w",
-				req.GVK, client.ObjectKeyFromObject(obj), err))
+			return fmt.Errorf("object %s/%s disappeared for Add/Update event: %w",
+				req.GVK, client.ObjectKeyFromObject(obj), err)
 		}
 	}
 	delta := cache.Delta{
@@ -257,8 +246,8 @@ func processRequest(ctx context.Context, c *Controller, req Request) error {
 	// Process the delta through the pipeline
 	deltas, err := c.config.Pipeline.Evaluate(c.engine, delta)
 	if err != nil {
-		return c.readyR.Push(fmt.Errorf("error evaluating pipeline for object %s/%s: %w",
-			req.GVK, client.ObjectKeyFromObject(obj), err))
+		return fmt.Errorf("error evaluating pipeline for object %s/%s: %w", req.GVK,
+			client.ObjectKeyFromObject(obj), err)
 	}
 
 	// Apply the resultant deltas
@@ -267,8 +256,8 @@ func processRequest(ctx context.Context, c *Controller, req Request) error {
 			"delta-type", d.Type, "object", object.Dump(delta.Object))
 
 		if err := c.target.Write(ctx, d); err != nil {
-			return c.readyR.Push(fmt.Errorf("cannot update target %s for delta %s: %w",
-				req.GVK, d.String(), err))
+			return fmt.Errorf("cannot update target %s for delta %s: %w", req.GVK,
+				d.String(), err)
 		}
 	}
 

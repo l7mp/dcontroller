@@ -39,7 +39,7 @@ all: build
 
 .PHONY: manifests
 manifests: controller-gen
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/resources
 
 .PHONY: generate
 generate: controller-gen

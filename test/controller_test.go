@@ -155,6 +155,7 @@ target:
 				return len(anns) > 0 && anns[annotationName] == "NodePort"
 			}, timeout, interval).Should(BeTrue())
 		})
+
 		It("should survive deleting the service", func() {
 			ctrl.Log.Info("deleting service")
 			Expect(k8sClient.Delete(ctrlCtx, svc)).Should(Succeed())

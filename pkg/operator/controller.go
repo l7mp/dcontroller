@@ -25,9 +25,14 @@ import (
 
 var _ Controller = &controller{}
 
+type StatusUpdater interface {
+	UpdateStatus(ctx context.Context, operator *operator) error
+}
+
 type Controller interface {
 	runtimeManager.Runnable
 	reconcile.Reconciler
+	StatusUpdater
 	GetManager() runtimeManager.Manager
 }
 
@@ -120,14 +125,28 @@ func (c *controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	// set status
-	op.Status = operator.GetStatus(op.GetGeneration())
-	if err := c.Status().Update(ctx, &op); err != nil {
+	if err := c.UpdateStatus(ctx, operator); err != nil {
 		log.Error(err, "Failed to update Operator status")
 		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (c *controller) UpdateStatus(ctx context.Context, operator *operator) error {
+	spec := opv1a1.Operator{}
+	key := types.NamespacedName{Name: operator.name}
+	err := c.Get(ctx, key, &spec)
+	if err != nil {
+		return err
+	}
+
+	spec.Status = operator.GetStatus(spec.GetGeneration())
+	if err := c.Status().Update(ctx, &spec); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Start starts the operator controller and each operator registered with the controller. It blocks
@@ -196,11 +215,7 @@ func (c *controller) addOperator(spec *opv1a1.Operator) (*operator, error) {
 	}
 
 	key := client.ObjectKeyFromObject(spec)
-	operator, err := New(mgr, spec.GetName(), &spec.Spec, c.logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create operator %s: %w",
-			spec.Name, err)
-	}
+	operator := New(mgr, spec.GetName(), &spec.Spec, c, c.logger)
 
 	c.mu.Lock()
 	c.operators[key] = &opEntry{op: operator}
