@@ -1,0 +1,4 @@
+image:
+  name: docker.io/rg0now/dcontroller
+  tag: latest
+  pullPolicy: Always
