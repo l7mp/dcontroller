@@ -1,4 +1,4 @@
 image:
-  name: docker.io/rg0now/dcontroller
+  name: docker.io/retvari/dcontroller
   tag: latest
   pullPolicy: Always
