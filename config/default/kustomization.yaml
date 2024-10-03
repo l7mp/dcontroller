@@ -24,4 +24,4 @@ resources:
 - ../crd
 - ../rbac
 - ../manager
-- ../helm
+# - ../helm

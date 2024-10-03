@@ -4,8 +4,6 @@ resources:
 - ../rbac
 - ../crd
 - ../manager
-# patchesStrategicMerge:
-# - deployment-patch.yaml
 patches:
  - target:
       group: apps
