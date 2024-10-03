@@ -23,12 +23,12 @@ The Δ in the name stands for **declarative** and **delta**.
 
 First, Δ-controller implements a *declarative query language* (inspired by [MongoDB
 aggregators](https://www.mongodb.com/docs/manual/core/aggregation-pipeline)) that can be used to
-combine, filter and transform Kubernetes API resources into a representation that better fits the
-operators' internal logic, and from there back to native Kubernetes resources.  This is done by
-registering a processing pipeline to map the Kubernetes API resources into a view of interest to
-the controller. Views are dynamically maintained by Δ-controller by running the aggregation
-pipeline on the watch events automatically installed for the source Kubernetes API resources of the
-aggregation pipeline.
+combine, filter and transform Kubernetes API resources into a shape that better fits the operators'
+internal logic, and from there back to native Kubernetes resources.  This is done by registering a
+processing pipeline to map the Kubernetes API resources into a view of interest to the
+controller. Views are dynamically maintained by Δ-controller by running the aggregation pipeline on
+the watch events automatically installed for the source Kubernetes API resources of the aggregation
+pipeline.
 
 The literal delta in the name connotes that operators in Δ-controller use *incremental
 reconciliation* style control loops. This means that the controllers watch the incremental changes
@@ -51,8 +51,8 @@ describing a declarative controller and implement the logics on the Kubernetes A
 
 ## Getting started
 
-We will create a simple operator below that will write into each pod the number containers of the
-pod as a custom annotation. To simplify the operations, we will restrict the operator to the
+We will create a simple operator below that will write into each pod the number of containers in
+the pod as a custom annotation. To simplify the operations, we will restrict the operator to the
 default namespace. Whenever the container number is updated, the annotation will be updated too.
 
 For [here](examples/) for more complex examples.
@@ -91,16 +91,17 @@ spec:
 EOF
 ```
 
-The operator definition includes a single controller. The name specifies a unique controller name
-that is used to refer to individual controllers inside the operator. The `sources` field specifies
-the Kubernetes API resource(s) the operator watches, and the target spec describes the API resource
-the operator will write. This time, both the source and target will be Pods. The target type is
+The operator defines a single controller. The controller `name` indicates a unique identifier that
+is used to refer to individual controllers inside the operator. The `sources` field specifies the
+Kubernetes API resource(s) the operator watches, and the target spec describes the API resource the
+operator will write. This time, both the source and target will be Pods. The target type is
 `Patcher`, which means that the controller will use the processing pipeline output to patch the
 target. (In contrast, `Updater` targets will simply overwrite the target.)
 
-The most important field is the `pipeline`, which specifies a declarative pipeline to process the
-source API resource(s) into the target resource. The fields of the source and the target resource
-can be specified using standard [JSONPath notation](https://datatracker.ietf.org/doc/html/rfc9535).
+The most important field is the `pipeline`, which describes a declarative pipeline to process the
+source API resource(s) into the target resource. The pipeline operates on the fields of the source
+and the target resources using standard [JSONPath
+notation](https://datatracker.ietf.org/doc/html/rfc9535).
 
 ```yaml
 "@aggregate":
@@ -114,9 +115,9 @@ can be specified using standard [JSONPath notation](https://datatracker.ietf.org
               '@len': ["$.spec.containers"]
 ```
 
-The pipeline comprises a single aggregation operation, namely a projection. This `@project` op will
-create a patch by copying the name and namespace from the pod's metadata and adding the length of
-the `containers` list in the Pod spec as an annotation to it. The `@string` op is included to
+Our sample pipeline comprises a single aggregation operation, namely a projection. This `@project`
+op will create a patch by copying the pod's name and namespace and adding the length of the
+`containers` list in the Pod spec as an annotation to the metadata. The `@string` op is included to
 explicitly cast the numeric length value into a string.
 
 Ant that's the whole idea: you specify one or more Kubernetes API resources to watch, a declarative
@@ -124,9 +125,10 @@ pipeline that will process the input resources into a patch that is then automat
 the target resource. The Δ-controller operators are completely dynamic so you can add, delete and
 modify them anytime, they are fully described in a single custom resource with the entire logics,
 there can be any number of operators running in parallel (but make sure they do not create infinite
-update cycles!), and the entire framework involves zero line of code.
+update cycles!), and the entire framework involves zero line of code. This is NoCode/LowCode at its
+best!
 
-## Test
+### Test
 
 We will test the operator with a sample pod:
 
@@ -182,7 +184,7 @@ spec:
 EOF
 ```
 
-The annotation should no indicate 3 containers:
+The annotation should now indicate 3 containers:
 
 ```console
 kubectl get pod net-debug-2 -o jsonpath='{.metadata.annotations}'
@@ -196,7 +198,7 @@ kubectl -n kube-system get pod etcd -o jsonpath='{.metadata.annotations}'
 ...
 ```
 
-## Cleanup
+### Cleanup
 
 Remove all resources we have created:
 
@@ -252,14 +254,16 @@ kubectl delete operators.dcontroller.io pod-container-num-annotator
 
 ## Caveats
 
-- The operator runs with full RBAC capabilities. This is required at this point to make sure that
-  the declarative operators loaded at runtime can access any Kubernetes API resource they intend to
-  watch or modify. Later we may implement a dynamic RBAC scheme that would minimize the required
-  permissions to the minimal set of APi resources the running operators need.
+- The operator runs with full RBAC permissions to operate on the entire Kubernetes API. This is
+  required at this point to make sure that the declarative operators loaded at runtime can access
+  any Kubernetes API resource they intend to watch or modify. Later we may implement a dynamic RBAC
+  scheme that would minimize the required permissions to the minimal set of API resources the
+  running operators may need.
 - The strategic merge patch implementation does not handle lists. Since Kubernetes does not
-  implement native strategic merge patching for schemaless unstructured resources, currently
-  patches must be implemented a simplified local JSON patch code that does not handle lists. Use
-  `Patcher` targets carefullly.
+  implement native strategic merge patching for schemaless unstructured resources that Δ-controller
+  uses internally, currently patches must be implemented a simplified local JSON patch code that
+  does not handle lists. Use `Patcher` targets carefully or, whenever possible, opt for `Updater`
+  targets.
 
 ## License
 
