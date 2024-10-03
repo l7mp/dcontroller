@@ -3,7 +3,7 @@ kind: Namespace
 metadata:
   labels:
     control-plane: dcontroller-manager
-  name: system
+  name: dcontroller-manager-system
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -268,13 +268,14 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: manager
-  namespace: system
+  name: dcontroller-manager
+  namespace: dcontroller-manager-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: leader-election-role
+  name: dcontroller-leader-election-role
+  namespace: dcontroller-manager-system
 rules:
 - apiGroups:
   - ""
@@ -311,7 +312,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: manager-role
+  name: dcontroller-manager-role
 rules:
 - apiGroups:
   - '*'
@@ -341,28 +342,29 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: leader-election-rolebinding
+  name: dcontroller-leader-election-rolebinding
+  namespace: dcontroller-manager-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: leader-election-role
+  name: dcontroller-leader-election-role
 subjects:
 - kind: ServiceAccount
-  name: manager
-  namespace: system
+  name: dcontroller-manager
+  namespace: dcontroller-manager-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: manager-rolebinding
+  name: dcontroller-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: manager-role
+  name: dcontroller-manager-role
 subjects:
 - kind: ServiceAccount
-  name: manager
-  namespace: system
+  name: dcontroller-manager
+  namespace: dcontroller-manager-system
 ---
 apiVersion: v1
 data:
@@ -380,15 +382,16 @@ data:
       resourceName: 92062b70.dcontroller.io
 kind: ConfigMap
 metadata:
-  name: manager-config
+  name: dcontroller-manager-config
+  namespace: dcontroller-manager-system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
     control-plane: dcontroller-manager
-  name: manager
-  namespace: system
+  name: dcontroller-manager
+  namespace: dcontroller-manager-system
 spec:
   replicas: 1
   selector:
