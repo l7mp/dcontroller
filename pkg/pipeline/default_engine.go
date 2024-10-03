@@ -144,7 +144,8 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 		// consolidate: objects both in the deleted and added cache are updated
 		if delDelta.IsUnchanged() && addDelta.IsUnchanged() {
 			// nothing happened: object wasn't in the view and it still isn't
-			ds = []cache.Delta{{Type: cache.Updated, Object: nil}}
+			// ds = []cache.Delta{{Type: cache.Updated, Object: nil}}
+			ds = []cache.Delta{}
 		} else if delDelta.IsUnchanged() && !addDelta.IsUnchanged() {
 			// object added into the view
 			ds = []cache.Delta{addDelta}
