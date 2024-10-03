@@ -1,0 +1,16 @@
+apiVersion: v1
+entries:
+  dcontroller:
+  - apiVersion: v2
+    appVersion: 0.0.0
+    created: "2024-10-03T19:42:11.358989596+02:00"
+    description: A Helm chart for deploying dcontroller
+    digest: 7c3a114b203e745ab466e11007f3ed794ebc5b3f886e421719aa1f201ccce586
+    maintainers:
+    - name: rg0now
+    name: dcontroller
+    type: application
+    urls:
+    - https://hsnlab.github.io/dcontroller/dcontroller-0.0.0.tgz
+    version: 0.0.0
+generated: "2024-10-03T19:42:11.358525693+02:00"

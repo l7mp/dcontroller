@@ -9,7 +9,8 @@ LDFLAGS += -X main.version=${VERSION} -X main.commitHash=${COMMIT_HASH} -X main.
 GOARGS = -trimpath
 
 # Image URL to use all building/pushing image targets
-IMG ?= rg0now/dcontroller:latest
+IMG ?= retvari/dcontroller:latest
+HELM_URL ?= "https://hsnlab.github.io/dcontroller/"
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.30.0
@@ -91,6 +92,7 @@ chart: helm manifests kustomize
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/helm > chart/helm/templates/all.yaml
 	$(HELM) package chart/helm -d chart/repo
+	$(HELM) repo index --url $(HELM_URL) chart/repo 
 
 ##@ Deployment
 

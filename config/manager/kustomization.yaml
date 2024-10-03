@@ -10,5 +10,5 @@ configMapGenerator:
   name: manager-config
 images:
 - name: controller
-  newName: rg0now/dcontroller
+  newName: retvari/dcontroller
   newTag: latest
