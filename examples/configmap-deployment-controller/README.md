@@ -1,9 +1,11 @@
-# ConfigMap-Deployment operator
+# ConfigMap-Deployment operator: A NoCode Δ-controller operator
 
-As an example, we are going to create a ConfigDeployment resource. The purpose is to manage a
-Deployment whose pods are always using the latest version of a ConfigMap. While ConfigMaps are
-auto-updated within Pods, applications may not always be able to auto-refresh config from the file
-system. Some applications require restarts to apply configuration updates.
+In this tutorial we are going to create a ConfigDeployment custom resource definition (CRD) and
+write a fully declarative controller that will implement the reconciler logic for this
+resource. The purpose is to manage a Deployment whose pods are always using the latest version of a
+ConfigMap. While ConfigMaps are auto-updated within Pods, applications may not always be able to
+auto-refresh config from the file system. Some applications require restarts to apply configuration
+updates, and this is the logic that our controller will implement.
 
 ## Description
 
@@ -27,7 +29,7 @@ Make sure Δ-controller is up and running. Then, load the ConfigDeployment custo
 
 ```console
 cd <project-root>
-kubectl apply -f examples/configmap-deployment-controller/configdeployment.yaml
+kubectl apply -f examples/configmap-deployment-controller/configdeployment-crd.yaml
 ```
 
 ## Operator
