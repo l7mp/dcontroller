@@ -208,43 +208,6 @@ kubectl delete pod net-debug-2
 kubectl delete operators.dcontroller.io pod-container-num-annotator
 ```
 
-<!-- ```console -->
-<!-- kubectl run net-debug --image=docker.io/l7mp/net-debug:latest -->
-<!-- ``` -->
-
-<!-- ```console -->
-<!-- kubectl apply -f - <<EOF -->
-<!-- apiVersion: dcontroller.io/v1alpha1 -->
-<!-- kind: Operator -->
-<!-- metadata: -->
-<!--   name: pod-cpu-usage-annotator -->
-<!-- spec: -->
-<!--   controllers: -->
-<!--     - name: pod-cpu-usage-controller -->
-<!--       sources:  -->
-<!--         - apiGroup: "" -->
-<!--           kind: Pod -->
-<!--           namespace: default -->
-<!--         - apiGroup: "metrics.k8s.io" -->
-<!--           kind: PodMetrics -->
-<!--           namespace: default -->
-<!--       pipeline: -->
-<!--         "@join": -->
-<!--           '@eq': [ $.Pod.metadata.name, $.PodMetrics.metadata.name ] -->
-<!--         "@aggregate": -->
-<!--           - "@project": -->
-<!--               metadata: -->
-<!--                 name: $.Pod.metadata.name -->
-<!--                 namespace: $.Pod.metadata.namespace -->
-<!--                 annotations: -->
-<!--                   "dcontroller.io/cpu-usage": "$.PodMetrics.containers[0].usage.cpu" -->
-<!--       target: -->
-<!--         apiGroup: "" -->
-<!--         kind: Pod -->
-<!--         type: Patcher -->
-<!-- EOF -->
-<!-- ``` -->
-
 <!-- ### Expressions -->
 
 <!-- - Aggregations work on objects that are indexed on (.metadata.namespace, .metadata.name): all -->

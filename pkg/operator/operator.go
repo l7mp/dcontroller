@@ -3,8 +3,11 @@ package operator
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 
 	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
@@ -19,24 +22,23 @@ type Operator interface {
 }
 
 type operator struct {
-	name          string
-	mgr           runtimeManager.Manager
-	spec          *opv1a1.OperatorSpec
-	controllers   []*dcontroller.Controller // maybe nil
-	statusUpdater StatusUpdater
-	logger, log   logr.Logger
+	name        string
+	mgr         runtimeManager.Manager
+	spec        *opv1a1.OperatorSpec
+	controllers []*dcontroller.Controller // maybe nil
+	ctx         context.Context
+	logger, log logr.Logger
 }
 
 // NewOperator creates a new operator.
-func New(mgr runtimeManager.Manager, name string, spec *opv1a1.OperatorSpec, statusUpdater StatusUpdater, logger logr.Logger) *operator {
+func New(mgr runtimeManager.Manager, name string, spec *opv1a1.OperatorSpec, logger logr.Logger) *operator {
 	op := &operator{
-		name:          name,
-		mgr:           mgr,
-		spec:          spec,
-		controllers:   []*dcontroller.Controller{},
-		logger:        logger,
-		statusUpdater: statusUpdater,
-		log:           logger.WithName("operator").WithValues("name", name),
+		name:        name,
+		mgr:         mgr,
+		spec:        spec,
+		controllers: []*dcontroller.Controller{},
+		logger:      logger,
+		log:         logger.WithName("operator").WithValues("name", name),
 	}
 
 	// Create the controllers for the operator (manager.Start() will automatically start them)
@@ -59,7 +61,7 @@ func New(mgr runtimeManager.Manager, name string, spec *opv1a1.OperatorSpec, sta
 // Start starts the operator. It blocks
 func (op *operator) Start(ctx context.Context) error {
 	op.log.Info("starting")
-
+	op.ctx = ctx
 	return op.mgr.Start(ctx)
 
 }
@@ -71,9 +73,31 @@ func (op *operator) GetManager() runtimeManager.Manager {
 
 // Trigger can be used to ask a status update trigger on the operator.
 func (op *operator) Trigger() {
-	if err := op.statusUpdater.UpdateStatus(context.TODO(), op); err != nil {
+	if err := op.UpdateStatus(op.mgr.GetClient()); err != nil {
 		op.log.Error(err, "failed to update status")
 	}
+}
+
+func (op *operator) UpdateStatus(c client.Client) error {
+	ctx := op.ctx
+	if ctx == nil {
+		// this should never happen
+		ctx = context.TODO()
+	}
+
+	spec := opv1a1.Operator{}
+	key := types.NamespacedName{Name: op.name}
+	err := c.Get(ctx, key, &spec)
+	if err != nil {
+		return fmt.Errorf("cannot Get operator resource: %w", err)
+	}
+
+	spec.Status = op.GetStatus(spec.GetGeneration())
+	if err := c.Status().Update(ctx, &spec); err != nil {
+		return fmt.Errorf("cannot write status: %w", err)
+	}
+
+	return nil
 }
 
 // GetStatus populates the operator status with the controller statuses.

@@ -25,14 +25,9 @@ import (
 
 var _ Controller = &controller{}
 
-type StatusUpdater interface {
-	UpdateStatus(ctx context.Context, operator *operator) error
-}
-
 type Controller interface {
 	runtimeManager.Runnable
 	reconcile.Reconciler
-	StatusUpdater
 	GetManager() runtimeManager.Manager
 }
 
@@ -108,13 +103,13 @@ func (c *controller) GetManager() runtimeManager.Manager { return c.mgr }
 func (c *controller) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	log := c.log.WithValues("operator", req.String())
 
-	log.Info("Reconciling")
+	log.Info("reconciling")
 
 	op := opv1a1.Operator{}
 	err := c.Get(ctx, req.NamespacedName, &op)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			log.Error(err, "Failed to get Operator")
+			log.Error(err, "failed to get Operator")
 			return reconcile.Result{}, err
 		}
 		c.deleteOperator(req.NamespacedName)
@@ -125,28 +120,13 @@ func (c *controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	if err := c.UpdateStatus(ctx, operator); err != nil {
-		log.Error(err, "Failed to update Operator status")
+	// we pass in our own client: the operator's client may not have been started yet
+	if err := operator.UpdateStatus(c); err != nil {
+		log.Error(err, "failed to update Operator status")
 		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
-}
-
-func (c *controller) UpdateStatus(ctx context.Context, operator *operator) error {
-	spec := opv1a1.Operator{}
-	key := types.NamespacedName{Name: operator.name}
-	err := c.Get(ctx, key, &spec)
-	if err != nil {
-		return err
-	}
-
-	spec.Status = operator.GetStatus(spec.GetGeneration())
-	if err := c.Status().Update(ctx, &spec); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // Start starts the operator controller and each operator registered with the controller. It blocks
@@ -215,7 +195,7 @@ func (c *controller) addOperator(spec *opv1a1.Operator) (*operator, error) {
 	}
 
 	key := client.ObjectKeyFromObject(spec)
-	operator := New(mgr, spec.GetName(), &spec.Spec, c, c.logger)
+	operator := New(mgr, spec.GetName(), &spec.Spec, c.logger)
 
 	c.mu.Lock()
 	c.operators[key] = &opEntry{op: operator}
