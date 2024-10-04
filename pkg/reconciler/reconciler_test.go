@@ -1,11 +1,15 @@
-package controller
+package reconciler
 
 import (
 	"context"
+	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -13,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeCtrl "sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -23,11 +28,44 @@ import (
 	"hsnlab/dcontroller/pkg/object"
 )
 
-var watcher chan Request
+const (
+	timeout       = time.Second * 1
+	interval      = time.Millisecond * 50
+	retryInterval = time.Millisecond * 100
+)
 
-type TestReconciler struct{}
+var (
+	loglevel = -10
+	//loglevel = -3
+	logger = zap.New(zap.UseFlagOptions(&zap.Options{
+		Development:     true,
+		DestWriter:      GinkgoWriter,
+		StacktraceLevel: zapcore.Level(10),
+		TimeEncoder:     zapcore.RFC3339NanoTimeEncoder,
+		Level:           zapcore.Level(loglevel),
+	}))
+	log  = logger.WithName("test")
+	podn = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testpod",
+			Namespace: "testns",
+		},
+		Spec: corev1.PodSpec{
+			Containers:    []corev1.Container{{Name: "nginx", Image: "nginx"}},
+			RestartPolicy: corev1.RestartPolicyOnFailure,
+		},
+	}
+	watcher chan Request
+)
 
-func (r *TestReconciler) Reconcile(ctx context.Context, req Request) (reconcile.Result, error) {
+func TestReconciler(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Controller")
+}
+
+type testReconciler struct{}
+
+func (r *testReconciler) Reconcile(ctx context.Context, req Request) (reconcile.Result, error) {
 	logger.V(4).Info("reconcile", "request", req)
 	watcher <- req
 	return reconcile.Result{}, nil
@@ -92,7 +130,7 @@ var _ = Describe("Reconciler", func() {
 			on := true
 			c, err := runtimeCtrl.NewTyped("test-controller", mgr, runtimeCtrl.TypedOptions[Request]{
 				SkipNameValidation: &on,
-				Reconciler:         &TestReconciler{},
+				Reconciler:         &testReconciler{},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -228,7 +266,7 @@ var _ = Describe("Reconciler", func() {
 			on := true
 			c, err := runtimeCtrl.NewTyped("test-controller", mgr, runtimeCtrl.TypedOptions[Request]{
 				SkipNameValidation: &on,
-				Reconciler:         &TestReconciler{},
+				Reconciler:         &testReconciler{},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -563,3 +601,21 @@ var _ = Describe("Reconciler", func() {
 		})
 	})
 })
+
+func tryWatchReq(watcher chan Request, d time.Duration) (Request, bool) {
+	select {
+	case req := <-watcher:
+		return req, true
+	case <-time.After(d):
+		return Request{}, false
+	}
+}
+
+func tryWatchWatcher(watcher watch.Interface, d time.Duration) (watch.Event, bool) {
+	select {
+	case event := <-watcher.ResultChan():
+		return event, true
+	case <-time.After(d):
+		return watch.Event{}, false
+	}
+}

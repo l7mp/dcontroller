@@ -5,8 +5,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/util/json"
+	"sigs.k8s.io/yaml"
 
+	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "hsnlab/dcontroller/pkg/api/view/v1alpha1"
 	"hsnlab/dcontroller/pkg/cache"
 	"hsnlab/dcontroller/pkg/object"
@@ -91,15 +92,13 @@ var _ = Describe("Joins", func() {
 	Describe("Evaluating join expressions for Added events", func() {
 		It("should evaluate a join on the pod parent", func() {
 			jsonData := `{"@join":{"@eq":["$.dep.metadata.name","$.pod.spec.parent"]}}`
-			var j Join
-			err := json.Unmarshal([]byte(jsonData), &j)
-			Expect(err).NotTo(HaveOccurred())
+			j := newJoin(eng, []byte(jsonData))
 
 			eng.WithObjects(dep1, dep2)
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 			Expect(eng.(*defaultEngine).baseViewStore).NotTo(HaveKey(viewv1a1.GroupVersion.WithKind("pod")))
 
-			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: pod1})
+			deltas, err := j.Evaluate(cache.Delta{Type: cache.Upserted, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(1))
@@ -113,12 +112,10 @@ var _ = Describe("Joins", func() {
 
 		It("should evaluate a join on pod namespace", func() {
 			jsonData := `{"@join":{"@eq":["$.dep.metadata.namespace","$.pod.metadata.namespace"]}}`
-			var j Join
-			err := json.Unmarshal([]byte(jsonData), &j)
-			Expect(err).NotTo(HaveOccurred())
+			j := newJoin(eng, []byte(jsonData))
 
 			eng.WithObjects(dep1, dep2)
-			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: pod1})
+			deltas, err := j.Evaluate(cache.Delta{Type: cache.Upserted, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(2))
 			Expect(deltas).To(ContainElement(objFieldEq(dep1.UnstructuredContent(), "dep")))
@@ -129,15 +126,13 @@ var _ = Describe("Joins", func() {
 
 		It("should evaluate a join on labels", func() {
 			jsonData := `{"@join":{"@eq":["$.dep.metadata.labels.app","$.pod.metadata.labels.app"]}}`
-			var j Join
-			err := json.Unmarshal([]byte(jsonData), &j)
-			Expect(err).NotTo(HaveOccurred())
+			j := newJoin(eng, []byte(jsonData))
 
 			eng.WithObjects(pod1, pod2, pod3)
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
 			Expect(eng.(*defaultEngine).baseViewStore).NotTo(HaveKey(viewv1a1.GroupVersion.WithKind("dep")))
 
-			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: dep1})
+			deltas, err := j.Evaluate(cache.Delta{Type: cache.Upserted, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
@@ -152,24 +147,20 @@ var _ = Describe("Joins", func() {
 
 		It("should yield an empty delta when joining on a non-existent object", func() {
 			jsonData := `{"@join":{"@eq":["$.dep.metadata.labels.app","$.rs.metadata.labels.app"]}}`
-			var j Join
-			err := json.Unmarshal([]byte(jsonData), &j)
-			Expect(err).NotTo(HaveOccurred())
+			j := newJoin(eng, []byte(jsonData))
 
 			eng.WithObjects(pod1, pod2, pod3)
-			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: dep1})
+			deltas, err := j.Evaluate(cache.Delta{Type: cache.Added, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(0))
 		})
 
 		It("should evaluate a join on a 3 views", func() {
 			jsonData := `{"@join":{"@and":[{"@eq":["$.dep.metadata.name","$.pod.spec.parent"]},{"@eq":["$.dep.metadata.name","$.rs.spec.dep"]}]}}`
-			var j Join
-			err := json.Unmarshal([]byte(jsonData), &j)
-			Expect(err).NotTo(HaveOccurred())
+			j := newJoin(eng, []byte(jsonData))
 
 			eng.WithObjects(dep1, dep2, rs1, rs2)
-			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
+			deltas, err := j.Evaluate(cache.Delta{Type: cache.Added, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(1))
 
@@ -185,15 +176,13 @@ var _ = Describe("Joins", func() {
 	Describe("Evaluating join expressions for Deleted events", func() {
 		It("should evaluate a join on the pod parent", func() {
 			jsonData := `{"@join":{"@eq":["$.dep.metadata.name","$.pod.spec.parent"]}}`
-			var j Join
-			err := json.Unmarshal([]byte(jsonData), &j)
-			Expect(err).NotTo(HaveOccurred())
+			j := newJoin(eng, []byte(jsonData))
 
 			eng.WithObjects(dep1, dep2, pod3)
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(1))
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
-			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Deleted, Object: pod3})
+			deltas, err := j.Evaluate(cache.Delta{Type: cache.Deleted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(0))
@@ -209,12 +198,10 @@ var _ = Describe("Joins", func() {
 
 		It("should skip the join when deleting a non-existent object", func() {
 			jsonData := `{"@join":{"@eq":["$.dep.metadata.name","$.pod.spec.parent"]}}`
-			var j Join
-			err := json.Unmarshal([]byte(jsonData), &j)
-			Expect(err).NotTo(HaveOccurred())
+			j := newJoin(eng, []byte(jsonData))
 
 			eng.WithObjects(dep1, dep2)
-			_, err = j.Evaluate(eng, cache.Delta{Type: cache.Deleted, Object: pod3})
+			_, err := j.Evaluate(cache.Delta{Type: cache.Deleted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
@@ -222,15 +209,13 @@ var _ = Describe("Joins", func() {
 	Describe("Evaluating join expressions for Updated events", func() {
 		It("should evaluate a simple join on labels", func() {
 			jsonData := `{"@join":{"@eq":["$.dep.metadata.name","$.pod.spec.parent"]}}`
-			var j Join
-			err := json.Unmarshal([]byte(jsonData), &j)
-			Expect(err).NotTo(HaveOccurred())
+			j := newJoin(eng, []byte(jsonData))
 
 			eng.WithObjects(dep1, dep2, pod1, pod2)
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(2))
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
-			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: pod3})
+			deltas, err := j.Evaluate(cache.Delta{Type: cache.Upserted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
@@ -245,7 +230,7 @@ var _ = Describe("Joins", func() {
 
 			// change the image in pod3
 			pod3.UnstructuredContent()["spec"].(Unstructured)["image"] = "newimage"
-			deltas, err = j.Evaluate(eng, cache.Delta{Type: cache.Upserted, Object: pod3})
+			deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
@@ -262,15 +247,13 @@ var _ = Describe("Joins", func() {
 
 		It("should evaluate a join on labels that induces a remove followed by an add", func() {
 			jsonData := `{"@join":{"@eq":["$.dep.metadata.labels.app","$.pod.metadata.labels.app"]}}`
-			var j Join
-			err := json.Unmarshal([]byte(jsonData), &j)
-			Expect(err).NotTo(HaveOccurred())
+			j := newJoin(eng, []byte(jsonData))
 
 			eng.WithObjects(dep1, dep2, pod1, pod2)
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(2))
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
-			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod3})
+			deltas, err := j.Evaluate(cache.Delta{Type: cache.Added, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
@@ -286,7 +269,7 @@ var _ = Describe("Joins", func() {
 			// re-label pod3
 			oldpod3 := object.DeepCopy(pod3)
 			pod3.SetLabels(map[string]string{"app": "app2"})
-			deltas, err = j.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: pod3})
+			deltas, err = j.Evaluate(cache.Delta{Type: cache.Updated, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
@@ -306,7 +289,7 @@ var _ = Describe("Joins", func() {
 			Expect(delta.Object.UnstructuredContent()["pod"]).To(Equal(pod3.UnstructuredContent()))
 			Expect(delta.Object.UnstructuredContent()["dep"]).To(Equal(dep2.UnstructuredContent()))
 
-			deltas, err = j.Evaluate(eng, cache.Delta{Type: cache.Deleted, Object: pod3})
+			deltas, err = j.Evaluate(cache.Delta{Type: cache.Deleted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(1))
 			Expect(deltas[0].IsUnchanged()).To(BeFalse())
@@ -317,9 +300,7 @@ var _ = Describe("Joins", func() {
 
 		It("should evaluate a complex join", func() {
 			jsonData := `{"@join":{"@eq":["$.dep.metadata.labels.app","$.pod.metadata.labels.app"]}}`
-			var j Join
-			err := json.Unmarshal([]byte(jsonData), &j)
-			Expect(err).NotTo(HaveOccurred())
+			j := newJoin(eng, []byte(jsonData))
 
 			eng.WithObjects(dep1, dep2, pod1, pod2, pod3)
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
@@ -328,7 +309,7 @@ var _ = Describe("Joins", func() {
 			// re-label pod
 			olddep1 := object.DeepCopy(dep1)
 			dep1.SetLabels(map[string]string{"app": "app2"})
-			deltas, err := j.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: dep1})
+			deltas, err := j.Evaluate(cache.Delta{Type: cache.Updated, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(3))
@@ -392,4 +373,11 @@ func objFieldEq(elem any, fields ...string) types.GomegaMatcher {
 		}
 		return val
 	}, Equal(elem))
+}
+
+func newJoin(eng Engine, data []byte) *Join {
+	var j opv1a1.Join
+	err := yaml.Unmarshal([]byte(data), &j)
+	Expect(err).NotTo(HaveOccurred())
+	return NewJoin(eng, &j)
 }

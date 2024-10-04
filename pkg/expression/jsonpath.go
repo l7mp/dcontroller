@@ -1,4 +1,4 @@
-package pipeline
+package expression
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 	"github.com/ohler55/ojg/jp"
 )
 
-func (e *Expression) GetJSONPath(ctx evalCtx, key string) (any, error) {
+func (e *Expression) GetJSONPath(ctx EvalCtx, key string) (any, error) {
 	if len(key) == 0 || key[0] != '$' {
 		return key, nil
 	}
@@ -20,12 +20,12 @@ func (e *Expression) GetJSONPath(ctx evalCtx, key string) (any, error) {
 	}
 
 	// $... is object
-	subject := ctx.object
+	subject := ctx.Object
 	// $$... is local subject (@map, @filter, etc.)
-	if len(key) >= 2 && key[0] == '$' && key[1] == '$' && ctx.subject != nil {
+	if len(key) >= 2 && key[0] == '$' && key[1] == '$' && ctx.Subject != nil {
 		// remove first $
 		key = key[1:]
-		subject = ctx.subject
+		subject = ctx.Subject
 	}
 	ret, err := GetJSONPathExp(key, subject)
 	if err != nil {
@@ -34,7 +34,7 @@ func (e *Expression) GetJSONPath(ctx evalCtx, key string) (any, error) {
 	return ret, nil
 }
 
-func (e *Expression) SetJSONPath(ctx evalCtx, key string, value, data any) error {
+func (e *Expression) SetJSONPath(ctx EvalCtx, key string, value, data any) error {
 	if len(key) == 0 {
 		return errors.New("empty key")
 	}

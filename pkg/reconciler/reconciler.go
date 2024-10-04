@@ -1,4 +1,4 @@
-package controller
+package reconciler
 
 import (
 	"context"
@@ -15,17 +15,13 @@ import (
 	"hsnlab/dcontroller/pkg/util"
 )
 
-type Reconciler = reconcile.TypedReconciler[Request]
-
-// type Reconciler[request comparable] struct {
-// 	client.Client
-// }
-
 type Request struct {
 	Namespace, Name string
 	EventType       cache.DeltaType
 	GVK             schema.GroupVersionKind
 }
+
+type Reconciler = reconcile.TypedReconciler[Request]
 
 var _ handler.TypedEventHandler[client.Object, Request] = &EventHandler[client.Object]{}
 

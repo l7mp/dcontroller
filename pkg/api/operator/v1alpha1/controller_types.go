@@ -3,7 +3,7 @@ package v1alpha1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"hsnlab/dcontroller/pkg/pipeline"
+	"hsnlab/dcontroller/pkg/expression"
 	"hsnlab/dcontroller/pkg/predicate"
 )
 
@@ -19,9 +19,26 @@ type Controller struct {
 	//
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:pruning:PreserveUnknownFields
-	Pipeline pipeline.Pipeline `json:"pipeline"`
+	Pipeline Pipeline `json:"pipeline"`
 	// The target resource the results are to be added.
 	Target Target `json:"target"`
+}
+
+// Pipeline is an optional join followed by an aggregation.
+type Pipeline struct {
+	*Join        `json:",inline"`
+	*Aggregation `json:",inline"`
+}
+
+// Join is an operation that can be used to perform an inner join on a list of views.
+type Join struct {
+	Expression expression.Expression `json:"@join"`
+}
+
+// Aggregation is an operation that can be used to process, objects, or alter the shape of a list
+// of objects in a view.
+type Aggregation struct {
+	Expressions []expression.Expression `json:"@aggregate"`
 }
 
 // Resource specifies a resource by the GVK.

@@ -28,7 +28,7 @@ import (
 	"hsnlab/dcontroller/pkg/cache"
 	"hsnlab/dcontroller/pkg/manager"
 	"hsnlab/dcontroller/pkg/object"
-	"hsnlab/dcontroller/pkg/pipeline"
+	"hsnlab/dcontroller/pkg/reconciler"
 )
 
 const (
@@ -150,7 +150,7 @@ var _ = Describe("Controller", func() {
       metadata:
         annotations:
           testannotation: $.testannotation`
-			var p pipeline.Pipeline
+			var p opv1a1.Pipeline
 			err := yaml.Unmarshal([]byte(jsonData), &p)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -177,9 +177,9 @@ var _ = Describe("Controller", func() {
 			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
 
 			// Create controller overriding the request processor
-			request := Request{}
+			request := reconciler.Request{}
 			c, err := New(mgr, config, Options{
-				Processor: func(_ context.Context, _ *Controller, req Request) error {
+				Processor: func(_ context.Context, _ *Controller, req reconciler.Request) error {
 					request = req
 					return nil
 				},
@@ -195,9 +195,9 @@ var _ = Describe("Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() bool {
-				return request != Request{}
+				return request != reconciler.Request{}
 			}, timeout, retryInterval).Should(BeTrue())
-			Expect(request).To(Equal(Request{
+			Expect(request).To(Equal(reconciler.Request{
 				GVK:       viewv1a1.NewGVK("view"),
 				Namespace: "default",
 				Name:      "viewname",
@@ -214,7 +214,7 @@ var _ = Describe("Controller", func() {
         namespace: $.metadata.namespace
         annotations:
           testannotation: $.testannotation`
-			var p pipeline.Pipeline
+			var p opv1a1.Pipeline
 			err := yaml.Unmarshal([]byte(jsonData), &p)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -880,15 +880,6 @@ target:
 		})
 	})
 })
-
-func tryWatchReq(watcher chan Request, d time.Duration) (Request, bool) {
-	select {
-	case req := <-watcher:
-		return req, true
-	case <-time.After(d):
-		return Request{}, false
-	}
-}
 
 func tryWatchWatcher(watcher watch.Interface, d time.Duration) (watch.Event, bool) {
 	select {

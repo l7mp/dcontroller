@@ -10,9 +10,12 @@ import (
 	toolscache "k8s.io/client-go/tools/cache"
 
 	"hsnlab/dcontroller/pkg/cache"
+	"hsnlab/dcontroller/pkg/expression"
 	"hsnlab/dcontroller/pkg/object"
 	"hsnlab/dcontroller/pkg/util"
 )
+
+type Unstructured = map[string]any
 
 var ObjectKey = toolscache.MetaObjectToName
 
@@ -226,7 +229,7 @@ func (eng *defaultEngine) evalAggregation(a *Aggregation, obj object.Object) (ob
 	return obj, nil
 }
 
-func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured, error) {
+func (eng *defaultEngine) evalStage(e *expression.Expression, u Unstructured) (Unstructured, error) {
 	if e.Arg == nil {
 		return nil, NewAggregationError(
 			fmt.Errorf("no expression found in aggregation stage %s", e.String()))
@@ -234,12 +237,12 @@ func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured
 
 	switch e.Op {
 	case "@select":
-		res, err := e.Arg.Evaluate(evalCtx{object: u, log: eng.log})
+		res, err := e.Arg.Evaluate(expression.EvalCtx{Object: u, Log: eng.log})
 		if err != nil {
 			return nil, err
 		}
 
-		b, err := asBool(res)
+		b, err := expression.AsBool(res)
 		if err != nil {
 			return nil, NewAggregationError(
 				fmt.Errorf("expected conditional expression to "+
@@ -257,12 +260,12 @@ func (eng *defaultEngine) evalStage(e *Expression, u Unstructured) (Unstructured
 		return v, nil
 
 	case "@project":
-		res, err := e.Arg.Evaluate(evalCtx{object: u, log: eng.log})
+		res, err := e.Arg.Evaluate(expression.EvalCtx{Object: u, Log: eng.log})
 		if err != nil {
 			return nil, err
 		}
 
-		v, err := asObject(res)
+		v, err := expression.AsObject(res)
 		if err != nil {
 			return nil, NewAggregationError(err)
 		}
@@ -403,14 +406,14 @@ func (eng *defaultEngine) evalJoin(j *Join, obj object.Object) ([]object.Object,
 		input["metadata"] = map[string]any{"name": strings.Join(ids, "--")}
 
 		// evalutate conditional expression on the input
-		res, err := j.Expression.Evaluate(evalCtx{object: input, log: eng.log})
+		res, err := j.Expression.Evaluate(expression.EvalCtx{Object: input, Log: eng.log})
 		if err != nil {
-			return nil, false, NewExpressionError(&j.Expression, err)
+			return nil, false, expression.NewExpressionError(&j.Expression, err)
 		}
 
-		arg, err := asBool(res)
+		arg, err := expression.AsBool(res)
 		if err != nil {
-			return nil, false, NewExpressionError(&j.Expression, err)
+			return nil, false, expression.NewExpressionError(&j.Expression, err)
 		}
 
 		if !arg {
@@ -425,7 +428,7 @@ func (eng *defaultEngine) evalJoin(j *Join, obj object.Object) ([]object.Object,
 		return newObj.DeepCopy(), true, nil
 	})
 	if err != nil {
-		return nil, NewExpressionError(&j.Expression, err)
+		return nil, expression.NewExpressionError(&j.Expression, err)
 	}
 
 	eng.log.V(5).Info("eval ready", "expression", j.String(), "result", res)

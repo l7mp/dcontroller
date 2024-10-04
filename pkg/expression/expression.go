@@ -1,4 +1,4 @@
-package pipeline
+package expression
 
 import (
 	"errors"
@@ -7,16 +7,18 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
 const ExpressionDumpMaxLevel = 10
 
 type Unstructured = map[string]any
+type GVK = schema.GroupVersionKind
 
-type evalCtx struct {
-	object, subject any
-	log             logr.Logger
+type EvalCtx struct {
+	Object, Subject any
+	Log             logr.Logger
 }
 
 type Expression struct {
@@ -25,7 +27,7 @@ type Expression struct {
 	Literal any
 }
 
-func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
+func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 	if len(e.Op) == 0 {
 		return nil, NewInvalidArgumentsError(fmt.Sprintf("empty operator in expession %q", e.String()))
 	}
@@ -42,12 +44,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			lit = v
 		}
 
-		v, err := asBool(lit)
+		v, err := AsBool(lit)
 		if err != nil {
 			return nil, NewExpressionError(e, err)
 		}
 
-		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", v)
+		ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", v)
 
 		return v, nil
 
@@ -62,12 +64,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			lit = v
 		}
 
-		v, err := asInt(lit)
+		v, err := AsInt(lit)
 		if err != nil {
 			return nil, NewExpressionError(e, err)
 		}
 
-		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", v)
+		ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", v)
 
 		return v, nil
 
@@ -82,12 +84,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			lit = v
 		}
 
-		v, err := asFloat(lit)
+		v, err := AsFloat(lit)
 		if err != nil {
 			return nil, NewExpressionError(e, err)
 		}
 
-		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", v)
+		ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", v)
 
 		return v, nil
 
@@ -102,7 +104,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			lit = v
 		}
 
-		str, err := asString(lit)
+		str, err := AsString(lit)
 		if err != nil {
 			return nil, NewExpressionError(e, err)
 		}
@@ -112,7 +114,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			return nil, err
 		}
 
-		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
+		ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
 
 		return ret, nil
 
@@ -151,7 +153,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		// WARNING: this will destroy multi-dimensional arrays
 		ret = unpackList(ret)
 
-		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
+		ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
 
 		return ret, nil
 
@@ -196,7 +198,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			}
 		}
 
-		ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
+		ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
 
 		return ret, nil
 	}
@@ -205,7 +207,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 	if string(e.Op[0]) == "@" {
 		switch e.Op {
 		case "@filter":
-			args, err := asExpOrList(e.Arg)
+			args, err := AsExpOrList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 
@@ -225,19 +227,19 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				return nil, errors.New("failed to evaluate arguments")
 			}
 
-			list, err := asList(rawArg)
+			list, err := AsList(rawArg)
 			if err != nil {
 				return nil, errors.New("invalid arguments: expected a list")
 			}
 
 			vs := []any{}
 			for _, input := range list {
-				res, err := cond.Evaluate(evalCtx{object: ctx.object, subject: input, log: ctx.log})
+				res, err := cond.Evaluate(EvalCtx{Object: ctx.Object, Subject: input, Log: ctx.Log})
 				if err != nil {
 					return nil, err
 				}
 
-				b, err := asBool(res)
+				b, err := AsBool(res)
 				if err != nil {
 					return nil, NewExpressionError(e,
 						fmt.Errorf("expected conditional expression to "+
@@ -249,12 +251,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				}
 			}
 
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", vs)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", vs)
 
 			return vs, nil
 
 		case "@any": // @in: [exp, list]
-			args, err := asExpOrList(e.Arg)
+			args, err := AsExpOrList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 
@@ -274,19 +276,19 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				return nil, errors.New("failed to evaluate arguments")
 			}
 
-			list, err := asList(rawArg)
+			list, err := AsList(rawArg)
 			if err != nil {
 				return nil, errors.New("invalid arguments: expected a list")
 			}
 
 			v := false
 			for _, input := range list {
-				res, err := exp.Evaluate(evalCtx{object: ctx.object, subject: input, log: ctx.log})
+				res, err := exp.Evaluate(EvalCtx{Object: ctx.Object, Subject: input, Log: ctx.Log})
 				if err != nil {
 					return nil, err
 				}
 
-				b, err := asBool(res)
+				b, err := AsBool(res)
 				if err != nil {
 					return nil, NewExpressionError(e,
 						fmt.Errorf("expected conditional expression to "+
@@ -299,11 +301,11 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				}
 			}
 
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
 		case "@all": // @in: [exp, list]
-			args, err := asExpOrList(e.Arg)
+			args, err := AsExpOrList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 
@@ -323,19 +325,19 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				return nil, errors.New("failed to evaluate arguments")
 			}
 
-			list, err := asList(rawArg)
+			list, err := AsList(rawArg)
 			if err != nil {
 				return nil, errors.New("invalid arguments: expected a list")
 			}
 
 			v := true
 			for _, input := range list {
-				res, err := exp.Evaluate(evalCtx{object: ctx.object, subject: input, log: ctx.log})
+				res, err := exp.Evaluate(EvalCtx{Object: ctx.Object, Subject: input, Log: ctx.Log})
 				if err != nil {
 					return nil, err
 				}
 
-				b, err := asBool(res)
+				b, err := AsBool(res)
 				if err != nil {
 					return nil, NewExpressionError(e,
 						fmt.Errorf("expected conditional expression to "+
@@ -348,11 +350,11 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				}
 			}
 
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
 		case "@none": // @in: [exp, list]
-			args, err := asExpOrList(e.Arg)
+			args, err := AsExpOrList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 
@@ -372,19 +374,19 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				return nil, errors.New("failed to evaluate arguments")
 			}
 
-			list, err := asList(rawArg)
+			list, err := AsList(rawArg)
 			if err != nil {
 				return nil, errors.New("invalid arguments: expected a list")
 			}
 
 			v := true
 			for _, input := range list {
-				res, err := exp.Evaluate(evalCtx{object: ctx.object, subject: input, log: ctx.log})
+				res, err := exp.Evaluate(EvalCtx{Object: ctx.Object, Subject: input, Log: ctx.Log})
 				if err != nil {
 					return nil, err
 				}
 
-				b, err := asBool(res)
+				b, err := AsBool(res)
 				if err != nil {
 					return nil, NewExpressionError(e,
 						fmt.Errorf("expected conditional expression to "+
@@ -397,11 +399,11 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				}
 			}
 
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
 		case "@map":
-			args, err := asExpOrList(e.Arg)
+			args, err := AsExpOrList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
@@ -415,14 +417,14 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				return nil, errors.New("failed to evaluate arguments")
 			}
 
-			list, err := asList(rawArg)
+			list, err := AsList(rawArg)
 			if err != nil {
 				return nil, errors.New("invalid arguments: expected a list")
 			}
 
 			vs := []any{}
 			for _, input := range list {
-				res, err := exp.Evaluate(evalCtx{object: ctx.object, subject: input, log: ctx.log})
+				res, err := exp.Evaluate(EvalCtx{Object: ctx.Object, Subject: input, Log: ctx.Log})
 				if err != nil {
 					return nil, err
 				}
@@ -430,7 +432,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				vs = append(vs, res)
 			}
 
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "result", vs)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", vs)
 
 			return vs, nil
 
@@ -482,27 +484,27 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 		// unary bool
 		case "@isnil":
 			v := arg == nil
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
 			return v, nil
 
 		case "@exists":
 			v := arg != nil
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
 			return v, nil
 
 		case "@not":
-			arg, err := asBool(arg)
+			arg, err := AsBool(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
 
 			v := !arg
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
 			return v, nil
 
 		// binary bool
 		case "@eq":
-			args, err := asList(arg)
+			args, err := AsList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 
@@ -513,12 +515,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			}
 
 			v := reflect.DeepEqual(args[0], args[1])
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
 			return v, nil
 
 			// list bool
 		case "@and":
-			args, err := asBoolList(arg)
+			args, err := AsBoolList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
@@ -528,12 +530,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				v = v && args[i]
 			}
 
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
 
 			return v, nil
 
 		case "@or":
-			args, err := asBoolList(arg)
+			args, err := AsBoolList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
@@ -543,77 +545,77 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				v = v || args[i]
 			}
 
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
 
 			return v, nil
 
 			// binary
 		case "@lt":
-			is, fs, kind, err := asBinaryIntOrFloatList(arg)
+			is, fs, kind, err := AsBinaryIntOrFloatList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
 
 			if kind == reflect.Int64 {
 				v := is[0] < is[1]
-				ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", is, "result", v)
+				ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", is, "result", v)
 				return v, nil
 			}
 
 			v := fs[0] < fs[1]
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
 			return v, nil
 
 		case "@lte":
-			is, fs, kind, err := asBinaryIntOrFloatList(arg)
+			is, fs, kind, err := AsBinaryIntOrFloatList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
 
 			if kind == reflect.Int64 {
 				v := is[0] <= is[1]
-				ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", is, "result", v)
+				ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", is, "result", v)
 				return v, nil
 			}
 
 			v := fs[0] <= fs[1]
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
 			return v, nil
 
 		case "@gt":
-			is, fs, kind, err := asBinaryIntOrFloatList(arg)
+			is, fs, kind, err := AsBinaryIntOrFloatList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
 
 			if kind == reflect.Int64 {
 				v := is[0] > is[1]
-				ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", is, "result", v)
+				ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", is, "result", v)
 				return v, nil
 			}
 
 			v := fs[0] > fs[1]
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
 			return v, nil
 
 		case "@gte":
-			is, fs, kind, err := asBinaryIntOrFloatList(arg)
+			is, fs, kind, err := AsBinaryIntOrFloatList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
 
 			if kind == reflect.Int64 {
 				v := is[0] >= is[1]
-				ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", is, "result", v)
+				ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", is, "result", v)
 				return v, nil
 			}
 
 			v := fs[0] >= fs[1]
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", fs, "result", v)
 			return v, nil
 
 		case "@selector": // [selector, labels]
-			args, err := asList(arg)
+			args, err := AsList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 
@@ -628,12 +630,12 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				return false, nil
 			}
 
-			selector, err := asObject(args[0])
+			selector, err := AsObject(args[0])
 			if err != nil {
 				return nil, NewExpressionError(e, fmt.Errorf("invalid label selector: %w", err))
 			}
 
-			labels, err := asObject(args[1])
+			labels, err := AsObject(args[1])
 			if err != nil {
 				return nil, NewExpressionError(e, fmt.Errorf("invalid label set: %w", err))
 			}
@@ -644,49 +646,49 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				return nil, fmt.Errorf("failed to evaluate label selector: %w", err)
 			}
 
-			v, err := asBool(res)
+			v, err := AsBool(res)
 			if err != nil {
 				return nil, NewExpressionError(e, fmt.Errorf("expected label selector expression to "+
 					"evaluate to boolean: %w", err))
 			}
 
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
 			// unary arithmetic
 		case "@abs":
-			f, err := asFloat(arg)
+			f, err := AsFloat(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
 
 			v := math.Abs(f)
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", f, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", f, "result", v)
 			return v, nil
 
 		case "@ceil":
-			f, err := asFloat(arg)
+			f, err := AsFloat(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
 
 			v := math.Ceil(f)
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", f, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", f, "result", v)
 			return v, nil
 
 		case "@floor":
-			f, err := asFloat(arg)
+			f, err := AsFloat(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
 
 			v := math.Floor(f)
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "args", f, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", f, "result", v)
 			return v, nil
 
 			// list ops
 		case "@sum":
-			is, fs, kind, err := asIntOrFloatList(arg)
+			is, fs, kind, err := AsIntOrFloatList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
@@ -706,22 +708,22 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				v = vf
 			}
 
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", arg, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", arg, "result", v)
 			return v, nil
 
 		case "@len":
-			args, err := asList(arg)
+			args, err := AsList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 
 			}
 
 			v := int64(len(args))
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
 		case "@in": // @in: [elem, list]
-			args, err := asList(arg)
+			args, err := AsList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 
@@ -732,7 +734,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 			}
 
 			elem := args[0]
-			list, err := asList(args[1])
+			list, err := AsList(args[1])
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
@@ -745,11 +747,11 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				}
 			}
 
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
 		case "@concat":
-			args, err := asStringList(arg)
+			args, err := AsStringList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
@@ -759,7 +761,7 @@ func (e *Expression) Evaluate(ctx evalCtx) (any, error) {
 				v += args[i]
 			}
 
-			ctx.log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 
 			return v, nil
 
@@ -877,7 +879,7 @@ func (e *Expression) MarshalJSON() ([]byte, error) {
 			ret := map[string]*Expression{e.Op: e.Arg}
 			return json.Marshal(ret)
 		}
-		v, err := asBool(e.Literal)
+		v, err := AsBool(e.Literal)
 		if err != nil {
 			return []byte(""), err
 		}
@@ -889,7 +891,7 @@ func (e *Expression) MarshalJSON() ([]byte, error) {
 			ret := map[string]*Expression{e.Op: e.Arg}
 			return json.Marshal(ret)
 		}
-		v, err := asInt(e.Literal)
+		v, err := AsInt(e.Literal)
 		if err != nil {
 			return []byte(""), err
 		}
@@ -901,7 +903,7 @@ func (e *Expression) MarshalJSON() ([]byte, error) {
 			ret := map[string]*Expression{e.Op: e.Arg}
 			return json.Marshal(ret)
 		}
-		v, err := asFloat(e.Literal)
+		v, err := AsFloat(e.Literal)
 		if err != nil {
 			return []byte(""), err
 		}
@@ -913,7 +915,7 @@ func (e *Expression) MarshalJSON() ([]byte, error) {
 			ret := map[string]*Expression{e.Op: e.Arg}
 			return json.Marshal(ret)
 		}
-		v, err := asString(e.Literal)
+		v, err := AsString(e.Literal)
 		if err != nil {
 			return []byte(""), err
 		}
@@ -967,107 +969,22 @@ func (e *Expression) String() string {
 	return string(b)
 }
 
-// func (e *Expression) string(level int) string {
-// 	if level >= ExpressionDumpMaxLevel {
-// 		return "..."
-// 	}
+func (in *Expression) DeepCopyInto(out *Expression) {
+	if in == nil || out == nil {
+		return
+	}
+	*out = *in
 
-// 	// literals
-// 	switch e.Op {
-// 	case "@any":
-// 		return fmt.Sprintf("%#v", e.Literal)
-// 	case "@bool":
-// 		if e.Arg != nil {
-// 			return e.Arg.string(level + 1)
-// 		}
-// 		v, err := asBool(e.Literal)
-// 		if err != nil {
-// 			return "<invalid>"
-// 		}
-// 		return fmt.Sprintf("%t", v)
-// 	case "@int":
-// 		if e.Arg != nil {
-// 			return e.Arg.string(level + 1)
-// 		}
-// 		v, err := asInt(e.Literal)
-// 		if err != nil {
-// 			return "<invalid>"
-// 		}
-// 		return fmt.Sprintf("%d", v)
-// 	case "@float":
-// 		if e.Arg != nil {
-// 			return e.Arg.string(level + 1)
-// 		}
-// 		v, err := asFloat(e.Literal)
-// 		if err != nil {
-// 			return "<invalid>"
-// 		}
-// 		return fmt.Sprintf("%.3f", v)
-// 	case "@string":
-// 		if e.Arg != nil {
-// 			return e.Arg.string(level + 1)
-// 		}
-// 		v, err := asString(e.Literal)
-// 		if err != nil {
-// 			return "<invalid>"
-// 		}
-// 		return fmt.Sprintf("%s", v)
-// 	case "@list":
-// 		if e.Arg != nil {
-// 			return e.Arg.string(level + 1)
-// 		}
-// 		es, ok := e.Literal.([]Expression)
-// 		if !ok {
-// 			return "<invalid>"
-// 		}
-// 		return fmt.Sprintf("%s", strings.Join(util.Map(
-// 			func(exp Expression) string { return exp.string(level + 1) }, es,
-// 		), ","))
-// 	case "@dict":
-// 		if e.Arg != nil {
-// 			return fmt.Sprintf("{%s}", e.Arg.string(level+1))
-// 		}
-// 		return fmt.Sprintf("{%s}", stringifier(e.Literal, level+1))
-// 	}
+	j, err := json.Marshal(in)
+	if err != nil {
+		out = nil
+		return
+	}
 
-// 	return fmt.Sprintf("%s:[%s]", e.Op, e.Arg.string(level+1))
-// }
+	if err := json.Unmarshal(j, out); err != nil {
+		out = nil
+		return
+	}
 
-// func stringify(arg any) string {
-// 	return stringifier(arg, 0)
-// }
-
-// func stringifier(arg any, level int) string {
-// 	if level >= ExpressionDumpMaxLevel {
-// 		return "..."
-// 	}
-
-// 	switch v := arg.(type) {
-// 	case Expression:
-// 		return v.string(level + 1)
-// 	case *Expression:
-// 		return v.string(level + 1)
-// 	case bool, int64, float64, string:
-// 		return fmt.Sprintf("%s", v)
-// 	case []any:
-// 		ret := []string{}
-// 		for _, item := range v {
-// 			ret = append(ret, stringifier(item, level+1))
-// 		}
-// 		return fmt.Sprintf("[%s]", strings.Join(ret, ","))
-// 	case map[string]Expression:
-// 		ret := []string{}
-// 		for key, value := range v {
-// 			ret = append(ret, fmt.Sprintf("%s:%s", key, value.string(level+1)))
-// 		}
-// 		return fmt.Sprintf("{%s}", strings.Join(ret, ","))
-// 	case map[string]any:
-// 		ret := []string{}
-// 		for key, value := range v {
-// 			ret = append(ret, fmt.Sprintf("%s:%s", key, stringifier(value, level+1)))
-// 		}
-// 		return fmt.Sprintf("{%s}", strings.Join(ret, ","))
-// 	default:
-// 		return fmt.Sprintf("%s", v)
-// 	}
-// }
+	return
+}

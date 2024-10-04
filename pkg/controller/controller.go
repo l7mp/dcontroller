@@ -19,12 +19,13 @@ import (
 	"hsnlab/dcontroller/pkg/cache"
 	"hsnlab/dcontroller/pkg/object"
 	"hsnlab/dcontroller/pkg/pipeline"
+	"hsnlab/dcontroller/pkg/reconciler"
 	"hsnlab/dcontroller/pkg/util"
 )
 
 const WatcherBufferSize int = 1024
 
-type ProcessorFunc func(ctx context.Context, c *Controller, req Request) error
+type ProcessorFunc func(ctx context.Context, c *Controller, req reconciler.Request) error
 type Options struct {
 	// Processor allows to override the default request processor of the controller.
 	Processor ProcessorFunc
@@ -38,11 +39,11 @@ var _ runtimeManager.Runnable = &Controller{}
 type Controller struct {
 	name, kind  string
 	config      opv1a1.Controller
-	sources     []Source
-	target      Target
+	sources     []reconciler.Source
+	target      reconciler.Target
 	mgr         runtimeManager.Manager
-	watcher     chan Request
-	engine      pipeline.Engine
+	watcher     chan reconciler.Request
+	pipeline    pipeline.Evaluator
 	processor   ProcessorFunc
 	errReporter *errorReporter
 	logger, log logr.Logger
@@ -59,9 +60,9 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 
 	c := &Controller{
 		mgr:         mgr,
-		sources:     []Source{},
+		sources:     []reconciler.Source{},
 		config:      config,
-		watcher:     make(chan Request, WatcherBufferSize),
+		watcher:     make(chan reconciler.Request, WatcherBufferSize),
 		errReporter: NewErrorReporter(opts.StatusTrigger),
 		logger:      logger,
 	}
@@ -83,27 +84,24 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 		return c, c.errReporter.PushCriticalError(errors.New("invalid controller configuration: no target"))
 	}
 
-	if len(config.Sources) > 1 && config.Pipeline.Join == nil {
-		return c, c.errReporter.PushCriticalError(errors.New("invalid controller configuration: controllers " +
-			"defined on multiple base resources must specify a Join in the pipeline"))
-	}
-
 	// opts
 	processor := processRequest
 	if opts.Processor != nil {
 		processor = opts.Processor
 	}
-
-	c.kind = config.Target.Resource.Kind // the kind of the target
-	c.target = NewTarget(mgr, config.Target)
 	c.processor = processor
 
-	// Create the reconciler
-	reconciler := NewControllerReconciler(mgr, c)
+	// Create the target
+	c.kind = config.Target.Resource.Kind // the kind of the target
+	c.target = reconciler.NewTarget(mgr, config.Target)
 
+	// Create the reconciler
+	controllerReconciler := NewControllerReconciler(mgr, c)
+
+	// Create the sources
 	srcs := []string{}
 	for _, s := range config.Sources {
-		source := NewSource(mgr, s)
+		source := reconciler.NewSource(mgr, s)
 		c.sources = append(c.sources, source)
 		srcs = append(srcs, source.String())
 	}
@@ -119,9 +117,9 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 		}
 
 		// Create the controller
-		ctrl, err := controller.NewTyped(name, mgr, controller.TypedOptions[Request]{
+		ctrl, err := controller.NewTyped(name, mgr, controller.TypedOptions[reconciler.Request]{
 			SkipNameValidation: &on,
-			Reconciler:         reconciler,
+			Reconciler:         controllerReconciler,
 		})
 		if err != nil {
 			return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to create runtime controller "+
@@ -145,9 +143,17 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 		baseviews = append(baseviews, gvk)
 	}
 
-	c.engine = pipeline.NewDefaultEngine(c.kind, baseviews,
+	// Create the pipeline
+	pipeline, err := pipeline.NewPipeline(c.kind, baseviews, c.config.Pipeline,
 		logger.WithName("pipeline").WithValues("controller", c.name, "kind/view", c.kind))
+	if err != nil {
+		return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to create pipleline for controller %s: %w",
+			c.name, err))
+	}
+	c.pipeline = pipeline
 
+	// Add the controller to the manager (this will automatically start it when Start is called
+	// on the manager, but the reconciler must still be explicitly started)
 	if err := mgr.Add(c); err != nil {
 		return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to schedule controller %s: %w",
 			c.name, err))
@@ -159,7 +165,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 func (c *Controller) GetName() string { return c.name }
 
 // GetWatcher returns the channel that multiplexes the requests coming from the base resources.
-func (c *Controller) GetWatcher() chan Request { return c.watcher }
+func (c *Controller) GetWatcher() chan reconciler.Request { return c.watcher }
 
 // Start starts running the controller. The Start function blocks until the context is closed or an
 // error occurs, and it will stop running when the context is closed.
@@ -225,7 +231,7 @@ func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 	return status
 }
 
-func processRequest(ctx context.Context, c *Controller, req Request) error {
+func processRequest(ctx context.Context, c *Controller, req reconciler.Request) error {
 	// Obtain the requested object
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(req.GVK)
@@ -244,7 +250,7 @@ func processRequest(ctx context.Context, c *Controller, req Request) error {
 	}
 
 	// Process the delta through the pipeline
-	deltas, err := c.config.Pipeline.Evaluate(c.engine, delta)
+	deltas, err := c.pipeline.Evaluate(delta)
 	if err != nil {
 		return fmt.Errorf("error evaluating pipeline for object %s/%s: %w", req.GVK,
 			client.ObjectKeyFromObject(obj), err)
@@ -268,7 +274,7 @@ func processRequest(ctx context.Context, c *Controller, req Request) error {
 // sources into the controller processor pipeline.
 type ControllerReconciler struct {
 	manager runtimeManager.Manager
-	watcher chan Request
+	watcher chan reconciler.Request
 	log     logr.Logger
 }
 
@@ -280,7 +286,7 @@ func NewControllerReconciler(mgr runtimeManager.Manager, c *Controller) *Control
 	}
 }
 
-func (r *ControllerReconciler) Reconcile(ctx context.Context, req Request) (reconcile.Result, error) {
+func (r *ControllerReconciler) Reconcile(ctx context.Context, req reconciler.Request) (reconcile.Result, error) {
 	r.log.V(4).Info("reconcile", "request", req)
 	r.watcher <- req
 	return reconcile.Result{}, nil

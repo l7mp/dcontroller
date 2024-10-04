@@ -1,4 +1,4 @@
-package pipeline
+package expression
 
 import (
 	"errors"
@@ -9,13 +9,13 @@ import (
 	"hsnlab/dcontroller/pkg/util"
 )
 
-func isList(d any) bool {
+func IsList(d any) bool {
 	dv := reflect.ValueOf(d)
 	return dv.Kind() == reflect.Slice || dv.Kind() == reflect.Array
 }
 
-func asList(d any) ([]any, error) {
-	if !isList(d) {
+func AsList(d any) ([]any, error) {
+	if !IsList(d) {
 		return nil, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
@@ -27,7 +27,7 @@ func asList(d any) ([]any, error) {
 	return ret, nil
 }
 
-func asBool(d any) (bool, error) {
+func AsBool(d any) (bool, error) {
 	if d == nil {
 		return false, errors.New("argument is nil")
 	}
@@ -38,15 +38,15 @@ func asBool(d any) (bool, error) {
 	return false, fmt.Errorf("argument is not a boolean: %s", util.Stringify(d))
 }
 
-func asBoolList(d any) ([]bool, error) {
-	if !isList(d) {
+func AsBoolList(d any) ([]bool, error) {
+	if !IsList(d) {
 		return []bool{}, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
 	dv := reflect.ValueOf(d)
 	ret := []bool{}
 	for i := 0; i < dv.Len(); i++ {
-		arg, err := asBool(dv.Index(i).Interface())
+		arg, err := AsBool(dv.Index(i).Interface())
 		if err != nil {
 			return []bool{}, err
 		}
@@ -55,8 +55,8 @@ func asBoolList(d any) ([]bool, error) {
 	return ret, nil
 }
 
-func asBinaryBoolList(d any) ([]bool, error) {
-	vs, err := asBoolList(d)
+func AsBinaryBoolList(d any) ([]bool, error) {
+	vs, err := AsBoolList(d)
 	if err != nil {
 		return []bool{}, err
 	}
@@ -68,7 +68,7 @@ func asBinaryBoolList(d any) ([]bool, error) {
 	return vs, nil
 }
 
-func asString(d any) (string, error) {
+func AsString(d any) (string, error) {
 	if d == nil {
 		return "", errors.New("argument is nil")
 	}
@@ -88,8 +88,8 @@ func asString(d any) (string, error) {
 	return "", fmt.Errorf("argument is not a string: %s", util.Stringify(d))
 }
 
-func asStringList(d any) ([]string, error) {
-	if !isList(d) {
+func AsStringList(d any) ([]string, error) {
+	if !IsList(d) {
 		return []string{}, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
@@ -100,7 +100,7 @@ func asStringList(d any) ([]string, error) {
 
 	ret := []string{}
 	for i := 0; i < dv.Len(); i++ {
-		arg, err := asString(dv.Index(i).Interface())
+		arg, err := AsString(dv.Index(i).Interface())
 		if err != nil {
 			return []string{}, err
 		}
@@ -109,8 +109,8 @@ func asStringList(d any) ([]string, error) {
 	return ret, nil
 }
 
-func asBinaryStringList(d any) ([]string, error) {
-	vs, err := asStringList(d)
+func AsBinaryStringList(d any) ([]string, error) {
+	vs, err := AsStringList(d)
 	if err != nil {
 		return []string{}, err
 	}
@@ -122,7 +122,7 @@ func asBinaryStringList(d any) ([]string, error) {
 	return vs, nil
 }
 
-func asInt(d any) (int64, error) {
+func AsInt(d any) (int64, error) {
 	if d == nil {
 		return int64(0), errors.New("argument is nil")
 	}
@@ -143,15 +143,15 @@ func asInt(d any) (int64, error) {
 	return 0, fmt.Errorf("argument is not an int: %s", util.Stringify(d))
 }
 
-func asIntList(d any) ([]int64, error) {
-	if !isList(d) {
+func AsIntList(d any) ([]int64, error) {
+	if !IsList(d) {
 		return []int64{}, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
 	dv := reflect.ValueOf(d)
 	ret := []int64{}
 	for i := 0; i < dv.Len(); i++ {
-		arg, err := asInt(dv.Index(i).Interface())
+		arg, err := AsInt(dv.Index(i).Interface())
 		if err != nil {
 			return []int64{}, err
 		}
@@ -160,8 +160,8 @@ func asIntList(d any) ([]int64, error) {
 	return ret, nil
 }
 
-func asBinaryIntList(d any) ([]int64, error) {
-	vs, err := asIntList(d)
+func AsBinaryIntList(d any) ([]int64, error) {
+	vs, err := AsIntList(d)
 	if err != nil {
 		return []int64{}, err
 	}
@@ -173,7 +173,7 @@ func asBinaryIntList(d any) ([]int64, error) {
 	return vs, nil
 }
 
-func asFloat(d any) (float64, error) {
+func AsFloat(d any) (float64, error) {
 	if d == nil {
 		return 0.0, errors.New("argument is nil")
 	}
@@ -196,15 +196,15 @@ func asFloat(d any) (float64, error) {
 	return 0.0, fmt.Errorf("argument is not a float: %s", util.Stringify(d))
 }
 
-func asFloatList(d any) ([]float64, error) {
-	if !isList(d) {
+func AsFloatList(d any) ([]float64, error) {
+	if !IsList(d) {
 		return []float64{}, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
 	dv := reflect.ValueOf(d)
 	ret := []float64{}
 	for i := 0; i < dv.Len(); i++ {
-		arg, err := asFloat(dv.Index(i).Interface())
+		arg, err := AsFloat(dv.Index(i).Interface())
 		if err != nil {
 			return []float64{}, err
 		}
@@ -213,8 +213,8 @@ func asFloatList(d any) ([]float64, error) {
 	return ret, nil
 }
 
-func asBinaryFloatList(d any) ([]float64, error) {
-	vs, err := asFloatList(d)
+func AsBinaryFloatList(d any) ([]float64, error) {
+	vs, err := AsFloatList(d)
 	if err != nil {
 		return []float64{}, err
 	}
@@ -227,15 +227,15 @@ func asBinaryFloatList(d any) ([]float64, error) {
 	return vs, nil
 }
 
-func asIntOrFloat(d any) (int64, float64, reflect.Kind, error) {
+func AsIntOrFloat(d any) (int64, float64, reflect.Kind, error) {
 	// try as an int
-	i, err := asInt(d)
+	i, err := AsInt(d)
 	if err == nil {
 		return i, 0.0, reflect.Int64, nil
 	}
 
 	// convert to float
-	f, err := asFloat(d)
+	f, err := AsFloat(d)
 	if err == nil {
 		return 0, f, reflect.Float64, nil
 	}
@@ -243,13 +243,13 @@ func asIntOrFloat(d any) (int64, float64, reflect.Kind, error) {
 	return 0, 0.0, reflect.Invalid, fmt.Errorf("argument is not an int or float: %s", util.Stringify(d))
 }
 
-func asIntOrFloatList(d any) ([]int64, []float64, reflect.Kind, error) {
-	is, err := asIntList(d)
+func AsIntOrFloatList(d any) ([]int64, []float64, reflect.Kind, error) {
+	is, err := AsIntList(d)
 	if err == nil {
 		return is, []float64{}, reflect.Int64, nil
 	}
 
-	fs, err := asFloatList(d)
+	fs, err := AsFloatList(d)
 	if err == nil {
 		return []int64{}, fs, reflect.Float64, nil
 	}
@@ -258,8 +258,8 @@ func asIntOrFloatList(d any) ([]int64, []float64, reflect.Kind, error) {
 		fmt.Errorf("incompatible elems in numeric list: %q", util.Stringify(d))
 }
 
-func asBinaryIntOrFloatList(d any) ([]int64, []float64, reflect.Kind, error) {
-	is, fs, kind, err := asIntOrFloatList(d)
+func AsBinaryIntOrFloatList(d any) ([]int64, []float64, reflect.Kind, error) {
+	is, fs, kind, err := AsIntOrFloatList(d)
 	if err != nil {
 		return is, fs, kind, err
 	}
@@ -280,7 +280,7 @@ func asBinaryIntOrFloatList(d any) ([]int64, []float64, reflect.Kind, error) {
 }
 
 // returns an expression or an expression list
-func asExpOrList(d any) ([]Expression, error) {
+func AsExpOrList(d any) ([]Expression, error) {
 	exp, ok := d.(Expression)
 	if !ok {
 		var expp *Expression
@@ -305,7 +305,7 @@ func asExpOrList(d any) ([]Expression, error) {
 	return []Expression{exp}, nil
 }
 
-func asObject(d any) (Unstructured, error) {
+func AsObject(d any) (Unstructured, error) {
 	val := reflect.ValueOf(d)
 	if val.Kind() == reflect.Map {
 		p := val.Interface()
@@ -316,15 +316,15 @@ func asObject(d any) (Unstructured, error) {
 	return nil, fmt.Errorf("argument is not an object: %s", util.Stringify(d))
 }
 
-func asObjectList(d any) ([]Unstructured, error) {
-	if !isList(d) {
+func AsObjectList(d any) ([]Unstructured, error) {
+	if !IsList(d) {
 		return nil, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
 	dv := reflect.ValueOf(d)
 	ret := []Unstructured{}
 	for i := 0; i < dv.Len(); i++ {
-		arg, err := asObject(dv.Index(i).Interface())
+		arg, err := AsObject(dv.Index(i).Interface())
 		if err != nil {
 			return nil, err
 		}

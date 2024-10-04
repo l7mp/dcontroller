@@ -12,14 +12,16 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"hsnlab/dcontroller/internal/testutils"
+	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "hsnlab/dcontroller/pkg/api/view/v1alpha1"
 	"hsnlab/dcontroller/pkg/cache"
 	"hsnlab/dcontroller/pkg/object"
 )
 
 var (
-	loglevel = -10
-	logger   = zap.New(zap.UseFlagOptions(&zap.Options{
+	emptyView = []GVK{}
+	loglevel  = -10
+	logger    = zap.New(zap.UseFlagOptions(&zap.Options{
 		Development:     true,
 		DestWriter:      GinkgoWriter,
 		StacktraceLevel: zapcore.Level(3),
@@ -131,15 +133,14 @@ var _ = Describe("Pipelines", func() {
           - "--"
           - $.pod.metadata.name
       $.metadata.namespace: $.pod.metadata.namespace`
-				var p Pipeline
-				err := yaml.Unmarshal([]byte(jsonData), &p)
-				Expect(err).NotTo(HaveOccurred())
+
+				p := newPipeline(eng, []byte(jsonData))
 
 				eng.WithObjects(dep1, dep2)
 				Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 				Expect(eng.(*defaultEngine).baseViewStore).NotTo(HaveKey("pod"))
 
-				deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
+				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(eng.(*defaultEngine).baseViewStore).To(HaveKey(viewv1a1.GroupVersion.WithKind("pod")))
 
@@ -163,11 +164,9 @@ var _ = Describe("Pipelines", func() {
 '@aggregate':
   - '@project':
       $.metadata: $.metadata`
-				var p Pipeline
-				err := yaml.Unmarshal([]byte(jsonData), &p)
-				Expect(err).NotTo(HaveOccurred())
+				p := newPipeline(eng, []byte(jsonData))
 
-				deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
+				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(deltas).To(HaveLen(1))
@@ -191,11 +190,9 @@ var _ = Describe("Pipelines", func() {
 '@aggregate':
   - '@select':
       '@eq': [$.metadata.namespace, "dummy"]`
-				var p Pipeline
-				err := yaml.Unmarshal([]byte(jsonData), &p)
-				Expect(err).NotTo(HaveOccurred())
+				p := newPipeline(eng, []byte(jsonData))
 
-				deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: pod1})
+				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(HaveLen(0))
 			})
@@ -217,12 +214,10 @@ var _ = Describe("Pipelines", func() {
       $.metadata: $.pod.metadata
       $.replicas: $.dep.spec.replicas
       $.ready: $.rs.status.ready`
-				var p Pipeline
-				err := yaml.Unmarshal([]byte(jsonData), &p)
-				Expect(err).NotTo(HaveOccurred())
+				p := newPipeline(eng, []byte(jsonData))
 
 				eng.WithObjects(pod1, pod2, pod3, dep2, rs1, rs2)
-				deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: dep1})
+				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(deltas).To(HaveLen(2))
@@ -249,7 +244,7 @@ var _ = Describe("Pipelines", func() {
 				// rewrite pod1 parent
 				// oldpod1 := pod1.DeepCopy()
 				pod1.UnstructuredContent()["spec"].(Unstructured)["parent"] = "dep2"
-				deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: pod1})
+				deltas, err = p.Evaluate(cache.Delta{Type: cache.Updated, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(deltas).To(HaveLen(1))
@@ -285,12 +280,10 @@ var _ = Describe("Pipelines", func() {
       $.metadata.namespace: $.dep.metadata.namespace
       $.replicas: $.dep.spec.replicas
       $.ready: $.rs.status.ready`
-				var p Pipeline
-				err := yaml.Unmarshal([]byte(jsonData), &p)
-				Expect(err).NotTo(HaveOccurred())
+				p := newPipeline(eng, []byte(jsonData))
 
 				eng.WithObjects(pod1, pod2, pod3, dep2, rs1, rs2)
-				deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: dep1})
+				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(deltas).To(HaveLen(2))
@@ -317,7 +310,7 @@ var _ = Describe("Pipelines", func() {
 				// rewrite pod1 parent
 				// oldpod1 := pod1.DeepCopy()
 				pod1.UnstructuredContent()["spec"].(Unstructured)["parent"] = "dep2"
-				deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: pod1})
+				deltas, err = p.Evaluate(cache.Delta{Type: cache.Updated, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(deltas).To(HaveLen(2))
@@ -341,18 +334,18 @@ var _ = Describe("Pipelines", func() {
 
 			It("should ignore a duplicate event", func() {
 				eng.WithObjects(dep1)
-				p := Pipeline{}
+				p := &Pipeline{engine: eng}
 
-				deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: dep1})
+				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(HaveLen(0))
 
-				deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: dep1})
+				deltas, err = p.Evaluate(cache.Delta{Type: cache.Updated, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(HaveLen(0))
 
 				// do not ignore a delete event for the same object
-				deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Deleted, Object: dep1})
+				deltas, err = p.Evaluate(cache.Delta{Type: cache.Deleted, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(HaveLen(1))
 				Expect(deltas[0].IsUnchanged()).To(BeFalse())
@@ -595,9 +588,7 @@ var _ = Describe("Pipelines", func() {
 		})
 
 		It("should implement the route attachment API with the All policy", func() {
-			var p Pipeline
-			err := yaml.Unmarshal([]byte(routeArrachmentRule), &p)
-			Expect(err).NotTo(HaveOccurred())
+			p := newPipeline(eng, []byte(routeArrachmentRule))
 
 			unstructured.SetNestedSlice(gateway.UnstructuredContent(),
 				[]any{
@@ -614,7 +605,7 @@ var _ = Describe("Pipelines", func() {
 				}, "spec", "listeners")
 			eng.WithObjects(gateway)
 
-			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})
+			deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(deltas).To(HaveLen(1))
@@ -623,7 +614,7 @@ var _ = Describe("Pipelines", func() {
 			Expect(delta.Object.GetName()).To(Equal("gateway--route"))
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 
-			deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Deleted, Object: route})
+			deltas, err = p.Evaluate(cache.Delta{Type: cache.Deleted, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(deltas).To(HaveLen(1))
@@ -634,7 +625,7 @@ var _ = Describe("Pipelines", func() {
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 
 			route.SetNamespace("other")
-			deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})
+			deltas, err = p.Evaluate(cache.Delta{Type: cache.Added, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(deltas).To(HaveLen(1))
@@ -646,21 +637,17 @@ var _ = Describe("Pipelines", func() {
 		})
 
 		It("should implement the route attachment API with the Same policy", func() {
-			var p Pipeline
-			err := yaml.Unmarshal([]byte(routeArrachmentRule), &p)
-			Expect(err).NotTo(HaveOccurred())
+			p := newPipeline(eng, []byte(routeArrachmentRule))
 
 			eng.WithObjects(gateway)
 			route.SetNamespace("other")
-			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})
+			deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(0))
 		})
 
 		It("should implement the route attachment API with the Selector policy", func() {
-			var p Pipeline
-			err := yaml.Unmarshal([]byte(routeArrachmentRule), &p)
-			Expect(err).NotTo(HaveOccurred())
+			p := newPipeline(eng, []byte(routeArrachmentRule))
 
 			unstructured.SetNestedSlice(gateway.UnstructuredContent(),
 				[]any{map[string]any{
@@ -686,7 +673,7 @@ var _ = Describe("Pipelines", func() {
 			eng.WithObjects(gateway)
 
 			route.SetLabels(map[string]string{"app": "nginx"})
-			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: route})
+			deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
@@ -696,7 +683,7 @@ var _ = Describe("Pipelines", func() {
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 
 			route.SetLabels(map[string]string{"app": "httpd"})
-			deltas, err = p.Evaluate(eng, cache.Delta{Type: cache.Updated, Object: route})
+			deltas, err = p.Evaluate(cache.Delta{Type: cache.Updated, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(1))
 			delta = deltas[0]
@@ -737,16 +724,11 @@ var _ = Describe("Pipelines", func() {
         annotations:
           "dcontroller.io/service-type": "$.Service.spec.type"`
 
-			var p Pipeline
-			err := yaml.Unmarshal([]byte(yamlData), &p)
-			Expect(err).NotTo(HaveOccurred())
-
-			// logger.Info(fmt.Sprintf("%v", p))
-			// logger.Info(p.String())
+			p := newPipeline(eng, []byte(yamlData))
 
 			eng.WithObjects(svc1)
 
-			deltas, err := p.Evaluate(eng, cache.Delta{Type: cache.Added, Object: es1})
+			deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: es1})
 			Expect(err).NotTo(HaveOccurred())
 
 			// logger.Info(fmt.Sprintf("%v", deltas))
@@ -769,22 +751,29 @@ var _ = Describe("Pipelines", func() {
 
 		It("survice a full JSON marshal-unmarshal roundtrip", func() {
 			jsonData := `{"@join":{"@and":[{"@eq":["$.Service.metadata.name","$[\"EndpointSlice\"][\"metadata\"][\"labels\"][\"kubernetes.io/service-name\"]"]},{"@eq":["$.Service.metadata.namespace","$.EndpointSlice.metadata.namespace"]}]},"@aggregate":[{"@project":{"metadata":{"name":"$.EndpointSlice.metadata.name","namespace":"$.EndpointSlice.metadata.namespace","annotations":{"dcontroller.io/service-type":"$.Service.spec.type"}}}}]}`
-			var p1 Pipeline
-			err := json.Unmarshal([]byte(jsonData), &p1)
-			Expect(err).NotTo(HaveOccurred())
+			p1 := newPipeline(nil, []byte(jsonData))
 
 			js, err := json.Marshal(p1)
 			Expect(err).NotTo(HaveOccurred())
 
 			// cannot test json equivalence: map key order is arbitrary
 			// instead, parse back the json produced
-
-			var p2 Pipeline
+			var p2 *Pipeline
 			err = json.Unmarshal([]byte(js), &p2)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(p2).To(Equal(p1))
-
 		})
 	})
 })
+
+func newPipeline(eng Engine, data []byte) *Pipeline {
+	var p opv1a1.Pipeline
+	err := yaml.Unmarshal([]byte(data), &p)
+	Expect(err).NotTo(HaveOccurred())
+	return &Pipeline{
+		Join:        NewJoin(eng, p.Join),
+		Aggregation: NewAggregation(eng, p.Aggregation),
+		engine:      eng,
+	}
+}

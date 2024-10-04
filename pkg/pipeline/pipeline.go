@@ -1,16 +1,42 @@
 package pipeline
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
+
+	"github.com/go-logr/logr"
+
+	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
 	"hsnlab/dcontroller/pkg/cache"
 	"hsnlab/dcontroller/pkg/util"
 )
 
-// Pipeline is an optional join followed by an aggregation.
+var _ Evaluator = &Pipeline{}
+
+// Evaluator is a query that knows how to evaluate itself on a given delta and how to print itself.
+type Evaluator interface {
+	Evaluate(cache.Delta) ([]cache.Delta, error)
+	fmt.Stringer
+}
+
 type Pipeline struct {
-	*Join        `json:",inline"`
-	*Aggregation `json:",inline"`
+	*Join
+	*Aggregation
+	engine Engine
+}
+
+func NewPipeline(targetView string, baseviews []GVK, config opv1a1.Pipeline, log logr.Logger) (Evaluator, error) {
+	if len(baseviews) > 1 && config.Join == nil {
+		return nil, errors.New("invalid controller configuration: controllers " +
+			"defined on multiple base resources must specify a Join in the pipeline")
+	}
+
+	engine := NewDefaultEngine(targetView, baseviews, log)
+	return &Pipeline{
+		Join:        NewJoin(engine, config.Join),
+		Aggregation: NewAggregation(engine, config.Aggregation),
+		engine:      engine,
+	}, nil
 }
 
 func (p *Pipeline) String() string {
@@ -25,7 +51,8 @@ func (p *Pipeline) String() string {
 }
 
 // Evaluate processes an pipeline expression on the given delta.
-func (p *Pipeline) Evaluate(eng Engine, delta cache.Delta) ([]cache.Delta, error) {
+func (p *Pipeline) Evaluate(delta cache.Delta) ([]cache.Delta, error) {
+	eng := p.engine
 	eng.Log().V(2).Info("processing event", "event-type", delta.Type, "object", ObjectKey(delta.Object))
 
 	if !eng.IsValidEvent(delta) {
@@ -69,19 +96,6 @@ func (p *Pipeline) Evaluate(eng Engine, delta cache.Delta) ([]cache.Delta, error
 		"object", ObjectKey(delta.Object), "result", util.Stringify(res))
 
 	return res, nil
-}
-
-func (p *Pipeline) DeepCopyInto(d *Pipeline) {
-	j, err := json.Marshal(p)
-	if err != nil {
-		d = nil
-		return
-	}
-
-	if err := json.Unmarshal(j, d); err != nil {
-		d = nil
-		return
-	}
 }
 
 func collapseDeltas(ds []cache.Delta) []cache.Delta {

@@ -1,7 +1,7 @@
 <!-- [![Go Report Card](https://goreportcard.com/badge/sigs.k8s.io/controller-runtime)](https://goreportcard.com/report/sigs.k8s.io/controller-runtime) -->
 <!-- [![godoc](https://pkg.go.dev/badge/sigs.k8s.io/controller-runtime)](https://pkg.go.dev/sigs.k8s.io/controller-runtime) -->
 
-# Δ-controller: Declarative Kubernetes controller framework
+# Δ-controller: A NoCode/LowCode Kubernetes controller framework
 
 Δ-controller is a framework to simplify the design, implementation and maintenance of Kubernetes
 operators. The main goal is to reduce the mental overhead of writing Kubernetes operators by
