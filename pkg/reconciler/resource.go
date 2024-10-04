@@ -217,9 +217,9 @@ func (t *target) Write(ctx context.Context, delta cache.Delta) error {
 	delta.Object.SetGroupVersionKind(gvk)
 
 	switch t.target.Type {
-	case "Updater", "":
+	case opv1a1.Updater, "":
 		return t.update(ctx, delta)
-	case "Patcher":
+	case opv1a1.Patcher:
 		return t.patch(ctx, delta)
 	default:
 		return fmt.Errorf("unknown target type: %s", t.target.Type)
@@ -229,7 +229,8 @@ func (t *target) Write(ctx context.Context, delta cache.Delta) error {
 func (t *target) update(ctx context.Context, delta cache.Delta) error {
 	c := t.mgr.GetClient()
 
-	switch delta.Type {
+	//nolint:nolintlint
+	switch delta.Type { //nolint:exhaustive
 	case cache.Added:
 		t.log.V(4).Info("create", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
 		return c.Create(ctx, delta.Object)
@@ -248,7 +249,8 @@ func (t *target) update(ctx context.Context, delta cache.Delta) error {
 func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 	c := t.mgr.GetClient()
 
-	switch delta.Type {
+	//nolint:nolintlint
+	switch delta.Type { //nolint:exhaustive
 	case cache.Added, cache.Updated, cache.Replaced:
 		t.log.V(4).Info("update-patch", "event-type", delta.Type,
 			"key", client.ObjectKeyFromObject(delta.Object).String())
@@ -280,10 +282,10 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 		// make sure we do not remove crucial metadata: the GVK and the namespace/name
 		gvk := delta.Object.GroupVersionKind()
 		gr := schema.GroupVersion{Group: gvk.Group, Version: gvk.Version}
-		unstructured.SetNestedField(patch, gr.String(), "apiVersion")
-		unstructured.SetNestedField(patch, gvk.Kind, "kind")
-		unstructured.SetNestedField(patch, delta.Object.GetNamespace(), "metadata", "namespace")
-		unstructured.SetNestedField(patch, delta.Object.GetName(), "metadata", "name")
+		unstructured.SetNestedField(patch, gr.String(), "apiVersion")                            //nolint:errcheck
+		unstructured.SetNestedField(patch, gvk.Kind, "kind")                                     //nolint:errcheck
+		unstructured.SetNestedField(patch, delta.Object.GetNamespace(), "metadata", "namespace") //nolint:errcheck
+		unstructured.SetNestedField(patch, delta.Object.GetName(), "metadata", "name")           //nolint:errcheck
 
 		b, err := json.Marshal(patch)
 		if err != nil {
@@ -306,7 +308,6 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 		t.log.V(2).Info("target: ignoring delta", "type", delta.Type)
 
 		return nil
-
 	}
 }
 

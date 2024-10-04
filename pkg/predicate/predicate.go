@@ -15,7 +15,9 @@ var _ Interface = &Predicate{}
 var _ encodingjson.Marshaler = &Predicate{}
 var _ encodingjson.Unmarshaler = &Predicate{}
 
+// Interface is the general interface for predicates.
 type Interface interface {
+	// ToPredicate converts a serialized predicate into a native controller runtime predicate.
 	ToPredicate() (predicate.TypedPredicate[client.Object], error)
 }
 
@@ -24,27 +26,33 @@ func FromPredicate(predicate Predicate) (predicate.TypedPredicate[client.Object]
 	return predicate.ToPredicate()
 }
 
-// FromPredicate creates converts a seriaized label selector into a native controller runtime label
-// selector predicate.
+// FromLabelSelector creates converts a seriaized label selector into a native controller runtime
+// label selector predicate.
 func FromLabelSelector(labelSelector metav1.LabelSelector) (predicate.TypedPredicate[client.Object], error) {
 	return predicate.LabelSelectorPredicate(labelSelector)
 }
 
-// FromPredicate returns a namespace selector predicate from a namespace.
+// FromNamespace creates a namespace selector predicate from a namespace.
 func FromNamespace(namespace string) predicate.TypedPredicate[client.Object] {
 	return predicate.NewPredicateFuncs(func(object client.Object) bool {
 		return object.GetNamespace() == namespace
 	})
 }
 
+// BasicPredicate represents an elemental predicate, namely one of "GenerationChanged",
+// "ResourceVersionChanged", "LabelChanged" or "AnnotationChanged".
 type BasicPredicate string
+
+// BoolPredicate is a complex predicate composed of basic predicates and other bool predicates.
 type BoolPredicate map[string]([]Predicate)
 
+// Predicate is the top level representation of a predicate.
 type Predicate struct {
 	*BasicPredicate `json:",inline"`
 	*BoolPredicate  `json:",inline"`
 }
 
+// ToPredicate converts a serialized predicate into a native controller runtime predicate.
 func (p *Predicate) ToPredicate() (predicate.TypedPredicate[client.Object], error) {
 	if p.BasicPredicate != nil {
 		return p.BasicPredicate.ToPredicate()
@@ -55,6 +63,7 @@ func (p *Predicate) ToPredicate() (predicate.TypedPredicate[client.Object], erro
 	return nil, errors.New("invalid predicate")
 }
 
+// MarshalJSON encodes a predicate in JSON format.
 func (p Predicate) MarshalJSON() ([]byte, error) {
 	if p.BasicPredicate != nil {
 		return json.Marshal(p.BasicPredicate)
@@ -65,6 +74,7 @@ func (p Predicate) MarshalJSON() ([]byte, error) {
 	return nil, errors.New("invalid predicate")
 }
 
+// UnmarshalJSON decodes a predicate from JSON format.
 func (p *Predicate) UnmarshalJSON(data []byte) error {
 	// try as a simple pred
 	var pw BasicPredicate
@@ -85,6 +95,7 @@ func (p *Predicate) UnmarshalJSON(data []byte) error {
 	return err
 }
 
+// ToPredicate implements ToPredicate() for basic predicates.
 func (pw *BasicPredicate) ToPredicate() (predicate.TypedPredicate[client.Object], error) {
 	switch string(*pw) {
 	case "GenerationChanged":
@@ -100,6 +111,7 @@ func (pw *BasicPredicate) ToPredicate() (predicate.TypedPredicate[client.Object]
 	}
 }
 
+// ToPredicate implements ToPredicate() for bool predicates.
 func (cp *BoolPredicate) ToPredicate() (predicate.TypedPredicate[client.Object], error) {
 	if len(*cp) != 1 {
 		return nil, errors.New("expecting a single predicate op")

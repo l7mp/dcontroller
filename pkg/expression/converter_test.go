@@ -14,13 +14,13 @@ var _ = Describe("Converters", func() {
 			var x any = false
 			v, err := AsBool(x)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(false))
+			Expect(v).To(BeFalse())
 		})
 		It("should read a true bool", func() {
 			var x any = true
 			v, err := AsBool(x)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(true))
+			Expect(v).To(BeTrue())
 		})
 		It("should err for invalid bool", func() {
 			var x any = 12

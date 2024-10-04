@@ -39,7 +39,7 @@ const (
 
 var (
 	loglevel = -10
-	//loglevel = -3
+	// loglevel = -3
 	logger = zap.New(zap.UseFlagOptions(&zap.Options{
 		Development:     true,
 		DestWriter:      GinkgoWriter,
@@ -174,7 +174,7 @@ var _ = Describe("Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
-			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
+			go func() { mgr.Start(ctx) }()
 
 			// Create controller overriding the request processor
 			request := reconciler.Request{}
@@ -247,7 +247,7 @@ var _ = Describe("Controller", func() {
 			vcache := mgr.GetCompositeCache().GetViewCache()
 			Expect(vcache).NotTo(BeNil())
 
-			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
+			go func() { mgr.Start(ctx) }()
 
 			// Push a view object via the view cache
 			err = vcache.Add(view)
@@ -302,7 +302,7 @@ var _ = Describe("Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
-			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
+			go func() { mgr.Start(ctx) }()
 
 			yamlData := `
 name: test
@@ -451,7 +451,7 @@ target:
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
-			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
+			go func() { mgr.Start(ctx) }()
 
 			yamlData := `
 name: test
@@ -477,7 +477,7 @@ target:
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
-			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
+			go func() { mgr.Start(ctx) }()
 
 			yamlData := `
 name: test
@@ -502,7 +502,7 @@ pipeline:
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
-			go func() { mgr.Start(ctx) }() // will stop with a context cancelled error
+			go func() { mgr.Start(ctx) }()
 
 			yamlData := `
 sources:
@@ -590,12 +590,7 @@ target:
 				}
 
 				rs1, err = getRuntimeObjFromCache(ctx, vcache, "rs", event.Object)
-				if err != nil {
-					return false
-
-				}
-
-				return true
+				return err == nil
 			}, timeout, retryInterval).Should(BeTrue())
 
 			// should be a single object only
@@ -642,16 +637,7 @@ target:
 				}
 
 				rs2, err = getRuntimeObjFromCache(ctx, vcache, "rs", event.Object)
-				if err != nil {
-					return false
-
-				}
-
-				// if rs2.GetNamespace() != "default" || rs2.GetName() != "dep2" {
-				// 	return false
-				// }
-
-				return true
+				return err == nil
 			}, timeout, retryInterval).Should(BeTrue())
 
 			// Should be two objects
@@ -730,12 +716,7 @@ target:
 				}
 
 				rs3, err = getRuntimeObjFromCache(ctx, vcache, "rs", event.Object)
-				if err != nil {
-					return false
-
-				}
-
-				return true
+				return err == nil
 			}, timeout, retryInterval).Should(BeTrue())
 
 			Expect(rs3).To(Equal(&unstructured.Unstructured{

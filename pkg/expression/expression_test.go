@@ -80,7 +80,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
-			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+			Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
 		})
 
 		It("should deserialize and evaluate an integer literal expression", func() {
@@ -540,7 +540,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
-			Expect(reflect.ValueOf(res).Bool()).To(Equal(false))
+			Expect(reflect.ValueOf(res).Bool()).To(BeFalse())
 		})
 
 		It("should deserialize and evaluate an @exists expression", func() {
@@ -558,7 +558,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
-			Expect(reflect.ValueOf(res).Bool()).To(Equal(false))
+			Expect(reflect.ValueOf(res).Bool()).To(BeFalse())
 		})
 
 		It("should deserialize and evaluate a bool expression", func() {
@@ -576,7 +576,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
-			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+			Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
 		})
 
 		It("should deserialize and evaluate a compound literal expression", func() {
@@ -602,7 +602,7 @@ var _ = Describe("Expressions", func() {
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool),
 				fmt.Sprintf("kind mismatch: %v != %v",
 					reflect.ValueOf(res).Kind(), reflect.Int64))
-			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+			Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
 		})
 
 		It("should deserialize and err for a malformed expression", func() {
@@ -659,7 +659,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
-			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+			Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
 		})
 
 		It("should deserialize and evaluate a compound bool expression", func() {
@@ -686,7 +686,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
-			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+			Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
 		})
 
 		It("should deserialize and evaluate a compound bool expression", func() {
@@ -700,7 +700,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
-			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+			Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
 		})
 
 		It("should deserialize and evaluate a compound list expression", func() {
@@ -736,7 +736,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
-			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+			Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
 		})
 
 		It("should deserialize and evaluate a compound JSONPath expression", func() {
@@ -750,7 +750,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
-			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+			Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
 		})
 
 		It("should deserialize and evaluate a compound JSONPath expression", func() {
@@ -764,7 +764,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
-			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+			Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
 		})
 
 		It("should deserialize and evaluate a JSONPath list expression", func() {
@@ -778,7 +778,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
-			Expect(reflect.ValueOf(res).Bool()).To(Equal(true))
+			Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
 		})
 
 		It("should deserialize and evaluate a simple list expression", func() {
@@ -792,7 +792,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			kind := reflect.ValueOf(res).Kind()
-			Expect(kind == reflect.Int64).To(BeTrue())
+			Expect(kind).To(Equal(reflect.Int64))
 			Expect(res).To(Equal(int64(6)))
 		})
 
@@ -807,8 +807,8 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			kind := reflect.ValueOf(res).Kind()
-			Expect(kind == reflect.Bool).To(BeTrue())
-			Expect(res).To(Equal(true))
+			Expect(kind).To(Equal(reflect.Bool))
+			Expect(res).To(BeTrue())
 		})
 
 		It("should deserialize and evaluate an @in expression", func() {
@@ -822,8 +822,8 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			kind := reflect.ValueOf(res).Kind()
-			Expect(kind == reflect.Bool).To(BeTrue())
-			Expect(res).To(Equal(false))
+			Expect(kind).To(Equal(reflect.Bool))
+			Expect(res).To(BeFalse())
 		})
 
 		It("should deserialize and evaluate an @in expression", func() {
@@ -837,8 +837,8 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			kind := reflect.ValueOf(res).Kind()
-			Expect(kind == reflect.Bool).To(BeTrue())
-			Expect(res).To(Equal(false))
+			Expect(kind).To(Equal(reflect.Bool))
+			Expect(res).To(BeFalse())
 		})
 
 		It("should deserialize and evaluate an @in expression", func() {
@@ -852,8 +852,8 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			kind := reflect.ValueOf(res).Kind()
-			Expect(kind == reflect.Bool).To(BeTrue())
-			Expect(res).To(Equal(true))
+			Expect(kind).To(Equal(reflect.Bool))
+			Expect(res).To(BeTrue())
 		})
 	})
 
@@ -896,7 +896,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			kind := reflect.ValueOf(res).Kind()
-			Expect(kind == reflect.Int64).To(BeTrue())
+			Expect(kind).To(Equal(reflect.Int64))
 			Expect(res).To(Equal(int64(3)))
 		})
 
@@ -908,7 +908,7 @@ var _ = Describe("Expressions", func() {
 			Expect(exp).To(Equal(Expression{
 				Op: "@dict",
 				Literal: map[string]Expression{
-					"dummy": Expression{
+					"dummy": {
 						Op: "@list",
 						Literal: []Expression{
 							{Op: "@int", Literal: int64(1)},
@@ -924,8 +924,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			kind := reflect.ValueOf(res).Kind()
-			Expect(kind == reflect.Map).To(BeTrue(),
-				fmt.Sprintf("%q is not a map", kind))
+			Expect(kind).To(Equal(reflect.Map))
 			Expect(reflect.ValueOf(res).Interface().(Unstructured)).
 				To(Equal(Unstructured{"dummy": []any{int64(1), int64(2), int64(3)}}))
 		})
@@ -941,8 +940,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			kind := reflect.ValueOf(res).Kind()
-			Expect(kind == reflect.Map).To(BeTrue(),
-				fmt.Sprintf("%q is not a map", kind))
+			Expect(kind).To(Equal(reflect.Map))
 			Expect(reflect.ValueOf(res).Interface().(Unstructured)).
 				To(Equal(Unstructured{"dummy": []any{int64(1), int64(2), int64(3)}, "another-dummy": "a"}))
 		})
@@ -958,8 +956,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			kind := reflect.ValueOf(res).Kind()
-			Expect(kind == reflect.Map).To(BeTrue(),
-				fmt.Sprintf("%q is not a map", kind))
+			Expect(kind).To(Equal(reflect.Map))
 			Expect(res).To(Equal(Unstructured{"dummy": []any{int64(1), int64(2), int64(3)}, "x": false}))
 		})
 
@@ -974,8 +971,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			kind := reflect.ValueOf(res).Kind()
-			Expect(kind == reflect.Map).To(BeTrue(),
-				fmt.Sprintf("%q is not a map", kind))
+			Expect(kind).To(Equal(reflect.Map))
 			Expect(reflect.ValueOf(res).Interface().(Unstructured)).
 				To(Equal(Unstructured{"another-dummy": []any{
 					Unstructured{"a": int64(1), "b": 2.2},
@@ -997,7 +993,7 @@ var _ = Describe("Expressions", func() {
 
 			v, err := AsBool(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(true))
+			Expect(v).To(BeTrue())
 		})
 
 		It("should evaluate a @selector expression using the short form", func() {
@@ -1012,7 +1008,7 @@ var _ = Describe("Expressions", func() {
 
 			v, err := AsBool(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(true))
+			Expect(v).To(BeTrue())
 		})
 
 		It("should evaluate a @selector expression on an object's labels", func() {
@@ -1029,7 +1025,7 @@ var _ = Describe("Expressions", func() {
 
 			v, err := AsBool(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(true))
+			Expect(v).To(BeTrue())
 
 			obj.SetLabels(map[string]string{"app": "apache"})
 			ctx = EvalCtx{Object: obj.UnstructuredContent(), Log: logger}
@@ -1038,7 +1034,7 @@ var _ = Describe("Expressions", func() {
 
 			v, err = AsBool(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(false))
+			Expect(v).To(BeFalse())
 		})
 
 		It("should evaluate a @selector containing a matchLabels expression on an object's labels", func() {
@@ -1055,7 +1051,7 @@ var _ = Describe("Expressions", func() {
 
 			v, err := AsBool(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(true))
+			Expect(v).To(BeTrue())
 
 			obj.SetLabels(map[string]string{"app": "apache"})
 			ctx = EvalCtx{Object: obj.UnstructuredContent(), Log: logger}
@@ -1064,7 +1060,7 @@ var _ = Describe("Expressions", func() {
 
 			v, err = AsBool(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(false))
+			Expect(v).To(BeFalse())
 		})
 
 		It("should evaluate a @selector expression with a complex match expression", func() {
@@ -1081,7 +1077,7 @@ var _ = Describe("Expressions", func() {
 
 			v, err := AsBool(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(true))
+			Expect(v).To(BeTrue())
 
 			obj.SetLabels(map[string]string{"app": "apache"})
 			ctx = EvalCtx{Object: obj.UnstructuredContent(), Log: logger}
@@ -1090,7 +1086,7 @@ var _ = Describe("Expressions", func() {
 
 			v, err = AsBool(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(false))
+			Expect(v).To(BeFalse())
 		})
 
 		It("should evaluate a @selector expression on an object's labels", func() {
@@ -1106,7 +1102,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 			v, err := AsBool(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(true))
+			Expect(v).To(BeTrue())
 
 			obj.SetLabels(map[string]string{"app": "apache", "env": "production", "version": "v2"})
 			ctx = EvalCtx{Object: obj.UnstructuredContent(), Log: logger}
@@ -1114,7 +1110,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 			v, err = AsBool(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(false))
+			Expect(v).To(BeFalse())
 
 			obj.SetLabels(map[string]string{"app": "nginx"})
 			ctx = EvalCtx{Object: obj.UnstructuredContent(), Log: logger}
@@ -1122,7 +1118,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 			v, err = AsBool(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(false))
+			Expect(v).To(BeFalse())
 
 			obj.SetLabels(map[string]string{"app": "nginx", "env": "staging", "version": "v3"})
 			ctx = EvalCtx{Object: obj.UnstructuredContent(), Log: logger}
@@ -1130,7 +1126,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 			v, err = AsBool(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(v).To(Equal(true))
+			Expect(v).To(BeTrue())
 		})
 	})
 
@@ -1312,11 +1308,11 @@ var _ = Describe("Expressions", func() {
 			Expect(exp).To(Equal(Expression{
 				Op: "@dict",
 				Literal: map[string]Expression{
-					"a": Expression{Op: "@int", Literal: int64(1)},
-					"b": Expression{
+					"a": {Op: "@int", Literal: int64(1)},
+					"b": {
 						Op: "@dict",
 						Literal: map[string]Expression{
-							"c": Expression{Op: "@string", Literal: "x"},
+							"c": {Op: "@string", Literal: "x"},
 						},
 					},
 				},

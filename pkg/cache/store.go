@@ -59,7 +59,11 @@ func (s *Store) GetByKey(key string) (object.Object, bool, error) {
 // given list. Store takes ownership of the list, you should not reference
 // it after calling this function.
 func (s *Store) Replace(objs []object.Object, arg string) error {
-	return s.Replace(objs, arg)
+	as := make([]any, len(objs))
+	for i := range objs {
+		as[i] = objs[i]
+	}
+	return s.Store.Replace(as, arg)
 }
 
 // Resync is meaningless in the terms appearing here but has

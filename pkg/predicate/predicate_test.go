@@ -2,36 +2,14 @@ package predicate
 
 import (
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-)
-
-const (
-	timeout       = time.Second * 1
-	interval      = time.Millisecond * 50
-	retryInterval = time.Millisecond * 100
-)
-
-var (
-	loglevel = -10
-	//loglevel = -3
-	logger = zap.New(zap.UseFlagOptions(&zap.Options{
-		Development:     true,
-		DestWriter:      GinkgoWriter,
-		StacktraceLevel: zapcore.Level(10),
-		TimeEncoder:     zapcore.RFC3339NanoTimeEncoder,
-		Level:           zapcore.Level(loglevel),
-	}))
-	log = logger.WithName("test")
 )
 
 func TestPredicate(t *testing.T) {
@@ -61,7 +39,7 @@ var _ = Describe("Predicate", func() {
 			t1 := BasicPredicate("GenerationChanged")
 			t2 := BasicPredicate("ResourceVersionChanged")
 			compPred := BoolPredicate(map[string][]Predicate{
-				"Or": []Predicate{{BasicPredicate: &t1}, {BasicPredicate: &t2}},
+				"Or": {{BasicPredicate: &t1}, {BasicPredicate: &t2}},
 			})
 
 			data, err := json.Marshal(compPred)

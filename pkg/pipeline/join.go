@@ -17,6 +17,7 @@ type Join struct {
 	engine Engine
 }
 
+// NewJoin creates a new join from a seralized representation.
 func NewJoin(engine Engine, config *opv1a1.Join) *Join {
 	if config == nil {
 		return nil

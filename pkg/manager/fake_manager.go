@@ -29,7 +29,7 @@ import (
 var _ manager.Manager = &FakeRuntimeManager{}
 var _ manager.Manager = &FakeManager{}
 
-// /////// FakeManager
+// FakeManager is a fake manager that is used for testing.
 type FakeManager struct {
 	*Manager
 	// runtime
@@ -41,6 +41,7 @@ type FakeManager struct {
 	compositeCache *ccache.CompositeCache
 }
 
+// NewFakeManager creates a new fake manager.
 func NewFakeManager(opts manager.Options, objs ...client.Object) (*FakeManager, error) {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
@@ -96,12 +97,13 @@ func (m *FakeManager) GetRuntimeClient() client.WithWatch        { return m.fake
 func (m *FakeManager) GetCompositeCache() *ccache.CompositeCache { return m.compositeCache }
 func (m *FakeManager) GetObjectTracker() testing.ObjectTracker   { return m.tracker }
 
-// FakeRuntimeManager
+// Runnable is something that can be run.
 type Runnable interface {
 	manager.Runnable
 	GetName() string
 }
 
+// FakeRuntimeManager is a runtime manager fake.
 type FakeRuntimeManager struct {
 	Client       client.Client
 	Cache        cache.Cache
@@ -124,7 +126,6 @@ func NewFakeRuntimeManager(cache cache.Cache, client client.Client, logger logr.
 	}
 }
 
-// manager.Manager
 func (f *FakeRuntimeManager) Elected() <-chan struct{}                                 { return nil }
 func (f *FakeRuntimeManager) SetFields(i interface{}) error                            { return nil }
 func (f *FakeRuntimeManager) AddHealthzCheck(name string, check healthz.Checker) error { return nil }
@@ -148,7 +149,7 @@ func (f *FakeRuntimeManager) Add(runnable manager.Runnable) error {
 			name = r.GetName()
 		}
 		f.log.V(4).Info("starting runnable", "started", f.started, "name", name)
-		go runnable.Start(f.ctx)
+		go runnable.Start(f.ctx) //nolint:errcheck
 	}
 
 	f.runnables = append(f.runnables, runnable)
@@ -176,7 +177,7 @@ func (f *FakeRuntimeManager) Start(ctx context.Context) error {
 		}
 		f.log.V(4).Info("starting runnable", "started", f.started, "name", name)
 
-		go runnable.Start(f.ctx)
+		go runnable.Start(f.ctx) //nolint:errcheck
 	}
 
 	<-ctx.Done()
@@ -184,7 +185,6 @@ func (f *FakeRuntimeManager) Start(ctx context.Context) error {
 	return nil
 }
 
-// cluster.Cluster
 func (f *FakeRuntimeManager) GetHTTPClient() *http.Client                          { return nil }
 func (f *FakeRuntimeManager) GetConfig() *rest.Config                              { return nil }
 func (f *FakeRuntimeManager) GetCache() cache.Cache                                { return f.Cache }

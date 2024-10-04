@@ -25,6 +25,8 @@ type compositeClient struct {
 	client.Client
 }
 
+// NewCompositeClient creates a composite client: views are served through the viewcache, native
+// Kubernetes resources served from a native client (can be split client).
 func NewCompositeClient(config *rest.Config, options client.Options) (client.Client, error) {
 	defaultClient, err := client.New(config, options)
 	if err != nil {

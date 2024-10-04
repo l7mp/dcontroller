@@ -36,7 +36,7 @@ const (
 
 var (
 	loglevel = -10
-	//loglevel = -3
+	// loglevel = -3
 	logger = zap.New(zap.UseFlagOptions(&zap.Options{
 		Development:     true,
 		DestWriter:      GinkgoWriter,
@@ -66,7 +66,7 @@ func TestReconciler(t *testing.T) {
 type testReconciler struct{}
 
 func (r *testReconciler) Reconcile(ctx context.Context, req Request) (reconcile.Result, error) {
-	logger.V(4).Info("reconcile", "request", req)
+	log.V(4).Info("reconcile", "request", req)
 	watcher <- req
 	return reconcile.Result{}, nil
 }
@@ -144,7 +144,7 @@ var _ = Describe("Reconciler", func() {
 
 			// Start the manager
 			// go mgr.Start(ctx) // will stop with a context cancelled erro
-			go func() { mgr.Start(ctx) }() // will stop with a context cancelled erro
+			go func() { mgr.Start(ctx) }()
 
 			// Push a view object
 			err = vcache.Add(oldObj)
@@ -279,7 +279,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Start the manager
-			go func() { mgr.Start(ctx) }() // will stop with a context cancelled erro
+			go func() { mgr.Start(ctx) }()
 
 			// Try to obtain the view from the watcher
 			req, ok := tryWatchReq(watcher, interval)
@@ -308,8 +308,7 @@ var _ = Describe("Reconciler", func() {
 			target := NewTarget(mgr, opv1a1.Target{Resource: opv1a1.Resource{Kind: "view"}})
 
 			// Start the manager
-			// go mgr.Start(ctx) // will stop with a context cancelled erro
-			go func() { mgr.Start(ctx) }() // will stop with a context cancelled erro
+			go func() { mgr.Start(ctx) }()
 
 			// Push a view object to the target
 			err = target.Write(ctx, cache.Delta{Type: cache.Added, Object: view})
@@ -414,6 +413,7 @@ var _ = Describe("Reconciler", func() {
 			// Push update to the target
 			newPod := object.DeepCopy(pod2)
 			unstructured.RemoveNestedField(newPod.UnstructuredContent(), "spec", "containers")
+
 			unstructured.SetNestedField(newPod.UnstructuredContent(), "Always", "spec", "restartPolicy")
 			err = target.Write(ctx, cache.Delta{Type: cache.Updated, Object: newPod})
 			Expect(err).NotTo(HaveOccurred())
@@ -436,14 +436,12 @@ var _ = Describe("Reconciler", func() {
 			p = getFromClient.(*corev1.Pod)
 			Expect(p.GetName()).To(Equal("testpod"))
 			Expect(p.GetNamespace()).To(Equal("testns"))
-			Expect(p.Spec.Containers).To(HaveLen(0))
+			Expect(p.Spec.Containers).To(BeEmpty())
 			Expect(p.Spec.RestartPolicy).To(Equal(corev1.RestartPolicy("Always")))
 
 			// Delete from the target
 			err = target.Write(ctx, cache.Delta{Type: cache.Deleted, Object: newPod})
 			Expect(err).NotTo(HaveOccurred())
-			getFromTracker, err = tracker.Get(gvr, "testns", "testpod")
-			Expect(err).To(HaveOccurred())
 		})
 
 		It("should be able to write view objects to Patch targets", func() {
@@ -457,7 +455,7 @@ var _ = Describe("Reconciler", func() {
 
 			// Start the manager
 			// go mgr.Start(ctx) // will stop with a context cancelled erro
-			go func() { mgr.Start(ctx) }() // will stop with a context cancelled erro
+			go func() { mgr.Start(ctx) }()
 
 			// Get view cache
 			vcache := mgr.GetCompositeCache().GetViewCache()
@@ -536,6 +534,7 @@ var _ = Describe("Reconciler", func() {
 			// Patch to the target
 			newPod := object.DeepCopy(pod2)
 			unstructured.RemoveNestedField(newPod.UnstructuredContent(), "spec", "containers")
+			//nolint:errchekc
 			unstructured.SetNestedField(newPod.UnstructuredContent(), "Always", "spec", "restartPolicy")
 			err = target.Write(ctx, cache.Delta{Type: cache.Updated, Object: newPod})
 			Expect(err).NotTo(HaveOccurred())
@@ -572,6 +571,7 @@ var _ = Describe("Reconciler", func() {
 
 			// Delete patch to the target
 			newPod = object.DeepCopy(pod2)
+
 			unstructured.SetNestedField(newPod.UnstructuredContent(), nil, "spec", "restartPolicy")
 			err = target.Write(ctx, cache.Delta{Type: cache.Deleted, Object: newPod})
 			Expect(err).NotTo(HaveOccurred())

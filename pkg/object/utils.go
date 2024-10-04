@@ -14,7 +14,7 @@ import (
 
 var scheme = runtime.NewScheme()
 
-// Dump convers an unstuctured object into a human-readable form.
+// Dump converts an unstuctured object into a human-readable form.
 func Dump(obj Object) string {
 	// copy
 	ro := DeepCopy(obj)
@@ -32,7 +32,7 @@ func Dump(obj Object) string {
 	return output
 }
 
-// only for core objects
+// ConvertRuntimeObjectToClientObject converts a core runtime objects into a full client.Object.
 func ConvertRuntimeObjectToClientObject(runtimeObj runtime.Object) (client.Object, error) {
 	// Try direct type assertion first
 	if clientObj, ok := runtimeObj.(client.Object); ok {
@@ -75,9 +75,10 @@ func ConvertRuntimeObjectToClientObject(runtimeObj runtime.Object) (client.Objec
 	return clientObj, nil
 }
 
+// GetBaseScheme returns a base scheme. Used mostly for testing.
 func GetBaseScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
-	corev1.AddToScheme(scheme)
-	appsv1.AddToScheme(scheme)
+	corev1.AddToScheme(scheme) //nolint:errcheck
+	appsv1.AddToScheme(scheme) //nolint:errcheck
 	return scheme
 }

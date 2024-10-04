@@ -32,12 +32,12 @@ func patch(o, m any) any {
 		return deepCopy(m)
 	}
 
-	switch m.(type) {
+	switch x := m.(type) {
 	case bool, int64, float64, string:
-		return m
+		return x
 
 	case []any:
-		litlm := m.([]any)
+		litlm := x
 		litlo, ok2 := o.([]any)
 		if !ok2 {
 			return deepCopy(litlm)
@@ -58,7 +58,7 @@ func patch(o, m any) any {
 		return retl
 
 	case map[string]any:
-		litmm := m.(map[string]any)
+		litmm := x
 		litmo, ok2 := o.(map[string]any)
 		if !ok2 {
 			return deepCopy(litmm)
@@ -120,6 +120,7 @@ func deepCopy(value any) any {
 	}
 }
 
+// ApplyStrategicMergePatch is a partial local re-implementation of strategic merge patches.
 func ApplyStrategicMergePatch(original, patch *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	originalData, err := runtime.Encode(unstructured.UnstructuredJSONScheme, original)
 	if err != nil {

@@ -11,11 +11,8 @@ linters:
     - errchkjson
     - errorlint
     - exhaustive
-    - exportloopref
     - ginkgolinter
-    - goconst
     - gocritic
-    - gocyclo
     - gofmt
     - goimports
     - goprintffuncname
@@ -24,13 +21,13 @@ linters:
     - govet
     - importas
     - ineffassign
-    - makezero
+    # - makezero
     - misspell
     - nakedret
     - nilerr
     - nolintlint
     - prealloc
-    - revive
+    # - revive
     - staticcheck
     - stylecheck
     - tagliatelle
@@ -168,8 +165,10 @@ issues:
       text: "G304: Potential file inclusion via variable"
     - linters:
         - dupl
+        - errcheck
+        - goconst
       path: _test\.go
-
+      
 run:
   go: "1.22"
   timeout: 10m

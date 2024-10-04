@@ -19,8 +19,8 @@ var _ = Describe("Joins", func() {
 
 	BeforeEach(func() {
 		pod1 = object.NewViewObject("pod")
-		object.SetContent(pod1, Unstructured{
-			"spec": Unstructured{
+		object.SetContent(pod1, unstruct{
+			"spec": unstruct{
 				"image":  "image1",
 				"parent": "dep1",
 			},
@@ -29,8 +29,8 @@ var _ = Describe("Joins", func() {
 		pod1.SetLabels(map[string]string{"app": "app1"})
 
 		pod2 = object.NewViewObject("pod")
-		object.SetContent(pod2, Unstructured{
-			"spec": Unstructured{
+		object.SetContent(pod2, unstruct{
+			"spec": unstruct{
 				"image":  "image2",
 				"parent": "dep1",
 			},
@@ -39,8 +39,8 @@ var _ = Describe("Joins", func() {
 		pod2.SetLabels(map[string]string{"app": "app2"})
 
 		pod3 = object.NewViewObject("pod")
-		object.SetContent(pod3, Unstructured{
-			"spec": Unstructured{
+		object.SetContent(pod3, unstruct{
+			"spec": unstruct{
 				"image":  "image1",
 				"parent": "dep2",
 			},
@@ -49,8 +49,8 @@ var _ = Describe("Joins", func() {
 		pod3.SetLabels(map[string]string{"app": "app1"})
 
 		dep1 = object.NewViewObject("dep")
-		object.SetContent(dep1, Unstructured{
-			"spec": Unstructured{
+		object.SetContent(dep1, unstruct{
+			"spec": unstruct{
 				"replicas": int64(3),
 			},
 		})
@@ -58,8 +58,8 @@ var _ = Describe("Joins", func() {
 		dep1.SetLabels(map[string]string{"app": "app1"})
 
 		dep2 = object.NewViewObject("dep")
-		object.SetContent(dep2, Unstructured{
-			"spec": Unstructured{
+		object.SetContent(dep2, unstruct{
+			"spec": unstruct{
 				"replicas": int64(1),
 			},
 		})
@@ -67,8 +67,8 @@ var _ = Describe("Joins", func() {
 		dep2.SetLabels(map[string]string{"app": "app2"})
 
 		rs1 = object.NewViewObject("rs")
-		object.SetContent(rs1, Unstructured{
-			"spec": Unstructured{
+		object.SetContent(rs1, unstruct{
+			"spec": unstruct{
 				"dep": "dep1",
 			},
 		})
@@ -76,22 +76,22 @@ var _ = Describe("Joins", func() {
 		rs1.SetLabels(map[string]string{"app": "app1"})
 
 		rs2 = object.NewViewObject("rs")
-		object.SetContent(rs2, Unstructured{
-			"spec": Unstructured{
+		object.SetContent(rs2, unstruct{
+			"spec": unstruct{
 				"dep": "dep2",
 			},
 		})
 		object.SetName(rs2, "default", "rs2")
 		rs2.SetLabels(map[string]string{"app": "app2"})
 
-		eng = NewDefaultEngine("view", []GVK{viewv1a1.GroupVersion.WithKind("pod"),
+		eng = NewDefaultEngine("view", []gvk{viewv1a1.GroupVersion.WithKind("pod"),
 			viewv1a1.GroupVersion.WithKind("dep"),
 			viewv1a1.GroupVersion.WithKind("rs")}, logger)
 	})
 
 	Describe("Evaluating join expressions for Added events", func() {
 		It("should evaluate a join on the pod parent", func() {
-			jsonData := `{"@join":{"@eq":["$.dep.metadata.name","$.pod.spec.parent"]}}`
+			jsonData := `{"@join":{"@eq":["$.dep.metadata.name","$.pod.spec.parent"]}}` //nolint:goconst
 			j := newJoin(eng, []byte(jsonData))
 
 			eng.WithObjects(dep1, dep2)
@@ -125,7 +125,7 @@ var _ = Describe("Joins", func() {
 		})
 
 		It("should evaluate a join on labels", func() {
-			jsonData := `{"@join":{"@eq":["$.dep.metadata.labels.app","$.pod.metadata.labels.app"]}}`
+			jsonData := `{"@join":{"@eq":["$.dep.metadata.labels.app","$.pod.metadata.labels.app"]}}` //nolint:goconst
 			j := newJoin(eng, []byte(jsonData))
 
 			eng.WithObjects(pod1, pod2, pod3)
@@ -146,13 +146,13 @@ var _ = Describe("Joins", func() {
 		})
 
 		It("should yield an empty delta when joining on a non-existent object", func() {
-			jsonData := `{"@join":{"@eq":["$.dep.metadata.labels.app","$.rs.metadata.labels.app"]}}`
+			jsonData := `{"@join":{"@eq":["$.dep.metadata.labels.app","$.rs.metadata.labels.app"]}}` //nolint:goconst
 			j := newJoin(eng, []byte(jsonData))
 
 			eng.WithObjects(pod1, pod2, pod3)
 			deltas, err := j.Evaluate(cache.Delta{Type: cache.Added, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(deltas).To(HaveLen(0))
+			Expect(deltas).To(BeEmpty())
 		})
 
 		It("should evaluate a join on a 3 views", func() {
@@ -185,7 +185,7 @@ var _ = Describe("Joins", func() {
 			deltas, err := j.Evaluate(cache.Delta{Type: cache.Deleted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(HaveLen(0))
+			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("pod")].List()).To(BeEmpty())
 			Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 
 			Expect(deltas).To(HaveLen(1))
@@ -229,7 +229,7 @@ var _ = Describe("Joins", func() {
 			Expect(delta.Object.UnstructuredContent()["dep"]).To(Equal(dep2.UnstructuredContent()))
 
 			// change the image in pod3
-			pod3.UnstructuredContent()["spec"].(Unstructured)["image"] = "newimage"
+			pod3.UnstructuredContent()["spec"].(unstruct)["image"] = "newimage"
 			deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: pod3})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -320,7 +320,7 @@ var _ = Describe("Joins", func() {
 
 			delta := deltas[0]
 			Expect(delta.IsUnchanged()).To(BeFalse())
-			if delta.Object.UnstructuredContent()["pod"].(Unstructured)["metadata"].(Unstructured)["name"] != "pod1" {
+			if delta.Object.UnstructuredContent()["pod"].(unstruct)["metadata"].(unstruct)["name"] != "pod1" {
 				delta = deltas[1]
 			}
 			Expect(delta.Type).To(Equal(cache.Deleted))
@@ -329,7 +329,7 @@ var _ = Describe("Joins", func() {
 
 			delta = deltas[1]
 			Expect(delta.IsUnchanged()).To(BeFalse())
-			if delta.Object.UnstructuredContent()["pod"].(Unstructured)["metadata"].(Unstructured)["name"] != "pod3" {
+			if delta.Object.UnstructuredContent()["pod"].(unstruct)["metadata"].(unstruct)["name"] != "pod3" {
 				delta = deltas[0]
 			}
 			Expect(delta.Type).To(Equal(cache.Deleted))
@@ -377,7 +377,7 @@ func objFieldEq(elem any, fields ...string) types.GomegaMatcher {
 
 func newJoin(eng Engine, data []byte) *Join {
 	var j opv1a1.Join
-	err := yaml.Unmarshal([]byte(data), &j)
+	err := yaml.Unmarshal(data, &j)
 	Expect(err).NotTo(HaveOccurred())
 	return NewJoin(eng, &j)
 }

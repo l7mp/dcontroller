@@ -23,11 +23,10 @@ const DefaultWatchChannelBuffer = 256
 var _ cache.Cache = &ViewCache{}
 
 type ViewCache struct {
-	mu           sync.RWMutex
-	caches       map[schema.GroupVersionKind]toolscache.Indexer
-	informers    map[schema.GroupVersionKind]*ViewCacheInformer
-	informersMux sync.RWMutex
-	logger, log  logr.Logger
+	mu          sync.RWMutex
+	caches      map[schema.GroupVersionKind]toolscache.Indexer
+	informers   map[schema.GroupVersionKind]*ViewCacheInformer
+	logger, log logr.Logger
 }
 
 func NewViewCache(opts Options) *ViewCache {
@@ -45,7 +44,6 @@ func NewViewCache(opts Options) *ViewCache {
 	return c
 }
 
-// cache handlers
 func (c *ViewCache) RegisterCacheForKind(gvk schema.GroupVersionKind) error {
 	c.log.V(1).Info("registering cache for new GVK", "gvk", gvk)
 
@@ -88,7 +86,6 @@ func (c *ViewCache) GetCacheForKind(gvk schema.GroupVersionKind) (toolscache.Ind
 	return indexer, nil
 }
 
-// informer handlers
 func (c *ViewCache) RegisterInformerForKind(gvk schema.GroupVersionKind) error {
 	c.log.V(4).Info("registering informer for new GVK", "gvk", gvk)
 
@@ -241,14 +238,12 @@ func (c *ViewCache) Delete(obj object.Object) error {
 	return nil
 }
 
-// indexer is unimplemented
 func (c *ViewCache) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	c.log.Info("IndexField called on ViewCache", "gvk", gvk)
 	return errors.New("field indexing is not supported for ViewCache")
 }
 
-// client.Reader
 func (c *ViewCache) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	target, ok := obj.(object.Object)
 	if !ok {
@@ -319,7 +314,6 @@ func (c *ViewCache) Dump(ctx context.Context, gvk schema.GroupVersionKind) []str
 	return ret
 }
 
-// watcher
 func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
 	gvk := list.GetObjectKind().GroupVersionKind()
 
@@ -358,7 +352,7 @@ func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...c
 
 		c.log.V(5).Info("stopping watcher", "gvk", gvk)
 
-		informer.RemoveEventHandler(handlerReg)
+		informer.RemoveEventHandler(handlerReg) //nolint:errcheck
 		watcher.Stop()
 	}()
 

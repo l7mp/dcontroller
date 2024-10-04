@@ -78,7 +78,7 @@ func AsString(d any) (string, error) {
 	}
 
 	// convert numeric
-	switch reflect.ValueOf(d).Kind() {
+	switch reflect.ValueOf(d).Kind() { //nolint:exhaustive
 	case reflect.String:
 		return reflect.ValueOf(d).String(), nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr, reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
@@ -279,7 +279,7 @@ func AsBinaryIntOrFloatList(d any) ([]int64, []float64, reflect.Kind, error) {
 	return is, fs, kind, nil
 }
 
-// returns an expression or an expression list
+// AsExpOrList returns an expression or an expression list.
 func AsExpOrList(d any) ([]Expression, error) {
 	exp, ok := d.(Expression)
 	if !ok {
@@ -293,7 +293,7 @@ func AsExpOrList(d any) ([]Expression, error) {
 		return nil, fmt.Errorf("argument is not an expression: %s", util.Stringify(d))
 	}
 
-	if exp.Op == "@list" {
+	if exp.Op == "@list" { //nolint:goconst
 		ret, ok := exp.Literal.([]Expression)
 		if !ok {
 			return nil, fmt.Errorf("internal error: list expression should contain a literal list: %s",

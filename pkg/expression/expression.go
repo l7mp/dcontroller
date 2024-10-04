@@ -210,7 +210,6 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			args, err := AsExpOrList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
-
 			}
 
 			if len(args) != 2 {
@@ -255,11 +254,10 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 
 			return vs, nil
 
-		case "@any": // @in: [exp, list]
+		case "@any", "@none": // @in: [exp, list]
 			args, err := AsExpOrList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
-
 			}
 
 			if len(args) != 2 {
@@ -308,7 +306,6 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			args, err := AsExpOrList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
-
 			}
 
 			if len(args) != 2 {
@@ -345,55 +342,6 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 				}
 
 				if !b {
-					v = false
-					break
-				}
-			}
-
-			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
-			return v, nil
-
-		case "@none": // @in: [exp, list]
-			args, err := AsExpOrList(e.Arg)
-			if err != nil {
-				return nil, NewExpressionError(e, err)
-
-			}
-
-			if len(args) != 2 {
-				return nil, NewExpressionError(e,
-					errors.New("invalid arguments: expected 2 arguments"))
-			}
-
-			// conditional
-			exp := args[0]
-
-			// arguments
-			rawArg, err := args[1].Evaluate(ctx)
-			if err != nil {
-				return nil, errors.New("failed to evaluate arguments")
-			}
-
-			list, err := AsList(rawArg)
-			if err != nil {
-				return nil, errors.New("invalid arguments: expected a list")
-			}
-
-			v := true
-			for _, input := range list {
-				res, err := exp.Evaluate(EvalCtx{Object: ctx.Object, Subject: input, Log: ctx.Log})
-				if err != nil {
-					return nil, err
-				}
-
-				b, err := AsBool(res)
-				if err != nil {
-					return nil, NewExpressionError(e,
-						fmt.Errorf("expected conditional expression to "+
-							"evaluate to boolean: %w", err))
-				}
-
-				if b {
 					v = false
 					break
 				}
@@ -507,7 +455,6 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			args, err := AsList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
-
 			}
 
 			if len(args) != 2 {
@@ -618,7 +565,6 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			args, err := AsList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
-
 			}
 
 			if len(args) != 2 {
@@ -715,7 +661,6 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			args, err := AsList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
-
 			}
 
 			v := int64(len(args))
@@ -726,7 +671,6 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			args, err := AsList(arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
-
 			}
 
 			if len(args) != 2 {
@@ -969,22 +913,18 @@ func (e *Expression) String() string {
 	return string(b)
 }
 
-func (in *Expression) DeepCopyInto(out *Expression) {
-	if in == nil || out == nil {
+func (e *Expression) DeepCopyInto(out *Expression) {
+	if e == nil || out == nil {
 		return
 	}
-	*out = *in
+	*out = *e
 
-	j, err := json.Marshal(in)
+	j, err := json.Marshal(e)
 	if err != nil {
-		out = nil
 		return
 	}
 
 	if err := json.Unmarshal(j, out); err != nil {
-		out = nil
 		return
 	}
-
-	return
 }

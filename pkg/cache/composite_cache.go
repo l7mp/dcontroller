@@ -104,7 +104,7 @@ func (cc *CompositeCache) Start(ctx context.Context) error {
 
 	// we must run this in a goroutine, otherwise the default cache cannot start up
 	// ignore the returned error: viewcache.Start() never errs
-	go cc.viewCache.Start(ctx)
+	go cc.viewCache.Start(ctx) //nolint:errcheck
 
 	return cc.defaultCache.Start(ctx)
 }

@@ -51,7 +51,7 @@ const (
 	interval = time.Millisecond * 250
 	// loglevel = -10
 	loglevel = -3
-	//loglevel = -1
+	// loglevel = -1
 )
 
 var (
@@ -68,7 +68,7 @@ var (
 	k8sClient        client.Client
 	testEnv          *envtest.Environment
 	ctx              context.Context
-	cancel, opCancel context.CancelFunc
+	cancel, opCancel context.CancelFunc //nolint:unused
 	logger, setupLog logr.Logger
 )
 

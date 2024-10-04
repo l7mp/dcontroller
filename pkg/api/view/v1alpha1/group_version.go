@@ -16,6 +16,7 @@ var (
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
+// NewGVK returns the full GVK of a view.
 func NewGVK(view string) schema.GroupVersionKind {
 	return GroupVersion.WithKind(view)
 }

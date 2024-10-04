@@ -158,7 +158,7 @@ func (c *controller) startOp(key types.NamespacedName) {
 	c.operators[key] = e
 	c.mu.Unlock()
 
-	go e.op.Start(ctx)
+	go e.op.Start(ctx) //nolint:errcheck
 }
 
 func (c *controller) upsertOperator(spec *opv1a1.Operator) (*operator, error) {

@@ -19,18 +19,18 @@ var _ = Describe("Aggregations", func() {
 
 	BeforeEach(func() {
 		objs = []object.Object{object.NewViewObject("view"), object.NewViewObject("view")}
-		object.SetContent(objs[0], Unstructured{
-			"spec": Unstructured{
+		object.SetContent(objs[0], unstruct{
+			"spec": unstruct{
 				"a": int64(1),
-				"b": Unstructured{"c": int64(2)},
+				"b": unstruct{"c": int64(2)},
 			},
 			"c": "c",
 		})
 		object.SetName(objs[0], "default", "name")
-		object.SetContent(objs[1], Unstructured{
-			"spec": Unstructured{
+		object.SetContent(objs[1], unstruct{
+			"spec": unstruct{
 				"a": int64(2),
-				"b": Unstructured{"c": int64(3)},
+				"b": unstruct{"c": int64(3)},
 			},
 			"d": "d",
 		})
@@ -50,7 +50,8 @@ var _ = Describe("Aggregations", func() {
 			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Added, Object: objs[0]}))
 
 			res, err = ag.Evaluate(cache.Delta{Type: cache.Added, Object: objs[1]})
-			Expect(res).To(HaveLen(0))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(BeEmpty())
 		})
 
 		It("should evaluate a false select expression", func() {
@@ -59,11 +60,11 @@ var _ = Describe("Aggregations", func() {
 
 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(0))
+			Expect(res).To(BeEmpty())
 
 			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[1]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(0))
+			Expect(res).To(BeEmpty())
 		})
 
 		It("should evaluate an inverted false select expression", func() {
@@ -89,7 +90,7 @@ var _ = Describe("Aggregations", func() {
 
 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(0))
+			Expect(res).To(BeEmpty())
 		})
 	})
 
@@ -122,10 +123,10 @@ var _ = Describe("Aggregations", func() {
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].Type).To(Equal(cache.Added))
 			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
-				Object: Unstructured{
+				Object: unstruct{
 					"apiVersion": "view.dcontroller.io/v1alpha1",
 					"kind":       "view",
-					"metadata": Unstructured{
+					"metadata": unstruct{
 						"name": "name",
 					},
 				},
@@ -144,7 +145,7 @@ var _ = Describe("Aggregations", func() {
 			obj := res[0].Object
 			raw, ok := obj.Object["metadata"]
 			Expect(ok).To(BeTrue())
-			meta, ok := raw.(Unstructured)
+			meta, ok := raw.(unstruct)
 			Expect(ok).To(BeTrue())
 			Expect(meta["namespace"]).To(Equal("default"))
 			Expect(meta["name"]).To(Equal("name"))
@@ -161,7 +162,7 @@ var _ = Describe("Aggregations", func() {
 			obj := res[0].Object
 			raw, ok := obj.Object["metadata"]
 			Expect(ok).To(BeTrue())
-			meta, ok := raw.(Unstructured)
+			meta, ok := raw.(unstruct)
 			Expect(ok).To(BeTrue())
 			Expect(meta["namespace"]).To(Equal("default"))
 			Expect(meta["name"]).To(Equal("name"))
@@ -245,10 +246,10 @@ var _ = Describe("Aggregations", func() {
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].Type).To(Equal(cache.Added))
 			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
-				Object: Unstructured{
+				Object: unstruct{
 					"apiVersion": "view.dcontroller.io/v1alpha1",
 					"kind":       "view",
-					"metadata": Unstructured{
+					"metadata": unstruct{
 						"namespace": "test-ns",
 						"name":      "test-name",
 					},
@@ -368,14 +369,14 @@ var _ = Describe("Aggregations", func() {
 			obj.SetNamespace("test-ns")
 			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(0))
+			Expect(res).To(BeEmpty())
 		})
 	})
 })
 
 func newAggregation(eng Engine, data []byte) *Aggregation {
 	var a opv1a1.Aggregation
-	err := yaml.Unmarshal([]byte(data), &a)
+	err := yaml.Unmarshal(data, &a)
 	Expect(err).NotTo(HaveOccurred())
 	return NewAggregation(eng, &a)
 }

@@ -162,7 +162,7 @@ var _ = Describe("CompositeCache", func() {
 			err = cache.List(ctx, list)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.Items).To(HaveLen(1))
-			Expect(object.DeepEqual(&list.Items[0], pod)).NotTo(BeFalse())
+			Expect(object.DeepEqual(&list.Items[0], pod)).To(BeTrue())
 		})
 
 		It("should return an empty list when cache is empty", func() {

@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	emptyView = []GVK{}
+	emptyView = []gvk{}
 	loglevel  = -10
 	logger    = zap.New(zap.UseFlagOptions(&zap.Options{
 		Development:     true,
@@ -42,8 +42,8 @@ var _ = Describe("Pipelines", func() {
 
 		BeforeEach(func() {
 			pod1 = object.NewViewObject("pod")
-			object.SetContent(pod1, Unstructured{
-				"spec": Unstructured{
+			object.SetContent(pod1, unstruct{
+				"spec": unstruct{
 					"image":  "image1",
 					"parent": "dep1",
 				},
@@ -52,8 +52,8 @@ var _ = Describe("Pipelines", func() {
 			pod1.SetLabels(map[string]string{"app": "app1"})
 
 			pod2 = object.NewViewObject("pod")
-			object.SetContent(pod2, Unstructured{
-				"spec": Unstructured{
+			object.SetContent(pod2, unstruct{
+				"spec": unstruct{
 					"image":  "image2",
 					"parent": "dep1",
 				},
@@ -62,8 +62,8 @@ var _ = Describe("Pipelines", func() {
 			pod2.SetLabels(map[string]string{"app": "app2"})
 
 			pod3 = object.NewViewObject("pod")
-			object.SetContent(pod3, Unstructured{
-				"spec": Unstructured{
+			object.SetContent(pod3, unstruct{
+				"spec": unstruct{
 					"image":  "image1",
 					"parent": "dep2",
 				},
@@ -72,8 +72,8 @@ var _ = Describe("Pipelines", func() {
 			pod3.SetLabels(map[string]string{"app": "app1"})
 
 			dep1 = object.NewViewObject("dep")
-			object.SetContent(dep1, Unstructured{
-				"spec": Unstructured{
+			object.SetContent(dep1, unstruct{
+				"spec": unstruct{
 					"replicas": int64(3),
 				},
 			})
@@ -81,8 +81,8 @@ var _ = Describe("Pipelines", func() {
 			dep1.SetLabels(map[string]string{"app": "app1"})
 
 			dep2 = object.NewViewObject("dep")
-			object.SetContent(dep2, Unstructured{
-				"spec": Unstructured{
+			object.SetContent(dep2, unstruct{
+				"spec": unstruct{
 					"replicas": int64(1),
 				},
 			})
@@ -90,11 +90,11 @@ var _ = Describe("Pipelines", func() {
 			dep2.SetLabels(map[string]string{"app": "app2"})
 
 			rs1 = object.NewViewObject("rs")
-			object.SetContent(rs1, Unstructured{
-				"spec": Unstructured{
+			object.SetContent(rs1, unstruct{
+				"spec": unstruct{
 					"dep": "dep1",
 				},
-				"status": Unstructured{
+				"status": unstruct{
 					"ready": int64(2),
 				},
 			})
@@ -102,18 +102,18 @@ var _ = Describe("Pipelines", func() {
 			rs1.SetLabels(map[string]string{"app": "app1"})
 
 			rs2 = object.NewViewObject("rs")
-			object.SetContent(rs2, Unstructured{
-				"spec": Unstructured{
+			object.SetContent(rs2, unstruct{
+				"spec": unstruct{
 					"dep": "dep2",
 				},
-				"status": Unstructured{
+				"status": unstruct{
 					"ready": int64(1),
 				},
 			})
 			object.SetName(rs2, "default", "rs2")
 			rs2.SetLabels(map[string]string{"app": "app2"})
 
-			eng = NewDefaultEngine("view", []GVK{viewv1a1.GroupVersion.WithKind("pod"),
+			eng = NewDefaultEngine("view", []gvk{viewv1a1.GroupVersion.WithKind("pod"),
 				viewv1a1.GroupVersion.WithKind("dep"),
 				viewv1a1.GroupVersion.WithKind("rs")}, logger)
 		})
@@ -149,10 +149,10 @@ var _ = Describe("Pipelines", func() {
 				Expect(delta.IsUnchanged()).To(BeFalse())
 				Expect(delta.Object.GetName()).To(Equal("dep1--pod1"))
 				Expect(delta.Object.GetNamespace()).To(Equal("default"))
-				Expect(delta.Object.UnstructuredContent()).To(Equal(Unstructured{
+				Expect(delta.Object.UnstructuredContent()).To(Equal(unstruct{
 					"apiVersion": "view.dcontroller.io/v1alpha1",
 					"kind":       "view",
-					"metadata": Unstructured{
+					"metadata": unstruct{
 						"name":      "dep1--pod1",
 						"namespace": "default",
 					},
@@ -174,10 +174,10 @@ var _ = Describe("Pipelines", func() {
 				Expect(delta.IsUnchanged()).To(BeFalse())
 				Expect(delta.Object.GetName()).To(Equal("pod1"))
 				Expect(delta.Object.GetNamespace()).To(Equal("default"))
-				Expect(delta.Object.UnstructuredContent()).To(Equal(Unstructured{
+				Expect(delta.Object.UnstructuredContent()).To(Equal(unstruct{
 					"apiVersion": "view.dcontroller.io/v1alpha1",
 					"kind":       "view",
-					"metadata": Unstructured{
+					"metadata": unstruct{
 						"name":      "pod1",
 						"namespace": "default",
 						"labels":    map[string]any{"app": "app1"},
@@ -194,7 +194,7 @@ var _ = Describe("Pipelines", func() {
 
 				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(deltas).To(HaveLen(0))
+				Expect(deltas).To(BeEmpty())
 			})
 		})
 
@@ -243,7 +243,7 @@ var _ = Describe("Pipelines", func() {
 
 				// rewrite pod1 parent
 				// oldpod1 := pod1.DeepCopy()
-				pod1.UnstructuredContent()["spec"].(Unstructured)["parent"] = "dep2"
+				pod1.UnstructuredContent()["spec"].(unstruct)["parent"] = "dep2"
 				deltas, err = p.Evaluate(cache.Delta{Type: cache.Updated, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
 
@@ -309,7 +309,7 @@ var _ = Describe("Pipelines", func() {
 
 				// rewrite pod1 parent
 				// oldpod1 := pod1.DeepCopy()
-				pod1.UnstructuredContent()["spec"].(Unstructured)["parent"] = "dep2"
+				pod1.UnstructuredContent()["spec"].(unstruct)["parent"] = "dep2"
 				deltas, err = p.Evaluate(cache.Delta{Type: cache.Updated, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
 
@@ -338,11 +338,11 @@ var _ = Describe("Pipelines", func() {
 
 				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(deltas).To(HaveLen(0))
+				Expect(deltas).To(BeEmpty())
 
 				deltas, err = p.Evaluate(cache.Delta{Type: cache.Updated, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(deltas).To(HaveLen(0))
+				Expect(deltas).To(BeEmpty())
 
 				// do not ignore a delete event for the same object
 				deltas, err = p.Evaluate(cache.Delta{Type: cache.Deleted, Object: dep1})
@@ -430,7 +430,7 @@ var _ = Describe("Pipelines", func() {
 						},
 						map[string]any{
 							"lastTransitionTime": "2024-07-08T05:36:35Z",
-							"message":            "listener object references sucessfully resolved",
+							"message":            "listener object references successfully resolved",
 							"observedGeneration": int64(1),
 							"reason":             "ResolvedRefs",
 							"status":             "True",
@@ -582,7 +582,7 @@ var _ = Describe("Pipelines", func() {
 			object.SetName(route, "default", "route")
 			object.SetContent(route, testUDPRoute)
 			route = object.DeepCopy(route)
-			eng = NewDefaultEngine("view", []GVK{
+			eng = NewDefaultEngine("view", []gvk{
 				viewv1a1.GroupVersion.WithKind("gateway"),
 				viewv1a1.GroupVersion.WithKind("route")}, logger)
 		})
@@ -643,7 +643,7 @@ var _ = Describe("Pipelines", func() {
 			route.SetNamespace("other")
 			deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: route})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(deltas).To(HaveLen(0))
+			Expect(deltas).To(BeEmpty())
 		})
 
 		It("should implement the route attachment API with the Selector policy", func() {
@@ -702,7 +702,7 @@ var _ = Describe("Pipelines", func() {
 			svc1 = testutils.TestSvc.DeepCopy()
 			es1 = testutils.TestEndpointSlice.DeepCopy()
 
-			eng = NewDefaultEngine("view", []GVK{svc1.GroupVersionKind(),
+			eng = NewDefaultEngine("view", []gvk{svc1.GroupVersionKind(),
 				es1.GroupVersionKind()}, logger)
 		})
 
@@ -759,7 +759,7 @@ var _ = Describe("Pipelines", func() {
 			// cannot test json equivalence: map key order is arbitrary
 			// instead, parse back the json produced
 			var p2 *Pipeline
-			err = json.Unmarshal([]byte(js), &p2)
+			err = json.Unmarshal(js, &p2)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(p2).To(Equal(p1))
@@ -769,7 +769,7 @@ var _ = Describe("Pipelines", func() {
 
 func newPipeline(eng Engine, data []byte) *Pipeline {
 	var p opv1a1.Pipeline
-	err := yaml.Unmarshal([]byte(data), &p)
+	err := yaml.Unmarshal(data, &p)
 	Expect(err).NotTo(HaveOccurred())
 	return &Pipeline{
 		Join:        NewJoin(eng, p.Join),

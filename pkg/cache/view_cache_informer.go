@@ -132,7 +132,7 @@ func (c *ViewCacheInformer) TriggerEvent(eventType toolscache.DeltaType, oldObj,
 		c.log.V(8).Info("trigger-event: sending event to handler", "event", eventType,
 			"object", object.Dump(newObj), "handler-id", handler.id)
 
-		switch eventType {
+		switch eventType { //nolint:exhaustive
 		case toolscache.Added:
 			handler.OnAdd(object.DeepCopy(newObj), false)
 			events++
@@ -142,6 +142,8 @@ func (c *ViewCacheInformer) TriggerEvent(eventType toolscache.DeltaType, oldObj,
 		case toolscache.Deleted:
 			handler.OnDelete(object.DeepCopy(newObj))
 			events++
+		default:
+			c.log.V(4).Info("trigger-event: ignoring event", "event", eventType)
 		}
 	}
 }

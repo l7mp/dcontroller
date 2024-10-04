@@ -72,12 +72,12 @@ type Target struct {
 	Type TargetType `json:"type,omitempty"`
 }
 
+// TargetType represents the type of a target.
 type TargetType string
 
 const (
-	// Updates defines a target type that will fully overwrite the target resource with the
-	// controller ouutput.
+	// Updater is a target that will fully overwrite the target resource with the update.
 	Updater TargetType = "Updater"
-	// Updates defines a target type that will applies the fully overwrite the target resource.
+	// Patcher is a target that applies the update as a patch to the target resource.
 	Patcher TargetType = "Patcher"
 )

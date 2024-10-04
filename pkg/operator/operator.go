@@ -30,7 +30,7 @@ type operator struct {
 	logger, log logr.Logger
 }
 
-// NewOperator creates a new operator.
+// New creates a new operator.
 func New(mgr runtimeManager.Manager, name string, spec *opv1a1.OperatorSpec, logger logr.Logger) *operator {
 	op := &operator{
 		name:        name,
@@ -63,7 +63,6 @@ func (op *operator) Start(ctx context.Context) error {
 	op.log.Info("starting")
 	op.ctx = ctx
 	return op.mgr.Start(ctx)
-
 }
 
 // GetManager returns the controller runtime manager associated with the operator.

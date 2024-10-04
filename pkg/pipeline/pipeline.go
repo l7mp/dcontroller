@@ -19,19 +19,21 @@ type Evaluator interface {
 	fmt.Stringer
 }
 
+// Pipeline is query that knows how to evaluate itself.
 type Pipeline struct {
 	*Join
 	*Aggregation
 	engine Engine
 }
 
-func NewPipeline(targetView string, baseviews []GVK, config opv1a1.Pipeline, log logr.Logger) (Evaluator, error) {
-	if len(baseviews) > 1 && config.Join == nil {
+// NewPipeline creates a new pipeline from the set of base objects and a seralized pipeline that writes into a given target.
+func NewPipeline(target string, sources []gvk, config opv1a1.Pipeline, log logr.Logger) (Evaluator, error) {
+	if len(sources) > 1 && config.Join == nil {
 		return nil, errors.New("invalid controller configuration: controllers " +
 			"defined on multiple base resources must specify a Join in the pipeline")
 	}
 
-	engine := NewDefaultEngine(targetView, baseviews, log)
+	engine := NewDefaultEngine(target, sources, log)
 	return &Pipeline{
 		Join:        NewJoin(engine, config.Join),
 		Aggregation: NewAggregation(engine, config.Aggregation),

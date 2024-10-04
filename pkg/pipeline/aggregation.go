@@ -19,6 +19,7 @@ type Aggregation struct {
 	engine Engine
 }
 
+// NewAggregation creates a new aggregation from a seralized representation.
 func NewAggregation(engine Engine, config *opv1a1.Aggregation) *Aggregation {
 	if config == nil {
 		return nil

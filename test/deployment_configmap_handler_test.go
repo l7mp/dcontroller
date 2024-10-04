@@ -82,7 +82,7 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 			yamlData, err := os.ReadFile("deployment_configmap_handler.yaml")
 			Expect(err).NotTo(HaveOccurred())
 			var op opv1a1.Operator
-			Expect(yaml.Unmarshal([]byte(yamlData), &op)).NotTo(HaveOccurred())
+			Expect(yaml.Unmarshal(yamlData, &op)).NotTo(HaveOccurred())
 
 			setupLog.Info("adding new operator")
 			Expect(k8sClient.Create(ctx, &op)).Should(Succeed())

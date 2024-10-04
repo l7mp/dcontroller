@@ -54,7 +54,7 @@ var _ = Describe("StatusReporter", func() {
 
 		errs := [ErrorReporterStackSize + 10]error{}
 		for i := 0; i < ErrorReporterStackSize+10; i++ {
-			errs[i] = errors.New(fmt.Sprintf("%d", i))
+			errs[i] = fmt.Errorf("%d", i)
 			Expect(r.PushError(errs[i])).To(Equal(errs[i]))
 		}
 		Expect(r.Size()).To(Equal(ErrorReporterStackSize))

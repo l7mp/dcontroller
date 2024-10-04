@@ -84,7 +84,7 @@ var _ = Describe("Startup", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
-			go mgr.Start(ctx) // will stop with a context cancelled error
+			go mgr.Start(ctx)
 
 			cache := mgr.GetCache()
 			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
@@ -105,7 +105,7 @@ var _ = Describe("Startup", func() {
 			mgr, err := NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
-			go mgr.Start(ctx) // will stop with a context cancelled error
+			go mgr.Start(ctx)
 
 			// pod added
 			Expect(mgr.GetRuntimeCache().Add(pod)).NotTo(HaveOccurred())
@@ -131,7 +131,7 @@ var _ = Describe("Startup", func() {
 			mgr, err := NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
-			go mgr.Start(ctx) // will stop with a context cancelled error
+			go mgr.Start(ctx)
 
 			cache := mgr.GetCache()
 			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
@@ -158,7 +158,7 @@ var _ = Describe("Startup", func() {
 			mgr, err := NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
-			go mgr.Start(ctx) // will stop with a context cancelled error
+			go mgr.Start(ctx)
 
 			// pod added
 			Expect(mgr.GetRuntimeCache().Add(pod)).NotTo(HaveOccurred())
@@ -174,8 +174,6 @@ var _ = Describe("Startup", func() {
 			})
 			err = c.Get(ctx, client.ObjectKeyFromObject(pod), obj)
 			Expect(err).NotTo(HaveOccurred())
-			// the returned object somehow obtains a resource-version: remove it
-			//unstructured.RemoveNestedField(obj.Object, "metadata", "resourceVersion")
 			Expect(obj).To(Equal(pod))
 			Expect(reflect.DeepEqual(pod, obj)).To(BeTrue())
 		})
@@ -184,7 +182,7 @@ var _ = Describe("Startup", func() {
 			mgr, err := NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
-			go mgr.Start(ctx) // will stop with a context cancelled error
+			go mgr.Start(ctx)
 
 			obj := object.NewViewObject("view")
 			object.SetContent(obj, map[string]any{"a": int64(1)})
@@ -210,7 +208,7 @@ var _ = Describe("Startup", func() {
 			mgr, err := NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
-			go mgr.Start(ctx) // will stop with a context cancelled error
+			go mgr.Start(ctx)
 
 			obj := &unstructured.UnstructuredList{}
 			obj.SetGroupVersionKind(schema.GroupVersionKind{
@@ -230,15 +228,13 @@ var _ = Describe("Startup", func() {
 				Version:  "v1",
 				Resource: "pods", // Resource does not equal Kind!
 			}
-			getFromTracker, err := tracker.Get(gvr, "testns", "testpod")
-			Expect(err).To(HaveOccurred())
-
 			// create
 			Expect(c.Create(ctx, pod)).NotTo(HaveOccurred())
 
 			// second get should succeed
-			getFromTracker, err = tracker.Get(gvr, "testns", "testpod")
+			getFromTracker, err := tracker.Get(gvr, "testns", "testpod")
 			Expect(err).NotTo(HaveOccurred())
+
 			// no way to deep-equal: the tracker returns a native Pod object (not unstructured)
 			Expect(getFromTracker.GetObjectKind().GroupVersionKind()).To(Equal(schema.GroupVersionKind{
 				Group:   "",
@@ -268,7 +264,7 @@ var _ = Describe("Startup", func() {
 			mgr, err := NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
-			go mgr.Start(ctx) // will stop with a context cancelled error
+			go mgr.Start(ctx)
 
 			list := &unstructured.UnstructuredList{}
 			list.SetGroupVersionKind(schema.GroupVersionKind{

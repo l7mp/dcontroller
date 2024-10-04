@@ -117,7 +117,6 @@ spec:
 
 	// write container-num into pods
 	Context("When applying a controller with a pipeline that makes a runtime error", Ordered, Label("controller"), func() {
-		const annotationName = "container-num"
 		var (
 			ctrlCtx    context.Context
 			ctrlCancel context.CancelFunc

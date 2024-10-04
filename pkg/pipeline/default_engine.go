@@ -15,23 +15,23 @@ import (
 	"hsnlab/dcontroller/pkg/util"
 )
 
-type Unstructured = map[string]any
+type unstruct = map[string]any
 
 var ObjectKey = toolscache.MetaObjectToName
 
 // defaultEngine is the default implementation of the pipeline engine.
 type defaultEngine struct {
 	targetView    string               // the views/objects to work on
-	baseviews     []GVK                // the view to put the output objects into
-	baseViewStore map[GVK]*cache.Store // internal view cache
+	baseviews     []gvk                // the view to put the output objects into
+	baseViewStore map[gvk]*cache.Store // internal view cache
 	log           logr.Logger
 }
 
-func NewDefaultEngine(targetView string, baseviews []GVK, log logr.Logger) Engine {
+func NewDefaultEngine(targetView string, baseviews []gvk, log logr.Logger) Engine {
 	return &defaultEngine{
 		targetView:    targetView,
 		baseviews:     baseviews,
-		baseViewStore: make(map[GVK]*cache.Store),
+		baseViewStore: make(map[gvk]*cache.Store),
 		log:           log,
 	}
 }
@@ -43,9 +43,8 @@ func (eng *defaultEngine) WithObjects(objs ...object.Object) {
 	for _, o := range objs {
 		gvk := o.GetObjectKind().GroupVersionKind()
 		eng.initViewStore(gvk)
-		eng.baseViewStore[gvk].Add(o)
+		eng.baseViewStore[gvk].Add(o) //nolint:errcheck
 	}
-	return
 }
 
 func (eng *defaultEngine) IsValidEvent(delta cache.Delta) bool {
@@ -100,7 +99,7 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 
 	// update local view cache
 	var ds []cache.Delta
-	switch delta.Type {
+	switch delta.Type { //nolint:exhaustive
 	case cache.Added:
 		eng.log.V(6).Info("aggregation: add using new object", "object", delta.Object)
 
@@ -145,20 +144,21 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 		}
 
 		// consolidate: objects both in the deleted and added cache are updated
-		if delDelta.IsUnchanged() && addDelta.IsUnchanged() {
+		switch {
+		case delDelta.IsUnchanged() && addDelta.IsUnchanged():
 			// nothing happened: object wasn't in the view and it still isn't
 			// ds = []cache.Delta{{Type: cache.Updated, Object: nil}}
 			ds = []cache.Delta{}
-		} else if delDelta.IsUnchanged() && !addDelta.IsUnchanged() {
+		case delDelta.IsUnchanged() && !addDelta.IsUnchanged():
 			// object added into the view
 			ds = []cache.Delta{addDelta}
-		} else if !delDelta.IsUnchanged() && addDelta.IsUnchanged() {
+		case !delDelta.IsUnchanged() && addDelta.IsUnchanged():
 			// object removed from the view
 			ds = []cache.Delta{delDelta}
-		} else if ObjectKey(delDelta.Object) == ObjectKey(addDelta.Object) {
+		case ObjectKey(delDelta.Object) == ObjectKey(addDelta.Object):
 			// object updated
 			ds = []cache.Delta{{Type: cache.Updated, Object: addDelta.Object}}
-		} else {
+		default:
 			// aggregation affects the name and the name has changed!
 			ds = []cache.Delta{delDelta, addDelta}
 		}
@@ -216,7 +216,6 @@ func (eng *defaultEngine) evalAggregation(a *Aggregation, obj object.Object) (ob
 			// @select shortcuts the iteration
 			return nil, nil
 		}
-
 	}
 
 	obj, err := Normalize(eng, content)
@@ -229,7 +228,7 @@ func (eng *defaultEngine) evalAggregation(a *Aggregation, obj object.Object) (ob
 	return obj, nil
 }
 
-func (eng *defaultEngine) evalStage(e *expression.Expression, u Unstructured) (Unstructured, error) {
+func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) (unstruct, error) {
 	if e.Arg == nil {
 		return nil, NewAggregationError(
 			fmt.Errorf("no expression found in aggregation stage %s", e.String()))
@@ -250,7 +249,7 @@ func (eng *defaultEngine) evalStage(e *expression.Expression, u Unstructured) (U
 		}
 
 		// default is no change
-		var v Unstructured
+		var v unstruct
 		if b {
 			v = u
 		}
@@ -304,7 +303,7 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 	delta = eng.handleUpsertEvent(delta)
 
 	ds := make([]cache.Delta, 0)
-	switch delta.Type {
+	switch delta.Type { //nolint:exhaustive
 	case cache.Added:
 		os, err := eng.evalJoin(j, delta.Object)
 		if err != nil {
@@ -498,7 +497,7 @@ func (eng *defaultEngine) recurseProd(obj object.Object, current []object.Object
 	return nil
 }
 
-func (eng *defaultEngine) initViewStore(gvk GVK) {
+func (eng *defaultEngine) initViewStore(gvk gvk) {
 	if _, ok := eng.baseViewStore[gvk]; !ok {
 		eng.baseViewStore[gvk] = cache.NewStore()
 	}

@@ -11,7 +11,7 @@ import (
 	"hsnlab/dcontroller/pkg/object"
 )
 
-type GVK = schema.GroupVersionKind
+type gvk = schema.GroupVersionKind
 
 type Engine interface {
 	// EvaluateJoin evaluates a join expression.
@@ -29,7 +29,7 @@ type Engine interface {
 	Log() logr.Logger
 }
 
-func Normalize(eng Engine, content Unstructured) (object.Object, error) {
+func Normalize(eng Engine, content unstruct) (object.Object, error) {
 	// Normalize always produces Views!
 	obj := object.NewViewObject(eng.View())
 
@@ -38,7 +38,7 @@ func Normalize(eng Engine, content Unstructured) (object.Object, error) {
 	if !ok {
 		return nil, NewInvalidObjectError("no metadata in object")
 	}
-	metaMap, ok := meta.(Unstructured)
+	metaMap, ok := meta.(unstruct)
 	if !ok {
 		return nil, NewInvalidObjectError("invalid metadata in object")
 	}
@@ -51,7 +51,6 @@ func Normalize(eng Engine, content Unstructured) (object.Object, error) {
 	if reflect.ValueOf(name).Kind() != reflect.String {
 		return nil, NewInvalidObjectError(fmt.Sprintf("metadata/name must be a string "+
 			"(current value %q)", name))
-
 	}
 	nameStr := name.(string)
 	if nameStr == "" {

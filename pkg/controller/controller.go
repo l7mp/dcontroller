@@ -35,7 +35,7 @@ type Options struct {
 
 var _ runtimeManager.Runnable = &Controller{}
 
-// implementation
+// Controller is a dcontroller reconciler.
 type Controller struct {
 	name, kind  string
 	config      opv1a1.Controller
@@ -192,34 +192,34 @@ func (c *Controller) Start(ctx context.Context) error {
 func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 	status := opv1a1.ControllerStatus{Name: c.name}
 
-	condition := metav1.Condition{}
-	if c.errReporter.IsEmpty() {
+	var condition metav1.Condition
+	switch {
+	case c.errReporter.IsEmpty():
 		condition = metav1.Condition{
 			Type:               string(opv1a1.ControllerConditionReady),
 			Status:             metav1.ConditionTrue,
 			ObservedGeneration: gen,
 			LastTransitionTime: metav1.Now(),
 			Reason:             string(opv1a1.ControllerReasonReady),
-			Message:            fmt.Sprintf("Controller is up and running"),
+			Message:            "Controller is up and running",
 		}
-	} else if c.errReporter.IsCritical() {
+	case c.errReporter.IsCritical():
 		condition = metav1.Condition{
 			Type:               string(opv1a1.ControllerConditionReady),
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: gen,
 			LastTransitionTime: metav1.Now(),
 			Reason:             string(opv1a1.ControllerReasonNotReady),
-			Message:            fmt.Sprintf(fmt.Sprintf("Controller failed to start due to a critcal error")),
+			Message:            "Controller failed to start due to a critcal error",
 		}
-
-	} else {
+	default:
 		condition = metav1.Condition{
 			Type:               string(opv1a1.ControllerConditionReady),
 			Status:             metav1.ConditionUnknown,
 			ObservedGeneration: gen,
 			LastTransitionTime: metav1.Now(),
 			Reason:             string(opv1a1.ControllerReasonReconciliationFailed),
-			Message:            fmt.Sprintf(fmt.Sprintf("Controller seems functional but there were reconciliation errors")),
+			Message:            "Controller seems functional but there were reconciliation errors",
 		}
 	}
 
