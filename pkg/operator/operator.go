@@ -4,39 +4,54 @@ package operator
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/yaml"
 
 	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
 	dcontroller "hsnlab/dcontroller/pkg/controller"
 )
 
-var _ Operator = &operator{}
+var _ runtimeManager.Runnable = &Operator{}
 
-type Operator interface {
-	runtimeManager.Runnable
-	GetStatus(int64) opv1a1.OperatorStatus
+type StatusTrigger = struct{}
+
+// Options can be used to customize the Operator's behavior.
+type Options struct {
+	// StatusChannel is a channel to receive status update triggers from the operator. Once the
+	// caller receives a trigger, it should call GetStatus() on the operator to read the
+	// current status and set it in the Operator CRD.
+	StatusChannel chan StatusTrigger
+
+	// Logger is a standard logger.
+	Logger logr.Logger
 }
 
-type operator struct {
+type Operator struct {
 	name        string
 	mgr         runtimeManager.Manager
 	spec        *opv1a1.OperatorSpec
 	controllers []*dcontroller.Controller // maybe nil
 	ctx         context.Context
+	statusChan  chan StatusTrigger
 	logger, log logr.Logger
 }
 
 // New creates a new operator.
-func New(mgr runtimeManager.Manager, name string, spec *opv1a1.OperatorSpec, logger logr.Logger) *operator {
-	op := &operator{
+func New(name string, mgr runtimeManager.Manager, spec *opv1a1.OperatorSpec, opts Options) *Operator {
+	logger := opts.Logger
+	if logger.GetSink() == nil {
+		logger = logr.Discard()
+	}
+
+	op := &Operator{
 		name:        name,
 		mgr:         mgr,
 		spec:        spec,
 		controllers: []*dcontroller.Controller{},
+		statusChan:  opts.StatusChannel,
 		logger:      logger,
 		log:         logger.WithName("operator").WithValues("name", name),
 	}
@@ -52,55 +67,69 @@ func New(mgr runtimeManager.Manager, name string, spec *opv1a1.OperatorSpec, log
 			op.log.Error(err, "failed to create controller", "controller", config.Name)
 		}
 
+		// the controller returned is always valid: this makes sure we will receive the
+		// status update triggers to show the controller errors to the user
 		op.controllers = append(op.controllers, c)
 	}
 
 	return op
 }
 
+// Load creates a new operator from a serialized operator spec.
+func Load(name string, mgr runtimeManager.Manager, file string, opts Options) (*Operator, error) {
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+	var spec opv1a1.OperatorSpec
+	if err := yaml.Unmarshal(b, &spec); err != nil {
+		return nil, fmt.Errorf("failed to parse operator spec: %w", err)
+	}
+
+	return New(name, mgr, &spec, opts), nil
+}
+
 // Start starts the operator. It blocks
-func (op *operator) Start(ctx context.Context) error {
+func (op *Operator) Start(ctx context.Context) error {
 	op.log.Info("starting")
 	op.ctx = ctx
 	return op.mgr.Start(ctx)
 }
 
 // GetManager returns the controller runtime manager associated with the operator.
-func (op *operator) GetManager() runtimeManager.Manager {
+func (op *Operator) GetManager() runtimeManager.Manager {
 	return op.mgr
 }
 
-// Trigger can be used to ask a status update trigger on the operator.
-func (op *operator) Trigger() {
-	if err := op.UpdateStatus(op.mgr.GetClient()); err != nil {
-		op.log.Error(err, "failed to update status")
-	}
+// GetName returns the name of the operator.
+func (op *Operator) GetName() string {
+	return op.name
 }
 
-func (op *operator) UpdateStatus(c client.Client) error {
+// Trigger can be used to ask a status update trigger on the operator.
+func (op *Operator) Trigger() {
 	ctx := op.ctx
 	if ctx == nil {
-		// this should never happen
+		// we are not started yet:
 		ctx = context.TODO()
 	}
 
-	spec := opv1a1.Operator{}
-	key := types.NamespacedName{Name: op.name}
-	err := c.Get(ctx, key, &spec)
-	if err != nil {
-		return fmt.Errorf("cannot Get operator resource: %w", err)
-	}
+	// make this async so that we won't block the operator
+	go func() {
+		defer close(op.statusChan)
 
-	spec.Status = op.GetStatus(spec.GetGeneration())
-	if err := c.Status().Update(ctx, &spec); err != nil {
-		return fmt.Errorf("cannot write status: %w", err)
-	}
-
-	return nil
+		select {
+		case op.statusChan <- StatusTrigger{}:
+			op.log.V(4).Info("operator status update triggered")
+			return
+		case <-ctx.Done():
+			return
+		}
+	}()
 }
 
 // GetStatus populates the operator status with the controller statuses.
-func (op *operator) GetStatus(gen int64) opv1a1.OperatorStatus {
+func (op *Operator) GetStatus(gen int64) opv1a1.OperatorStatus {
 	cs := []opv1a1.ControllerStatus{}
 	for _, c := range op.controllers {
 		if c != nil {

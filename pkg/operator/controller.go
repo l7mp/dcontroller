@@ -23,6 +23,9 @@ import (
 	"hsnlab/dcontroller/pkg/manager"
 )
 
+// StatusChannelBufferSize defines the longest backlog on the status channel.
+const StatusChannelBufferSize = 64
+
 var _ Controller = &controller{}
 
 type Controller interface {
@@ -32,8 +35,9 @@ type Controller interface {
 }
 
 type opEntry struct {
-	op     *operator
-	cancel context.CancelFunc
+	op         *Operator
+	cancel     context.CancelFunc
+	statusChan chan StatusTrigger
 }
 
 type controller struct {
@@ -115,14 +119,7 @@ func (c *controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		c.deleteOperator(req.NamespacedName)
 	}
 
-	operator, err := c.upsertOperator(&op)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// we pass in our own client: the operator's client may not have been started yet
-	if err := operator.UpdateStatus(c); err != nil {
-		log.Error(err, "failed to update Operator status")
+	if _, err := c.upsertOperator(&op); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -136,10 +133,11 @@ func (c *controller) Start(ctx context.Context) error {
 	c.mu.Lock()
 	c.ctx = ctx
 	c.started = true
+	c.mu.Unlock()
+
 	for k := range c.operators {
 		c.startOp(k)
 	}
-	c.mu.Unlock()
 
 	return c.mgr.Start(ctx)
 }
@@ -156,12 +154,24 @@ func (c *controller) startOp(key types.NamespacedName) {
 
 	c.mu.Lock()
 	c.operators[key] = e
+	statusChan := c.operators[key].statusChan
+	op := c.operators[key].op
 	c.mu.Unlock()
+
+	go func() {
+		// set the initial oeprator status
+		c.updateStatus(ctx, op)
+
+		for range statusChan {
+			c.log.V(4).Info("updating operator status", "name", op.name)
+			c.updateStatus(ctx, op)
+		}
+	}()
 
 	go e.op.Start(ctx) //nolint:errcheck
 }
 
-func (c *controller) upsertOperator(spec *opv1a1.Operator) (*operator, error) {
+func (c *controller) upsertOperator(spec *opv1a1.Operator) (*Operator, error) {
 	key := client.ObjectKeyFromObject(spec)
 	c.log.V(4).Info("upserting operator", "name", key.String())
 
@@ -175,7 +185,7 @@ func (c *controller) upsertOperator(spec *opv1a1.Operator) (*operator, error) {
 	return c.addOperator(spec)
 }
 
-func (c *controller) addOperator(spec *opv1a1.Operator) (*operator, error) {
+func (c *controller) addOperator(spec *opv1a1.Operator) (*Operator, error) {
 	c.log.V(2).Info("adding operator", "name", client.ObjectKeyFromObject(spec).String())
 
 	// disable leader-election, health-check and the metrics server on the embedded manager
@@ -195,10 +205,14 @@ func (c *controller) addOperator(spec *opv1a1.Operator) (*operator, error) {
 	}
 
 	key := client.ObjectKeyFromObject(spec)
-	operator := New(mgr, spec.GetName(), &spec.Spec, c.logger)
+	statusChan := make(chan StatusTrigger, StatusChannelBufferSize)
+	operator := New(spec.GetName(), mgr, &spec.Spec, Options{
+		StatusChannel: statusChan,
+		Logger:        c.logger,
+	})
 
 	c.mu.Lock()
-	c.operators[key] = &opEntry{op: operator}
+	c.operators[key] = &opEntry{op: operator, statusChan: statusChan}
 	c.mu.Unlock()
 
 	// start the new operator if we are already running
@@ -229,4 +243,21 @@ func (c *controller) getOperatorEntry(key types.NamespacedName) *opEntry {
 	op := c.operators[key]
 	c.mu.Unlock()
 	return op
+}
+
+func (c *controller) updateStatus(ctx context.Context, op *Operator) {
+	client := c.mgr.GetClient()
+	spec := opv1a1.Operator{}
+	key := types.NamespacedName{Name: op.name}
+	err := client.Get(ctx, key, &spec)
+	if err != nil {
+		op.log.Error(err, "failed to Get opertor", "name", op.name)
+		return
+	}
+
+	spec.Status = op.GetStatus(spec.GetGeneration())
+	if err := client.Status().Update(ctx, &spec); err != nil {
+		op.log.Error(err, "failed to Update opearator status", "name", op.GetName())
+		return
+	}
 }
