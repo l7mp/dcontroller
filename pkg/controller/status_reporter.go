@@ -22,21 +22,21 @@ func getDefaultRateLimiter() rate.Sometimes {
 	return rate.Sometimes{First: 3, Interval: 5 * time.Second}
 }
 
-// Trigger is a thing that knows how to act on an error stack update. Typically the response is to
-// update some error status.
-type Trigger interface {
-	Trigger()
+// ErrorHandler is a thing that knows how to act on an errors. Typically the response is to update
+// some error status.
+type ErrorHandler interface {
+	Trigger(error)
 }
 
 // errorReporter is the error stack implementatoin
 type errorReporter struct {
 	errorStack  []error
 	ratelimiter rate.Sometimes
-	trigger     Trigger
+	trigger     ErrorHandler
 	critical    bool // whether a critical error has been reported
 }
 
-func NewErrorReporter(trigger Trigger) *errorReporter {
+func NewErrorReporter(trigger ErrorHandler) *errorReporter {
 	return &errorReporter{errorStack: []error{}, ratelimiter: getDefaultRateLimiter(), trigger: trigger}
 }
 
@@ -53,7 +53,7 @@ func (s *errorReporter) Push(err error, critical bool) error {
 	// ask a status update if trigger is set
 	defer s.ratelimiter.Do(func() {
 		if s.trigger != nil {
-			s.trigger.Trigger()
+			s.trigger.Trigger(err)
 		}
 	})
 

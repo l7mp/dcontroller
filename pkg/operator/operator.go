@@ -16,14 +16,10 @@ import (
 
 var _ runtimeManager.Runnable = &Operator{}
 
-type StatusTrigger = struct{}
-
 // Options can be used to customize the Operator's behavior.
 type Options struct {
-	// StatusChannel is a channel to receive status update triggers from the operator. Once the
-	// caller receives a trigger, it should call GetStatus() on the operator to read the
-	// current status and set it in the Operator CRD.
-	StatusChannel chan StatusTrigger
+	// ErrorChannel is a channel to receive errors from the operator.
+	ErrorChannel chan error
 
 	// Logger is a standard logger.
 	Logger logr.Logger
@@ -35,7 +31,7 @@ type Operator struct {
 	spec        *opv1a1.OperatorSpec
 	controllers []*dcontroller.Controller // maybe nil
 	ctx         context.Context
-	statusChan  chan StatusTrigger
+	errorChan   chan error
 	logger, log logr.Logger
 }
 
@@ -51,7 +47,7 @@ func New(name string, mgr runtimeManager.Manager, spec *opv1a1.OperatorSpec, opt
 		mgr:         mgr,
 		spec:        spec,
 		controllers: []*dcontroller.Controller{},
-		statusChan:  opts.StatusChannel,
+		errorChan:   opts.ErrorChannel,
 		logger:      logger,
 		log:         logger.WithName("operator").WithValues("name", name),
 	}
@@ -59,7 +55,7 @@ func New(name string, mgr runtimeManager.Manager, spec *opv1a1.OperatorSpec, opt
 	// Create the controllers for the operator (manager.Start() will automatically start them)
 	for _, config := range spec.Controllers {
 		c, err := dcontroller.New(op.mgr, config, dcontroller.Options{
-			StatusTrigger: op,
+			ErrorHandler: op,
 		})
 		if err != nil {
 			// report errors but otherwise move on: controller erros will be reported
@@ -107,7 +103,7 @@ func (op *Operator) GetName() string {
 }
 
 // Trigger can be used to ask a status update trigger on the operator.
-func (op *Operator) Trigger() {
+func (op *Operator) Trigger(err error) {
 	ctx := op.ctx
 	if ctx == nil {
 		// we are not started yet:
@@ -116,10 +112,10 @@ func (op *Operator) Trigger() {
 
 	// make this async so that we won't block the operator
 	go func() {
-		defer close(op.statusChan)
+		defer close(op.errorChan)
 
 		select {
-		case op.statusChan <- StatusTrigger{}:
+		case op.errorChan <- err:
 			op.log.V(4).Info("operator status update triggered")
 			return
 		case <-ctx.Done():

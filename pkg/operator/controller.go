@@ -35,9 +35,9 @@ type Controller interface {
 }
 
 type opEntry struct {
-	op         *Operator
-	cancel     context.CancelFunc
-	statusChan chan StatusTrigger
+	op        *Operator
+	cancel    context.CancelFunc
+	errorChan chan error
 }
 
 type controller struct {
@@ -154,7 +154,7 @@ func (c *controller) startOp(key types.NamespacedName) {
 
 	c.mu.Lock()
 	c.operators[key] = e
-	statusChan := c.operators[key].statusChan
+	statusChan := c.operators[key].errorChan
 	op := c.operators[key].op
 	c.mu.Unlock()
 
@@ -162,8 +162,8 @@ func (c *controller) startOp(key types.NamespacedName) {
 		// set the initial oeprator status
 		c.updateStatus(ctx, op)
 
-		for range statusChan {
-			c.log.V(4).Info("updating operator status", "name", op.name)
+		for err := range statusChan {
+			c.log.V(4).Error(err, "operator returns an error", "name", op.name)
 			c.updateStatus(ctx, op)
 		}
 	}()
@@ -205,14 +205,14 @@ func (c *controller) addOperator(spec *opv1a1.Operator) (*Operator, error) {
 	}
 
 	key := client.ObjectKeyFromObject(spec)
-	statusChan := make(chan StatusTrigger, StatusChannelBufferSize)
+	errorChan := make(chan error, StatusChannelBufferSize)
 	operator := New(spec.GetName(), mgr, &spec.Spec, Options{
-		StatusChannel: statusChan,
-		Logger:        c.logger,
+		ErrorChannel: errorChan,
+		Logger:       c.logger,
 	})
 
 	c.mu.Lock()
-	c.operators[key] = &opEntry{op: operator, statusChan: statusChan}
+	c.operators[key] = &opEntry{op: operator, errorChan: errorChan}
 	c.mu.Unlock()
 
 	// start the new operator if we are already running

@@ -10,7 +10,7 @@ import (
 
 type testTrig struct{ counter int }
 
-func (t *testTrig) Trigger() { t.counter++ }
+func (t *testTrig) Trigger(err error) { t.counter++ }
 
 var _ = Describe("StatusReporter", func() {
 	It("should be able to push errors and return the last", func() {

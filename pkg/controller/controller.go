@@ -29,8 +29,8 @@ type ProcessorFunc func(ctx context.Context, c *Controller, req reconciler.Reque
 type Options struct {
 	// Processor allows to override the default request processor of the controller.
 	Processor ProcessorFunc
-	// StatusTrigger can be used to send a status update request.
-	StatusTrigger Trigger
+	// ErrorHandler can be used to handle errors.
+	ErrorHandler ErrorHandler
 }
 
 var _ runtimeManager.Runnable = &Controller{}
@@ -45,7 +45,7 @@ type Controller struct {
 	watcher     chan reconciler.Request
 	pipeline    pipeline.Evaluator
 	processor   ProcessorFunc
-	errReporter *errorReporter
+	errHandler  *errorReporter
 	logger, log logr.Logger
 }
 
@@ -59,29 +59,29 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 	}
 
 	c := &Controller{
-		mgr:         mgr,
-		sources:     []reconciler.Source{},
-		config:      config,
-		watcher:     make(chan reconciler.Request, WatcherBufferSize),
-		errReporter: NewErrorReporter(opts.StatusTrigger),
-		logger:      logger,
+		mgr:        mgr,
+		sources:    []reconciler.Source{},
+		config:     config,
+		watcher:    make(chan reconciler.Request, WatcherBufferSize),
+		errHandler: NewErrorReporter(opts.ErrorHandler),
+		logger:     logger,
 	}
 
 	name := config.Name
 	if name == "" {
-		return c, c.errReporter.PushCriticalError(errors.New("invalid controller configuration: empty name"))
+		return c, c.errHandler.PushCriticalError(errors.New("invalid controller configuration: empty name"))
 	}
 	c.name = name
 	c.log = logger.WithName("controller").WithValues("name", name)
 
 	// sanity check
 	if len(config.Sources) == 0 {
-		return c, c.errReporter.PushCriticalError(errors.New("invalid controller configuration: no source"))
+		return c, c.errHandler.PushCriticalError(errors.New("invalid controller configuration: no source"))
 	}
 
 	emptyTarget := opv1a1.Target{}
 	if config.Target == emptyTarget {
-		return c, c.errReporter.PushCriticalError(errors.New("invalid controller configuration: no target"))
+		return c, c.errHandler.PushCriticalError(errors.New("invalid controller configuration: no target"))
 	}
 
 	// opts
@@ -112,7 +112,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 	for _, s := range c.sources {
 		gvk, err := s.GetGVK()
 		if err != nil {
-			return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to obtain GVK for source %s: %w",
+			return c, c.errHandler.PushCriticalError(fmt.Errorf("failed to obtain GVK for source %s: %w",
 				util.Stringify(s), err))
 		}
 
@@ -122,19 +122,19 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 			Reconciler:         controllerReconciler,
 		})
 		if err != nil {
-			return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to create runtime controller "+
+			return c, c.errHandler.PushCriticalError(fmt.Errorf("failed to create runtime controller "+
 				"for resource %s: %w", gvk.String(), err))
 		}
 
 		// Set up the watch
 		src, err := s.GetSource()
 		if err != nil {
-			return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to create runtime source for "+
+			return c, c.errHandler.PushCriticalError(fmt.Errorf("failed to create runtime source for "+
 				"resource %s: %w", gvk.String(), err))
 		}
 
 		if err := ctrl.Watch(src); err != nil {
-			return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to watch resource %s: %w",
+			return c, c.errHandler.PushCriticalError(fmt.Errorf("failed to watch resource %s: %w",
 				gvk.String(), err))
 		}
 
@@ -147,7 +147,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 	pipeline, err := pipeline.NewPipeline(c.kind, baseviews, c.config.Pipeline,
 		logger.WithName("pipeline").WithValues("controller", c.name, "kind/view", c.kind))
 	if err != nil {
-		return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to create pipleline for controller %s: %w",
+		return c, c.errHandler.PushCriticalError(fmt.Errorf("failed to create pipleline for controller %s: %w",
 			c.name, err))
 	}
 	c.pipeline = pipeline
@@ -155,7 +155,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 	// Add the controller to the manager (this will automatically start it when Start is called
 	// on the manager, but the reconciler must still be explicitly started)
 	if err := mgr.Add(c); err != nil {
-		return c, c.errReporter.PushCriticalError(fmt.Errorf("failed to schedule controller %s: %w",
+		return c, c.errHandler.PushCriticalError(fmt.Errorf("failed to schedule controller %s: %w",
 			c.name, err))
 	}
 
@@ -180,7 +180,7 @@ func (c *Controller) Start(ctx context.Context) error {
 
 			if err := c.processor(ctx, c, req); err != nil {
 				err = fmt.Errorf("error processing watch event: %w", err)
-				c.log.Error(c.errReporter.PushError(err), "error", "request", req)
+				c.log.Error(c.errHandler.PushError(err), "error", "request", req)
 			}
 		case <-ctx.Done():
 			c.log.V(2).Info("controller terminating")
@@ -194,7 +194,7 @@ func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 
 	var condition metav1.Condition
 	switch {
-	case c.errReporter.IsEmpty():
+	case c.errHandler.IsEmpty():
 		condition = metav1.Condition{
 			Type:               string(opv1a1.ControllerConditionReady),
 			Status:             metav1.ConditionTrue,
@@ -203,7 +203,7 @@ func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 			Reason:             string(opv1a1.ControllerReasonReady),
 			Message:            "Controller is up and running",
 		}
-	case c.errReporter.IsCritical():
+	case c.errHandler.IsCritical():
 		condition = metav1.Condition{
 			Type:               string(opv1a1.ControllerConditionReady),
 			Status:             metav1.ConditionFalse,
@@ -226,7 +226,7 @@ func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 	conditions := []metav1.Condition{condition}
 	status.Conditions = conditions
 
-	status.LastErrors = c.errReporter.Report()
+	status.LastErrors = c.errHandler.Report()
 
 	return status
 }
