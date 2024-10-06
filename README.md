@@ -120,7 +120,39 @@ op will create a patch by copying the pod's name and namespace and adding the le
 `containers` list in the Pod spec as an annotation to the metadata. The `@string` op is included to
 explicitly cast the numeric length value into a string.
 
-Ant that's the whole idea: you specify one or more Kubernetes API resources to watch, a declarative
+Suppose the following pod resource:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod
+  namespace: default
+spec:
+  containers:
+  - name: container-1
+    image: my-container-1:latest
+    ...
+  - name: container-2
+    image: my-container-2:latest
+    ...
+  - name: container-3
+    image: my-container-3:latest
+    ...
+```
+
+Then, our pipeline will generate the below patch, which the controller will then readily apply to
+patch the target pod.
+
+```yaml
+metadata:
+  name: my-pod
+  namespaace: default
+  annotations:
+    "dcontroller.io/container-num": "3"
+```
+
+And that's the whole idea: you specify one or more Kubernetes API resources to watch, a declarative
 pipeline that will process the input resources into a patch that is then automatically applied to
 the target resource. The Δ-controller operators are completely dynamic so you can add, delete and
 modify them anytime, they are fully described in a single custom resource with the entire logics,
