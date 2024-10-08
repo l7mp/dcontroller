@@ -254,7 +254,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 
 			return vs, nil
 
-		case "@any", "@none": // @in: [exp, list]
+		case "@any": // @in: [exp, list]
 			args, err := AsExpOrList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
@@ -295,6 +295,54 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 
 				if b {
 					v = true
+					break
+				}
+			}
+
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			return v, nil
+
+		case "@none": // @in: [exp, list]
+			args, err := AsExpOrList(e.Arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			if len(args) != 2 {
+				return nil, NewExpressionError(e,
+					errors.New("invalid arguments: expected 2 arguments"))
+			}
+
+			// conditional
+			exp := args[0]
+
+			// arguments
+			rawArg, err := args[1].Evaluate(ctx)
+			if err != nil {
+				return nil, errors.New("failed to evaluate arguments")
+			}
+
+			list, err := AsList(rawArg)
+			if err != nil {
+				return nil, errors.New("invalid arguments: expected a list")
+			}
+
+			v := false
+			for _, input := range list {
+				res, err := exp.Evaluate(EvalCtx{Object: ctx.Object, Subject: input, Log: ctx.Log})
+				if err != nil {
+					return nil, err
+				}
+
+				b, err := AsBool(res)
+				if err != nil {
+					return nil, NewExpressionError(e,
+						fmt.Errorf("expected conditional expression to "+
+							"evaluate to boolean: %w", err))
+				}
+
+				if b {
+					v = false
 					break
 				}
 			}
