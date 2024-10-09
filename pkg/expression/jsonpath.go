@@ -7,7 +7,7 @@ import (
 	"github.com/ohler55/ojg/jp"
 )
 
-func (e *Expression) GetJSONPath(ctx EvalCtx, key string) (any, error) {
+func GetJSONPath(ctx EvalCtx, key string) (any, error) {
 	if len(key) == 0 || key[0] != '$' {
 		return key, nil
 	}
@@ -29,21 +29,21 @@ func (e *Expression) GetJSONPath(ctx EvalCtx, key string) (any, error) {
 	}
 	ret, err := GetJSONPathExp(key, subject)
 	if err != nil {
-		return nil, NewExpressionError(e, err)
+		return nil, err
 	}
 	return ret, nil
 }
 
-func (e *Expression) SetJSONPath(ctx EvalCtx, key string, value, data any) error {
+func SetJSONPath(ctx EvalCtx, key string, value, data any) error {
 	if len(key) == 0 {
 		return errors.New("empty key")
 	}
 
 	// first get the value
 	if str, ok := value.(string); ok {
-		res, err := e.GetJSONPath(ctx, str)
+		res, err := GetJSONPath(ctx, str)
 		if err != nil {
-			return NewExpressionError(e, err)
+			return err
 		}
 		value = res
 	}
@@ -61,8 +61,8 @@ func (e *Expression) SetJSONPath(ctx EvalCtx, key string, value, data any) error
 			}
 			return nil
 		}
-		return NewExpressionError(e, fmt.Errorf("JSONPath expression error: cannot set root "+
-			"key \"$.\" to value %q of type %T, only map types can be copied", value, value))
+		return fmt.Errorf("JSONPath expression error: cannot set root "+
+			"key \"$.\" to value %q of type %T, only map types can be copied", value, value)
 	}
 
 	// if not a JSONpath, just set it as is
@@ -73,8 +73,8 @@ func (e *Expression) SetJSONPath(ctx EvalCtx, key string, value, data any) error
 
 	// then call the low-level set util
 	if err := SetJSONPathExp(key, value, data); err != nil {
-		return NewExpressionError(e, fmt.Errorf("JSONPath expression error: cannot set "+
-			"key %q to value %q: %w", key, value, err))
+		return fmt.Errorf("JSONPath expression error: cannot set "+
+			"key %q to value %q: %w", key, value, err)
 	}
 
 	return nil

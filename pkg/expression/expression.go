@@ -109,7 +109,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			return nil, NewExpressionError(e, err)
 		}
 
-		ret, err := e.GetJSONPath(ctx, str)
+		ret, err := GetJSONPath(ctx, str)
 		if err != nil {
 			return nil, err
 		}
@@ -190,7 +190,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 				if err != nil {
 					return nil, err
 				}
-				err = exp.SetJSONPath(ctx, k, res, ret)
+				err = SetJSONPath(ctx, k, res, ret)
 				if err != nil {
 					return nil, NewExpressionError(e,
 						fmt.Errorf("could not deference JSON \"set\" expression: %w", err))
