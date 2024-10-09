@@ -17,27 +17,21 @@ const (
 )
 
 // RateLimit controls the status updater rate-limiter so that the first 3 errors will trigger an
-// update per every 5 seconds.
+// update per every 2 seconds.
 func getDefaultRateLimiter() rate.Sometimes {
-	return rate.Sometimes{First: 3, Interval: 5 * time.Second}
-}
-
-// ErrorHandler is a thing that knows how to act on an errors. Typically the response is to update
-// some error status.
-type ErrorHandler interface {
-	Trigger(error)
+	return rate.Sometimes{First: 3, Interval: 2 * time.Second}
 }
 
 // errorReporter is the error stack implementatoin
 type errorReporter struct {
 	errorStack  []error
 	ratelimiter rate.Sometimes
-	trigger     ErrorHandler
+	errorChan   chan error
 	critical    bool // whether a critical error has been reported
 }
 
-func NewErrorReporter(trigger ErrorHandler) *errorReporter {
-	return &errorReporter{errorStack: []error{}, ratelimiter: getDefaultRateLimiter(), trigger: trigger}
+func NewErrorReporter(errorChan chan error) *errorReporter {
+	return &errorReporter{errorStack: []error{}, ratelimiter: getDefaultRateLimiter(), errorChan: errorChan}
 }
 
 func (s *errorReporter) PushError(err error) error {
@@ -52,8 +46,8 @@ func (s *errorReporter) PushCriticalError(err error) error {
 func (s *errorReporter) Push(err error, critical bool) error {
 	// ask a status update if trigger is set
 	defer s.ratelimiter.Do(func() {
-		if s.trigger != nil {
-			s.trigger.Trigger(err)
+		if s.errorChan != nil {
+			s.errorChan <- err
 		}
 	})
 

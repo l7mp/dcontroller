@@ -10,6 +10,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeController "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -21,6 +22,7 @@ import (
 
 	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
 	"hsnlab/dcontroller/pkg/manager"
+	"hsnlab/dcontroller/pkg/util"
 )
 
 // StatusChannelBufferSize defines the longest backlog on the status channel.
@@ -51,7 +53,7 @@ type controller struct {
 	logger, log logr.Logger
 }
 
-// NewController creates a new Kubernetes controller for the Operator CRDs.
+// NewController creates a new Kubernetes controller that handles the Operator CRDs.
 func NewController(config *rest.Config, options runtimeManager.Options) (Controller, error) {
 	logger := options.Logger
 	if logger.GetSink() == nil {
@@ -163,7 +165,7 @@ func (c *controller) startOp(key types.NamespacedName) {
 		c.updateStatus(ctx, op)
 
 		for err := range statusChan {
-			c.log.V(4).Error(err, "operator returns an error", "name", op.name)
+			c.log.V(4).Error(err, "operator error", "name", op.name)
 			c.updateStatus(ctx, op)
 		}
 	}()
@@ -198,7 +200,7 @@ func (c *controller) addOperator(spec *opv1a1.Operator) (*Operator, error) {
 	opts.Logger = c.options.Logger
 
 	// First create a manager for this operator
-	mgr, err := manager.New(nil, c.mgr.GetConfig(), opts)
+	mgr, err := manager.New(c.mgr.GetConfig(), manager.Options{Options: opts})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create manager for operator %s: %w",
 			spec.Name, err)
@@ -247,17 +249,29 @@ func (c *controller) getOperatorEntry(key types.NamespacedName) *opEntry {
 
 func (c *controller) updateStatus(ctx context.Context, op *Operator) {
 	client := c.mgr.GetClient()
-	spec := opv1a1.Operator{}
 	key := types.NamespacedName{Name: op.name}
-	err := client.Get(ctx, key, &spec)
-	if err != nil {
-		op.log.Error(err, "failed to Get opertor", "name", op.name)
-		return
-	}
 
-	spec.Status = op.GetStatus(spec.GetGeneration())
-	if err := client.Status().Update(ctx, &spec); err != nil {
-		op.log.Error(err, "failed to Update opearator status", "name", op.GetName())
+	attempt := 0
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		attempt++
+		spec := opv1a1.Operator{}
+
+		err := client.Get(ctx, key, &spec)
+		if err != nil {
+			return err
+		}
+
+		spec.Status = op.GetStatus(spec.GetGeneration())
+
+		c.log.V(4).Info("updating status", "attempt", attempt, "status", util.Stringify(spec.Status))
+
+		if err := client.Status().Update(ctx, &spec); err != nil {
+			c.log.Error(err, "failed to update status", "attempt", attempt)
+			return err
+		}
+		return nil
+	}); err != nil {
+		op.log.Error(err, "failed to update opearator status", "name", op.GetName())
 		return
 	}
 }

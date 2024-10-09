@@ -75,7 +75,7 @@ func NewFakeManager(opts manager.Options, objs ...client.Object) (*FakeManager, 
 		compositeCache: compositeCache,
 	}, logger)
 
-	mgr, err := New(fakeRuntimeManager, nil, opts)
+	mgr, err := New(nil, Options{Options: opts, Manager: fakeRuntimeManager})
 	if err != nil {
 		return nil, err
 	}

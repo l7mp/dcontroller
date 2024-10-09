@@ -18,7 +18,10 @@ var _ runtimeManager.Runnable = &Operator{}
 
 // Options can be used to customize the Operator's behavior.
 type Options struct {
-	// ErrorChannel is a channel to receive errors from the operator.
+	// ErrorChannel is a channel to receive errors from the operator. Note that the error
+	// channel is rate limited to at most 3 errors per every 2 seconds. Use ReportErrors on the
+	// individual controllers to get the errors that might have been supporessed by the rate
+	// limiter.
 	ErrorChannel chan error
 
 	// Logger is a standard logger.
@@ -54,18 +57,11 @@ func New(name string, mgr runtimeManager.Manager, spec *opv1a1.OperatorSpec, opt
 
 	// Create the controllers for the operator (manager.Start() will automatically start them)
 	for _, config := range spec.Controllers {
-		c, err := dcontroller.New(op.mgr, config, dcontroller.Options{
-			ErrorHandler: op,
-		})
-		if err != nil {
-			// report errors but otherwise move on: controller erros will be reported
-			// in the operator's controller statuses
-			op.log.Error(err, "failed to create controller", "controller", config.Name)
+		if err := op.AddController(config); err != nil {
+			// error already pushed to the error channel: move on and let parent decide what to do
+			op.log.V(5).Info("failed to create controller", "controller", config.Name,
+				"error", err)
 		}
-
-		// the controller returned is always valid: this makes sure we will receive the
-		// status update triggers to show the controller errors to the user
-		op.controllers = append(op.controllers, c)
 	}
 
 	return op
@@ -85,10 +81,44 @@ func Load(name string, mgr runtimeManager.Manager, file string, opts Options) (*
 	return New(name, mgr, &spec, opts), nil
 }
 
+// GetController returns the controller with the given name or nil if no controller with that name
+// exists.
+func (op *Operator) GetController(name string) *dcontroller.Controller {
+	for _, c := range op.controllers {
+		if c.GetName() == name {
+			return c
+		}
+	}
+
+	return nil
+}
+
+// AddController adds a new controller to the operator.
+func (op *Operator) AddController(config opv1a1.Controller) error {
+	c, err := dcontroller.New(op.mgr, config, dcontroller.Options{
+		ErrorChan: op.errorChan,
+	})
+
+	// the controller returned is always valid: this makes sure we will receive the
+	// status update triggers to show the controller errors to the user
+	op.controllers = append(op.controllers, c)
+
+	return err
+}
+
 // Start starts the operator. It blocks
 func (op *Operator) Start(ctx context.Context) error {
 	op.log.Info("starting")
 	op.ctx = ctx
+
+	// close the error channel
+	if op.errorChan != nil {
+		go func() {
+			defer close(op.errorChan)
+			<-ctx.Done()
+		}()
+	}
+
 	return op.mgr.Start(ctx)
 }
 
@@ -104,24 +134,12 @@ func (op *Operator) GetName() string {
 
 // Trigger can be used to ask a status update trigger on the operator.
 func (op *Operator) Trigger(err error) {
-	ctx := op.ctx
-	if ctx == nil {
-		// we are not started yet:
-		ctx = context.TODO()
+	if op.errorChan != nil {
+		// this should be async so that we won't block the controller - if someone passed
+		// an errorchannel to the constructur we expect them to actually read what we write
+		// there
+		op.errorChan <- err
 	}
-
-	// make this async so that we won't block the operator
-	go func() {
-		defer close(op.errorChan)
-
-		select {
-		case op.errorChan <- err:
-			op.log.V(4).Info("operator status update triggered")
-			return
-		case <-ctx.Done():
-			return
-		}
-	}()
 }
 
 // GetStatus populates the operator status with the controller statuses.

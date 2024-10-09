@@ -53,13 +53,15 @@ var _ = Describe("Controller test:", Ordered, func() {
 
 		It("should create and start a manager succcessfully", func() {
 			setupLog.Info("setting up controller manager")
-			m, err := manager.New(nil, cfg, runtimeManager.Options{
-				LeaderElection:         false, // disable leader-election
-				HealthProbeBindAddress: "0",   // disable health-check
-				Metrics: metricsserver.Options{
-					BindAddress: "0", // disable the metrics server
+			m, err := manager.New(cfg, manager.Options{
+				Options: runtimeManager.Options{
+					LeaderElection:         false, // disable leader-election
+					HealthProbeBindAddress: "0",   // disable health-check
+					Metrics: metricsserver.Options{
+						BindAddress: "0", // disable the metrics server
+					},
+					Logger: logger,
 				},
-				Logger: logger,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			mgr = m

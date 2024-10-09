@@ -76,7 +76,7 @@ var _ = BeforeSuite(func() {
 	opts := zap.Options{
 		Development:     true,
 		DestWriter:      GinkgoWriter,
-		StacktraceLevel: zapcore.Level(3),
+		StacktraceLevel: zapcore.Level(4),
 		TimeEncoder:     zapcore.RFC3339NanoTimeEncoder,
 		Level:           zapcore.Level(loglevel),
 	}

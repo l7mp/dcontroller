@@ -23,7 +23,7 @@ import (
 )
 
 var _ = Describe("Operator status report test:", Ordered, func() {
-	Context("When creating a controller with a invalid config", Ordered, Label("controller"), func() {
+	Context("When creating a controller with an invalid config", Ordered, Label("controller"), func() {
 		var (
 			ctrlCtx    context.Context
 			ctrlCancel context.CancelFunc
@@ -95,7 +95,7 @@ spec:
 					return false
 				}
 				status = get.Status.Controllers[0]
-				return true
+				return status.Conditions[0].Status == metav1.ConditionFalse
 			}, timeout, interval).Should(BeTrue())
 
 			cond := meta.FindStatusCondition(status.Conditions, string(opv1a1.ControllerConditionReady))
