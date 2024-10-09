@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/yaml"
@@ -521,6 +522,26 @@ var _ = Describe("Expressions", func() {
 
 			Expect(d["spec"]).To(HaveKey("b"))
 			Expect(d["spec"].(Unstructured)["b"]).To(Equal(map[string]any{"c": int64(2), "d": int64(12)}))
+		})
+
+		It("should create and evaluate a JSONPath getter expression constructor", func() {
+			exp := NewJSONPathGetExpression("$.spec.b.c")
+			res, err := exp.Evaluate(EvalCtx{Object: obj1.UnstructuredContent(), Log: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal(int64(2)))
+		})
+
+		It("should create and evaluate a JSONPath setter expression constructor", func() {
+			exp, err := NewJSONPathSetExpression("$.spec.b.d", "aaa")
+			Expect(err).NotTo(HaveOccurred())
+			res, err := exp.Evaluate(EvalCtx{Object: obj1.UnstructuredContent(), Log: logger})
+			Expect(err).NotTo(HaveOccurred())
+			obj, err := AsObject(res)
+			Expect(err).NotTo(HaveOccurred())
+			s, ok, err := unstructured.NestedString(obj, "spec", "b", "d")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(s).To(Equal("aaa"))
 		})
 	})
 
