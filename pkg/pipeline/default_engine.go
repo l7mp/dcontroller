@@ -103,7 +103,7 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 	case cache.Added:
 		eng.log.V(6).Info("aggregation: add using new object", "object", delta.Object)
 
-		o, err := eng.evalAggregation(a, object.DeepCopy(delta.Object))
+		objs, err := eng.evalAggregation(a, object.DeepCopy(delta.Object))
 		if err != nil {
 			return nil, NewAggregationError(
 				fmt.Errorf("processing event %q: could not evaluate aggregation for new object %s: %w",
@@ -117,8 +117,9 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 		}
 
 		ds = []cache.Delta{}
-		if o != nil { // @select shortcuts
-			ds = append(ds, cache.Delta{Type: cache.Added, Object: o})
+		for _, obj := range objs {
+			// @select shortcuts
+			ds = append(ds, cache.Delta{Type: cache.Added, Object: obj})
 		}
 
 	case cache.Updated, cache.Replaced:
@@ -176,7 +177,7 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 
 		eng.log.V(6).Info("aggregation: delete using existing object", "object", old)
 
-		o, err := eng.evalAggregation(a, object.DeepCopy(old))
+		objs, err := eng.evalAggregation(a, object.DeepCopy(old))
 		if err != nil {
 			return nil, NewAggregationError(
 				fmt.Errorf("processing event %q: could not evaluate aggregation for deleted object %s: %w",
@@ -190,8 +191,9 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 		}
 
 		ds = []cache.Delta{}
-		if o != nil { // @select shortcuts
-			ds = append(ds, cache.Delta{Type: cache.Deleted, Object: o})
+		for _, obj := range objs {
+			// @select shortcuts
+			ds = append(ds, cache.Delta{Type: cache.Deleted, Object: obj})
 		}
 
 	default:
@@ -203,38 +205,42 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 	return ds, nil
 }
 
-func (eng *defaultEngine) evalAggregation(a *Aggregation, obj object.Object) (object.Object, error) {
-	content := obj.UnstructuredContent()
+func (eng *defaultEngine) evalAggregation(a *Aggregation, obj object.Object) ([]object.Object, error) {
+	args := []unstruct{obj.UnstructuredContent()}
 	for _, s := range a.Expressions {
-		res, err := eng.evalStage(&s, content)
+		sres := []unstruct{}
+		for _, u := range args {
+			ret, err := eng.evalStage(&s, u)
+			if err != nil {
+				return nil, err
+			}
+			sres = append(sres, ret...)
+		}
+		args = sres
+	}
+
+	ret := []object.Object{}
+	for _, u := range args {
+		obj, err := Normalize(eng, u)
 		if err != nil {
 			return nil, err
 		}
-
-		content = res
-		if content == nil {
-			// @select shortcuts the iteration
-			return nil, nil
-		}
+		ret = append(ret, obj)
 	}
 
-	obj, err := Normalize(eng, content)
-	if err != nil {
-		return nil, err
-	}
+	eng.Log().V(5).Info("eval ready", "aggregation", a.String(), "result", ret)
 
-	eng.Log().V(5).Info("eval ready", "aggregation", a.String(), "result", obj)
-
-	return obj, nil
+	return ret, nil
 }
 
-func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) (unstruct, error) {
+func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) ([]unstruct, error) {
 	if e.Arg == nil {
 		return nil, NewAggregationError(
 			fmt.Errorf("no expression found in aggregation stage %s", e.String()))
 	}
 
 	switch e.Op {
+	// @select is one-to-one or one-to-zero
 	case "@select":
 		res, err := e.Arg.Evaluate(expression.EvalCtx{Object: u, Log: eng.log})
 		if err != nil {
@@ -244,20 +250,21 @@ func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) (unstr
 		b, err := expression.AsBool(res)
 		if err != nil {
 			return nil, NewAggregationError(
-				fmt.Errorf("expected conditional expression to "+
-					"evaluate to boolean: %w", err))
+				fmt.Errorf("expected conditional expression to evaluate to "+
+					"boolean: %w", err))
 		}
 
 		// default is no change
-		var v unstruct
+		var vs []unstruct
 		if b {
-			v = u
+			vs = []unstruct{u}
 		}
 
-		eng.log.V(5).Info("eval ready", "aggregation", e.String(), "result", v)
+		eng.log.V(5).Info("eval ready", "aggregation", e.String(), "result", vs)
 
-		return v, nil
+		return vs, nil
 
+	// @project is one-to-one
 	case "@project":
 		res, err := e.Arg.Evaluate(expression.EvalCtx{Object: u, Log: eng.log})
 		if err != nil {
@@ -271,13 +278,14 @@ func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) (unstr
 
 		eng.log.V(5).Info("eval ready", "aggregation", e.String(), "result", v)
 
-		return v, nil
+		return []unstruct{v}, nil
 
 	default:
 		return nil, NewAggregationError(
 			errors.New("unknown aggregation stage"))
 	}
 }
+
 func (eng *defaultEngine) EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error) {
 	ds, err := eng.evaluateJoin(j, delta)
 	if err != nil {
