@@ -37,3 +37,51 @@ func NewJSONPathSetExpression(key string, value any) (Expression, error) {
 	}
 	return Expression{Op: "@dict", Literal: map[string]Expression{key: lit}}, nil
 }
+
+func (e *Expression) GetLiteralBool() (bool, error) {
+	ret, err := AsBool(e.Literal)
+	if err != nil {
+		return false, err
+	}
+	return ret, nil
+}
+
+func (e *Expression) GetLiteralInt() (int64, error) {
+	ret, err := AsInt(e.Literal)
+	if err != nil {
+		return 0, err
+	}
+	return ret, nil
+}
+
+func (e *Expression) GetLiteralString() (string, error) {
+	ret, err := AsString(e.Literal)
+	if err != nil {
+		return "", err
+	}
+	return ret, nil
+}
+
+func (e *Expression) GetLiteralFloat() (float64, error) {
+	ret, err := AsFloat(e.Literal)
+	if err != nil {
+		return 0.0, err
+	}
+	return ret, nil
+}
+
+func (e *Expression) GetLiteralList() ([]any, error) {
+	ret, err := AsList(e.Literal)
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+func (e *Expression) GetLiteralMap() (map[string]any, error) {
+	ret, err := AsMap(e.Literal)
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}

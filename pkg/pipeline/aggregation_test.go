@@ -372,6 +372,74 @@ var _ = Describe("Aggregations", func() {
 			Expect(res).To(BeEmpty())
 		})
 	})
+
+	Describe("Evaluating demultiplexer aggregations", func() {
+		It("should evaluate a simple @demux expression", func() {
+			obj := object.NewViewObject("view")
+			// must have a valid name
+			object.SetContent(obj, unstruct{
+				"spec": unstruct{
+					"list": []any{int64(1), "a", true},
+				},
+			})
+			object.SetName(obj, "default", "name")
+
+			jsonData := `{"@aggregate":[{"@demux": "$.spec.list"}]}`
+			ag := newAggregation(eng, []byte(jsonData))
+			Expect(ag.Expressions).To(HaveLen(1))
+
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(3))
+
+			Expect(res[0].Type).To(Equal(cache.Added))
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name":      "name-0",
+						"namespace": "default",
+					},
+					"spec": unstruct{
+						"list": int64(1),
+					},
+				},
+			}))
+
+			Expect(res[1].Type).To(Equal(cache.Added))
+			Expect(res[1].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name":      "name-1",
+						"namespace": "default",
+					},
+					"spec": unstruct{
+						"list": "a",
+					},
+				},
+			}))
+
+			Expect(res[2].Type).To(Equal(cache.Added))
+			Expect(res[2].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name":      "name-2",
+						"namespace": "default",
+					},
+					"spec": unstruct{
+						"list": true,
+					},
+				},
+			}))
+
+		})
+
+	})
 })
 
 func newAggregation(eng Engine, data []byte) *Aggregation {

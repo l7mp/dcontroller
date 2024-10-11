@@ -279,6 +279,15 @@ func AsBinaryIntOrFloatList(d any) ([]int64, []float64, reflect.Kind, error) {
 	return is, fs, kind, nil
 }
 
+func AsMap(d any) (map[string]any, error) {
+	ret, ok := d.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("failed to convert argument into a map: %s", util.Stringify(d))
+	}
+
+	return ret, nil
+}
+
 // AsExpOrList returns an expression or an expression list.
 func AsExpOrList(d any) ([]Expression, error) {
 	exp, ok := d.(Expression)

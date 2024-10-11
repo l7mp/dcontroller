@@ -136,7 +136,7 @@ func (op *Operator) GetName() string {
 func (op *Operator) Trigger(err error) {
 	if op.errorChan != nil {
 		// this should be async so that we won't block the controller - if someone passed
-		// an errorchannel to the constructur we expect them to actually read what we write
+		// an errorchannel to the constructor we expect them to actually read what we write
 		// there
 		op.errorChan <- err
 	}

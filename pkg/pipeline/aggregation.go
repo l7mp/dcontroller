@@ -43,7 +43,7 @@ func (a *Aggregation) Evaluate(delta cache.Delta) ([]cache.Delta, error) {
 	eng := a.engine
 	res, err := eng.EvaluateAggregation(a, delta)
 	if err != nil {
-		return nil, NewAggregationError(fmt.Errorf("aggregation error: %w", err))
+		return nil, err
 	}
 
 	return res, nil

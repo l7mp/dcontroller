@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	toolscache "k8s.io/client-go/tools/cache"
 
 	"hsnlab/dcontroller/pkg/cache"
@@ -105,15 +106,13 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 
 		objs, err := eng.evalAggregation(a, object.DeepCopy(delta.Object))
 		if err != nil {
-			return nil, NewAggregationError(
-				fmt.Errorf("processing event %q: could not evaluate aggregation for new object %s: %w",
-					delta.Type, ObjectKey(delta.Object), err))
+			return nil, fmt.Errorf("processing event %q: could not evaluate aggregation for new object %s: %w",
+				delta.Type, ObjectKey(delta.Object), err)
 		}
 
 		if err := eng.baseViewStore[gvk].Add(delta.Object); err != nil {
-			return nil, NewAggregationError(
-				fmt.Errorf("processing event %q: could not add object %s to store: %w",
-					delta.Type, ObjectKey(delta.Object), err))
+			return nil, fmt.Errorf("processing event %q: could not add object %s to store: %w",
+				delta.Type, ObjectKey(delta.Object), err)
 		}
 
 		ds = []cache.Delta{}
@@ -128,7 +127,7 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 
 		delDeltas, err := eng.evaluateAggregation(a, cache.Delta{Type: cache.Deleted, Object: delta.Object})
 		if err != nil {
-			return nil, NewAggregationError(err)
+			return nil, err
 		}
 		delDelta := cache.NilDelta
 		if len(delDeltas) == 1 {
@@ -137,7 +136,7 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 
 		addDeltas, err := eng.evaluateAggregation(a, cache.Delta{Type: cache.Added, Object: delta.Object})
 		if err != nil {
-			return nil, NewAggregationError(err)
+			return nil, err
 		}
 		addDelta := cache.NilDelta
 		if len(addDeltas) == 1 {
@@ -167,7 +166,7 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 	case cache.Deleted:
 		old, ok, err := eng.baseViewStore[gvk].GetByKey(ObjectKey(delta.Object).String())
 		if err != nil {
-			return nil, NewAggregationError(err)
+			return nil, err
 		}
 		if !ok {
 			eng.log.V(4).Info("aggregation: ignoring delete event for an unknown object",
@@ -179,15 +178,13 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 
 		objs, err := eng.evalAggregation(a, object.DeepCopy(old))
 		if err != nil {
-			return nil, NewAggregationError(
-				fmt.Errorf("processing event %q: could not evaluate aggregation for deleted object %s: %w",
-					delta.Type, ObjectKey(delta.Object), err))
+			return nil, fmt.Errorf("processing event %q: could not evaluate aggregation for deleted object %s: %w",
+				delta.Type, ObjectKey(delta.Object), err)
 		}
 
 		if err := eng.baseViewStore[gvk].Delete(old); err != nil {
-			return nil, NewAggregationError(
-				fmt.Errorf("procesing event %q: could not delete object %s from store: %w",
-					delta.Type, ObjectKey(delta.Object), err))
+			return nil, fmt.Errorf("procesing event %q: could not delete object %s from store: %w",
+				delta.Type, ObjectKey(delta.Object), err)
 		}
 
 		ds = []cache.Delta{}
@@ -235,8 +232,7 @@ func (eng *defaultEngine) evalAggregation(a *Aggregation, obj object.Object) ([]
 
 func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) ([]unstruct, error) {
 	if e.Arg == nil {
-		return nil, NewAggregationError(
-			fmt.Errorf("no expression found in aggregation stage %s", e.String()))
+		return nil, fmt.Errorf("no expression found in aggregation stage %s", e.String())
 	}
 
 	switch e.Op {
@@ -249,9 +245,8 @@ func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) ([]uns
 
 		b, err := expression.AsBool(res)
 		if err != nil {
-			return nil, NewAggregationError(
-				fmt.Errorf("expected conditional expression to evaluate to "+
-					"boolean: %w", err))
+			return nil, fmt.Errorf("expected conditional expression to evaluate to "+
+				"boolean: %w", err)
 		}
 
 		// default is no change
@@ -273,12 +268,75 @@ func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) ([]uns
 
 		v, err := expression.AsObject(res)
 		if err != nil {
-			return nil, NewAggregationError(err)
+			return nil, err
 		}
 
 		eng.log.V(5).Info("eval ready", "aggregation", e.String(), "result", v)
 
 		return []unstruct{v}, nil
+
+	// @demux is one to many
+	case "@demux":
+		if _, err := Normalize(eng, u); err != nil {
+			return nil, errors.New("@demux requires a valid .metadata.name")
+		}
+
+		arg, err := e.Arg.Evaluate(expression.EvalCtx{Object: u, Log: eng.log})
+		if err != nil {
+			return nil, err
+		}
+
+		list, err := expression.AsList(arg)
+		if err != nil {
+			return nil, err
+		}
+
+		vs := []unstruct{}
+		for i, elem := range list {
+			a := deepCopy(u)
+			v, ok := a.(unstruct)
+			if !ok {
+				return nil, errors.New("could not deepcopy object content")
+			}
+
+			// the name
+			name, ok, err := unstructured.NestedString(v, "metadata", "name")
+			if err != nil || !ok {
+				// this should never happen: object is normalized
+				return nil, errors.New("@demux: no name")
+			}
+
+			if err := unstructured.SetNestedField(v, fmt.Sprintf("%s-%d", name, i), "metadata", "name"); err != nil {
+				return nil, fmt.Errorf("@demux: cannot set name: %w", err)
+			}
+
+			// // the index
+			// if err := unstructured.SetNestedField(v, int64(i), "metadata", "index"); err != nil {
+			// 	return nil, fmt.Errorf("@demux: cannot set index: %w", err)
+			// }
+
+			// the elem to the corresponding jsonpath
+			jp, err := e.Arg.GetLiteralString()
+			if err != nil {
+				return nil, err
+			}
+
+			// must use the low-level jsonpath setter so that we retain the original object
+			if err := expression.SetJSONPathExp(jp, elem, v); err != nil {
+				return nil, err
+			}
+
+			v, err = expression.AsObject(v)
+			if err != nil {
+				return nil, err
+			}
+
+			vs = append(vs, v)
+		}
+
+		eng.log.V(5).Info("eval ready", "aggregation", e.String(), "result", util.Stringify(vs))
+
+		return vs, nil
 
 	default:
 		return nil, NewAggregationError(
@@ -555,4 +613,25 @@ func containsDelta(ds []cache.Delta, delta cache.Delta) bool {
 			n.Object.GetObjectKind().GroupVersionKind() &&
 			delta.Object.GetName() == n.Object.GetName()
 	})
+}
+
+func deepCopy(value any) any {
+	switch v := value.(type) {
+	case bool, int64, float64, string:
+		return v
+	case []any:
+		newList := make([]any, len(v))
+		for i, item := range v {
+			newList[i] = deepCopy(item)
+		}
+		return newList
+	case map[string]any:
+		newMap := make(map[string]any)
+		for k, item := range v {
+			newMap[k] = deepCopy(item)
+		}
+		return newMap
+	default:
+		return v
+	}
 }

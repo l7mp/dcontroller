@@ -25,11 +25,11 @@ func Patch(obj Object, m map[string]any) error {
 
 func patch(o, m any) any {
 	if reflect.DeepEqual(o, m) {
-		return deepCopy(m)
+		return DeepCopyAny(m)
 	}
 
 	if o == nil {
-		return deepCopy(m)
+		return DeepCopyAny(m)
 	}
 
 	switch x := m.(type) {
@@ -40,17 +40,17 @@ func patch(o, m any) any {
 		litlm := x
 		litlo, ok2 := o.([]any)
 		if !ok2 {
-			return deepCopy(litlm)
+			return DeepCopyAny(litlm)
 		}
 
-		retl := deepCopy(litlo).([]any)
+		retl := DeepCopyAny(litlo).([]any)
 		for i := range litlm {
 			if i >= len(litlo) {
-				retl = append(retl, deepCopy(litlm[i]))
+				retl = append(retl, DeepCopyAny(litlm[i]))
 				continue
 			}
 			if reflect.DeepEqual(litlo[i], litlm[i]) {
-				retl[i] = deepCopy(litlm[i])
+				retl[i] = DeepCopyAny(litlm[i])
 				continue
 			}
 			retl[i] = patch(litlo[i], litlm[i])
@@ -61,10 +61,10 @@ func patch(o, m any) any {
 		litmm := x
 		litmo, ok2 := o.(map[string]any)
 		if !ok2 {
-			return deepCopy(litmm)
+			return DeepCopyAny(litmm)
 		}
 
-		retm := deepCopy(litmo).(map[string]any)
+		retm := DeepCopyAny(litmo).(map[string]any)
 		for k, v := range litmm {
 			if v == nil {
 				delete(retm, k)
@@ -73,12 +73,12 @@ func patch(o, m any) any {
 
 			vo, ok := litmo[k]
 			if !ok {
-				retm[k] = deepCopy(v)
+				retm[k] = DeepCopyAny(v)
 				continue
 			}
 
 			if reflect.DeepEqual(vo, v) {
-				retm[k] = deepCopy(v)
+				retm[k] = DeepCopyAny(v)
 				continue
 			}
 
@@ -96,27 +96,6 @@ func patch(o, m any) any {
 	default:
 		// this should never happen so we should panic here but we won't
 		return nil
-	}
-}
-
-func deepCopy(value any) any {
-	switch v := value.(type) {
-	case bool, int64, float64, string:
-		return v
-	case []any:
-		newList := make([]any, len(v))
-		for i, item := range v {
-			newList[i] = deepCopy(item)
-		}
-		return newList
-	case map[string]any:
-		newMap := make(map[string]any)
-		for k, item := range v {
-			newMap[k] = deepCopy(item)
-		}
-		return newMap
-	default:
-		return v
 	}
 }
 

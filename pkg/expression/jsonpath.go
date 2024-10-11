@@ -34,6 +34,8 @@ func GetJSONPath(ctx EvalCtx, key string) (any, error) {
 	return ret, nil
 }
 
+// SetJSONPath overwrites the data in-place with the given value at the given key. Leaves the rest
+// of the data unchanged.
 func SetJSONPath(ctx EvalCtx, key string, value, data any) error {
 	if len(key) == 0 {
 		return errors.New("empty key")
@@ -49,20 +51,26 @@ func SetJSONPath(ctx EvalCtx, key string, value, data any) error {
 	}
 
 	// copy: if key is a JSONpath root ref and the result is a map, overwrite the entire map
-	if d, ok := data.(Unstructured); ok && key == "$." {
-		if val, ok := value.(Unstructured); ok {
-			// cannot just overwrite the map as this would not affect the caller, we
-			// have to remove all existing keys and copy new keys
-			for k := range val {
-				delete(d, k)
-			}
-			for k, v := range val {
-				d[k] = v
-			}
-			return nil
+	// if d, ok := data.(Unstructured); ok && key == "$." {
+	if key == "$." {
+		d, okd := data.(Unstructured)
+		val, okv := value.(Unstructured)
+		if !okd || !okv {
+			return fmt.Errorf("JSONPath expression error: cannot set root object of type %T "+
+				"to value %q of type %T, only map types can be copied with %q", d,
+				value, value, "$.")
 		}
-		return fmt.Errorf("JSONPath expression error: cannot set root "+
-			"key \"$.\" to value %q of type %T, only map types can be copied", value, value)
+
+		// cannot just overwrite the map as this would not affect the caller, we
+		// have to remove all existing keys and copy new keys
+		for k := range val {
+			delete(d, k)
+		}
+		for k, v := range val {
+			d[k] = v
+		}
+
+		return nil
 	}
 
 	// if not a JSONpath, just set it as is
