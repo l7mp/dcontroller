@@ -34,7 +34,7 @@ The literal delta in the name connotes that operators in Δ-controller use *incr
 reconciliation* style control loops. This means that the controllers watch the incremental changes
 to Kubernetes API resources and internal views and act only on the deltas. This simplifies writing
 [edge-triggered
-conrollers](https://hackernoon.com/level-triggering-and-reconciliation-in-kubernetes-1f17fe30333d).
+controllers](https://hackernoon.com/level-triggering-and-reconciliation-in-kubernetes-1f17fe30333d).
 
 ## Installation
 
@@ -55,7 +55,7 @@ We will create a simple operator below that will write into each pod the number 
 the pod as a custom annotation. To simplify the operations, we will restrict the operator to the
 default namespace. Whenever the container number is updated, the annotation will be updated too.
 
-For [here](examples/) for more complex examples.
+Navigate [here](examples/) for more complex examples.
 
 ### Operator
 
