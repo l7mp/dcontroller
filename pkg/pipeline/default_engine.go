@@ -100,7 +100,7 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 
 	// update local view cache
 	var ds []cache.Delta
-	switch delta.Type { //nolint:exhaustive
+	switch delta.Type {
 	case cache.Added:
 		eng.log.V(6).Info("aggregation: add using new object", "object", delta.Object)
 
@@ -369,7 +369,7 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 	delta = eng.handleUpsertEvent(delta)
 
 	ds := make([]cache.Delta, 0)
-	switch delta.Type { //nolint:exhaustive
+	switch delta.Type {
 	case cache.Added:
 		os, err := eng.evalJoin(j, delta.Object)
 		if err != nil {
