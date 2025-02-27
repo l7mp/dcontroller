@@ -276,7 +276,7 @@ func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) ([]uns
 		return []unstruct{v}, nil
 
 	// @demux is one to many
-	case "@demux":
+	case "@unwind", "@demux":
 		if _, err := Normalize(eng, u); err != nil {
 			return nil, errors.New("@demux requires a valid .metadata.name")
 		}
@@ -299,21 +299,18 @@ func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) ([]uns
 				return nil, errors.New("could not deepcopy object content")
 			}
 
-			// the name
-			name, ok, err := unstructured.NestedString(v, "metadata", "name")
-			if err != nil || !ok {
-				// this should never happen: object is normalized
-				return nil, errors.New("@demux: no name")
+			// update the index stack
+			stack, ok, err := unstructured.NestedSlice(v, "metadata", demuxIndexStack)
+			if err != nil {
+				return nil, fmt.Errorf("@demux: cannot get index stack: %w", err)
 			}
-
-			if err := unstructured.SetNestedField(v, fmt.Sprintf("%s-%d", name, i), "metadata", "name"); err != nil {
-				return nil, fmt.Errorf("@demux: cannot set name: %w", err)
+			if !ok {
+				stack = []any{}
 			}
-
-			// // the index
-			// if err := unstructured.SetNestedField(v, int64(i), "metadata", "index"); err != nil {
-			// 	return nil, fmt.Errorf("@demux: cannot set index: %w", err)
-			// }
+			stack = append(stack, int64(i))
+			if err := unstructured.SetNestedSlice(v, stack, "metadata", demuxIndexStack); err != nil {
+				return nil, fmt.Errorf("@demux: cannot set index: %w", err)
+			}
 
 			// the elem to the corresponding jsonpath
 			jp, err := e.Arg.GetLiteralString()

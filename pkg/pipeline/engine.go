@@ -3,13 +3,17 @@ package pipeline
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"hsnlab/dcontroller/pkg/cache"
+	"hsnlab/dcontroller/pkg/expression"
 	"hsnlab/dcontroller/pkg/object"
 )
+
+const demuxIndexStack = "__demux-index-stack"
 
 type gvk = schema.GroupVersionKind
 
@@ -43,6 +47,18 @@ func Normalize(eng Engine, content unstruct) (object.Object, error) {
 		return nil, NewInvalidObjectError("invalid metadata in object")
 	}
 
+	// namespace: can be empty
+	namespaceStr := ""
+	namespace, ok := metaMap["namespace"]
+	if ok {
+		if reflect.ValueOf(namespace).Kind() != reflect.String {
+			return nil, NewInvalidObjectError(fmt.Sprintf("metadata/namespace must be "+
+				"a string (current value %q)", namespace))
+		}
+		namespaceStr = namespace.(string)
+		metaMap["namespace"] = namespaceStr
+	}
+
 	// name must be defined
 	name, ok := metaMap["name"]
 	if !ok {
@@ -56,22 +72,33 @@ func Normalize(eng Engine, content unstruct) (object.Object, error) {
 	if nameStr == "" {
 		return nil, NewInvalidObjectError("empty metadata/name in aggregation result")
 	}
-	obj.SetName(nameStr)
+	metaMap["name"] = nameStr
 
-	// namespace: can be empty
-	namespace, ok := metaMap["namespace"]
-	if !ok {
-		obj.SetNamespace("")
-	} else {
-		if reflect.ValueOf(namespace).Kind() != reflect.String {
-			return nil, NewInvalidObjectError(fmt.Sprintf("metadata/namespace must be "+
-				"a string (current value %q)", namespace))
+	// demux/unwind may add the index at the end of the name: unpack the index stack and update
+	// the name
+	is, ok := metaMap[demuxIndexStack]
+	if ok {
+		stack, err := expression.AsIntList(is)
+		if err != nil {
+			return nil, NewInvalidObjectError(fmt.Sprintf("invalid demux index stack: %q", is))
 		}
-		namespaceStr := namespace.(string)
-		obj.SetNamespace(namespaceStr)
+		strs := make([]string, len(stack))
+		for i, x := range stack {
+			strs[i] = fmt.Sprintf("%d", x)
+		}
+		nameStr += fmt.Sprintf("-%s", strings.Join(strs, "-"))
+		metaMap["name"] = nameStr
+
+		// remove stack
+		delete(metaMap, demuxIndexStack)
+		content["metadata"] = metaMap
+
 	}
 
 	object.SetContent(obj, content)
+	// still needed
+	obj.SetName(nameStr)
+	obj.SetNamespace(namespaceStr)
 
 	return obj, nil
 }

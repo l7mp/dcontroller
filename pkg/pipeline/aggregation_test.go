@@ -374,7 +374,7 @@ var _ = Describe("Aggregations", func() {
 	})
 
 	Describe("Evaluating demultiplexer aggregations", func() {
-		It("should evaluate a simple @demux expression", func() {
+		It("should evaluate a simple demux expression", func() {
 			obj := object.NewViewObject("view")
 			// must have a valid name
 			object.SetContent(obj, unstruct{
@@ -384,7 +384,7 @@ var _ = Describe("Aggregations", func() {
 			})
 			object.SetName(obj, "default", "name")
 
-			jsonData := `{"@aggregate":[{"@demux": "$.spec.list"}]}`
+			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}]}`
 			ag := newAggregation(eng, []byte(jsonData))
 			Expect(ag.Expressions).To(HaveLen(1))
 
@@ -436,9 +436,138 @@ var _ = Describe("Aggregations", func() {
 					},
 				},
 			}))
-
 		})
 
+		It("should evaluate a nested demux expression", func() {
+			obj := object.NewViewObject("view")
+			// must have a valid name
+			object.SetContent(obj, unstruct{
+				"spec": unstruct{
+					"list": []any{
+						[]any{int64(1), int64(2), int64(3)},
+						[]any{int64(5), int64(6)},
+					},
+				},
+			})
+			object.SetName(obj, "default", "name")
+
+			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}, {"@unwind": "$.spec.list"}]}`
+			ag := newAggregation(eng, []byte(jsonData))
+
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(5))
+
+			Expect(res[0].Type).To(Equal(cache.Added))
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name":      "name-0-0",
+						"namespace": "default",
+					},
+					"spec": unstruct{
+						"list": int64(1),
+					},
+				},
+			}))
+
+			Expect(res[1].Type).To(Equal(cache.Added))
+			Expect(res[1].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name":      "name-0-1",
+						"namespace": "default",
+					},
+					"spec": unstruct{
+						"list": int64(2),
+					},
+				},
+			}))
+
+			Expect(res[2].Type).To(Equal(cache.Added))
+			Expect(res[2].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name":      "name-0-2",
+						"namespace": "default",
+					},
+					"spec": unstruct{
+						"list": int64(3),
+					},
+				},
+			}))
+
+			Expect(res[3].Type).To(Equal(cache.Added))
+			Expect(res[3].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name":      "name-1-0",
+						"namespace": "default",
+					},
+					"spec": unstruct{
+						"list": int64(5),
+					},
+				},
+			}))
+
+			Expect(res[4].Type).To(Equal(cache.Added))
+			Expect(res[4].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name":      "name-1-1",
+						"namespace": "default",
+					},
+					"spec": unstruct{
+						"list": int64(6),
+					},
+				},
+			}))
+		})
+
+		It("a demux expression pointing to a nonexistent key should err", func() {
+			obj := object.NewViewObject("view")
+			// must have a valid name
+			object.SetContent(obj, unstruct{
+				"spec": unstruct{},
+			})
+			object.SetName(obj, "default", "name")
+
+			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}]}`
+			ag := newAggregation(eng, []byte(jsonData))
+			Expect(ag.Expressions).To(HaveLen(1))
+
+			_, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should evaluate a demux expression with an empty list to a nil delta", func() {
+			obj := object.NewViewObject("view")
+			// must have a valid name
+			object.SetContent(obj, unstruct{
+				"spec": unstruct{
+					"list": []any{},
+				},
+			})
+			object.SetName(obj, "default", "name")
+
+			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}]}`
+			ag := newAggregation(eng, []byte(jsonData))
+			Expect(ag.Expressions).To(HaveLen(1))
+
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(0))
+		})
 	})
 })
 
