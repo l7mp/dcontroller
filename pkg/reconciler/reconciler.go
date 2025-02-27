@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -19,6 +20,10 @@ type Request struct {
 	Namespace, Name string
 	EventType       cache.DeltaType
 	GVK             schema.GroupVersionKind
+}
+
+func (r *Request) String() string {
+	return fmt.Sprintf("req:{ns:%s/name:%s/type:%s/gvk:%s}", r.Namespace, r.Name, r.EventType, r.GVK)
 }
 
 type Reconciler = reconcile.TypedReconciler[Request]
