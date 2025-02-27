@@ -506,7 +506,7 @@ var _ = Describe("Reconciler", func() {
 			// Get should not fail now
 			res2 := object.NewViewObject("view")
 			Expect(vcache.Get(ctx, client.ObjectKeyFromObject(view), res2)).NotTo(HaveOccurred())
-			Expect(res).To(Equal(res2))
+			Expect(*res).To(Equal(*res2))
 		})
 
 		It("should be able to write native objects to Patcher targets", func() {
