@@ -103,7 +103,7 @@ We will test the operator with a ConfigMap and a Deployment, plus a ConfigDeploy
 
 ```console
 kubectl create configmap config --from-literal=key1=value1 --from-literal=key2=value2
-kubectl create deployment dep --image=l7mp/net-debug --replicas=2
+kubectl create deployment dep --image=docker.io/l7mp/net-debug --replicas=2
 kubectl apply -f - <<EOF
 apiVersion: dcontroller.io/v1alpha1
 kind: ConfigDeployment
