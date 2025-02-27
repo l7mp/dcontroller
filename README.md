@@ -5,8 +5,8 @@
 
 Δ-controller is a framework to simplify the design, implementation and maintenance of Kubernetes
 operators. The main goal is to reduce the mental overhead of writing Kubernetes operators by
-providing simple automations to eliminate some of the repetitive code that must be written when
-coding against the [Kubernetes
+providing simple automations to eliminate some of the repetitive imperative code that must be
+written when coding against the [Kubernetes
 controller-runtime](https://github.com/kubernetes-sigs/controller-runtime) project. The final goal
 is to let anyone with minimal Go skills to write complex Kubernetes operators in the NoCode/LowCode
 style.
@@ -19,7 +19,7 @@ either a simplified internal representation that we call a *view*, or back into 
 Kubernetes resources. This is much akin to MongoDB, so users familiar with document-oriented
 databases and declarative queries will feel at home when using Δ-controller.
 
-The Δ in the name stands for **declarative** and **delta**.
+The Δ in the name stands for **declarative** and imperative (or **delta**).
 
 First, Δ-controller implements a *declarative query language* (inspired by [MongoDB
 aggregators](https://www.mongodb.com/docs/manual/core/aggregation-pipeline)) that can be used to
