@@ -566,7 +566,7 @@ var _ = Describe("Aggregations", func() {
 
 			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(0))
+			Expect(res).To(BeEmpty())
 		})
 	})
 })

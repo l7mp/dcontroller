@@ -92,7 +92,6 @@ func Normalize(eng Engine, content unstruct) (object.Object, error) {
 		// remove stack
 		delete(metaMap, demuxIndexStack)
 		content["metadata"] = metaMap
-
 	}
 
 	object.SetContent(obj, content)
