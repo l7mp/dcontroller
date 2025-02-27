@@ -67,8 +67,8 @@ func New(name string, mgr runtimeManager.Manager, spec *opv1a1.OperatorSpec, opt
 	return op
 }
 
-// Load creates a new operator from a serialized operator spec.
-func Load(name string, mgr runtimeManager.Manager, file string, opts Options) (*Operator, error) {
+// NewFromFile creates a new operator from a serialized operator spec.
+func NewFromFile(name string, mgr runtimeManager.Manager, file string, opts Options) (*Operator, error) {
 	b, err := os.ReadFile(file)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
