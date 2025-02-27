@@ -21,7 +21,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"hsnlab/dcontroller/pkg/expression"
+	"github.com/hsnlab/dcontroller/pkg/expression"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )

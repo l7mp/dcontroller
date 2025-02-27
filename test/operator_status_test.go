@@ -15,11 +15,11 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
-	"hsnlab/dcontroller/internal/testutils"
-	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	"hsnlab/dcontroller/pkg/object"
-	"hsnlab/dcontroller/pkg/operator"
-	"hsnlab/dcontroller/pkg/util"
+	"github.com/hsnlab/dcontroller/internal/testutils"
+	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/hsnlab/dcontroller/pkg/object"
+	"github.com/hsnlab/dcontroller/pkg/operator"
+	"github.com/hsnlab/dcontroller/pkg/util"
 )
 
 var _ = Describe("Operator status report test:", Ordered, func() {

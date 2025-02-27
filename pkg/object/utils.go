@@ -2,7 +2,6 @@ package object
 
 import (
 	"fmt"
-	"hsnlab/dcontroller/pkg/util"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -10,6 +9,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+
+	"github.com/hsnlab/dcontroller/pkg/util"
 )
 
 var scheme = runtime.NewScheme()

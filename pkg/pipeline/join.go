@@ -3,8 +3,8 @@ package pipeline
 import (
 	"fmt"
 
-	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	"hsnlab/dcontroller/pkg/cache"
+	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/hsnlab/dcontroller/pkg/cache"
 )
 
 var _ Evaluator = &Join{}

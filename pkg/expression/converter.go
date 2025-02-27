@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strconv"
 
-	"hsnlab/dcontroller/pkg/util"
+	"github.com/hsnlab/dcontroller/pkg/util"
 )
 
 func IsList(d any) bool {

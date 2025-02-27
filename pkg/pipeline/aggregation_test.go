@@ -7,10 +7,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/yaml"
 
-	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	"hsnlab/dcontroller/pkg/cache"
-	"hsnlab/dcontroller/pkg/expression"
-	"hsnlab/dcontroller/pkg/object"
+	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/hsnlab/dcontroller/pkg/cache"
+	"github.com/hsnlab/dcontroller/pkg/expression"
+	"github.com/hsnlab/dcontroller/pkg/object"
 )
 
 var _ = Describe("Aggregations", func() {

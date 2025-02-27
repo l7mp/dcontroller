@@ -12,9 +12,9 @@ import (
 	ctrlCache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	viewv1a1 "hsnlab/dcontroller/pkg/api/view/v1alpha1"
-	ccache "hsnlab/dcontroller/pkg/cache"
-	"hsnlab/dcontroller/pkg/object"
+	viewv1a1 "github.com/hsnlab/dcontroller/pkg/api/view/v1alpha1"
+	ccache "github.com/hsnlab/dcontroller/pkg/cache"
+	"github.com/hsnlab/dcontroller/pkg/object"
 )
 
 var _ client.Client = &compositeClient{}

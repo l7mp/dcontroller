@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"hsnlab/dcontroller/pkg/cache"
+	"github.com/hsnlab/dcontroller/pkg/cache"
 )
 
 // Options provides various settings to custimize the manager. Most options come verbatim from the

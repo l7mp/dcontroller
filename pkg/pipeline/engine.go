@@ -8,9 +8,9 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"hsnlab/dcontroller/pkg/cache"
-	"hsnlab/dcontroller/pkg/expression"
-	"hsnlab/dcontroller/pkg/object"
+	"github.com/hsnlab/dcontroller/pkg/cache"
+	"github.com/hsnlab/dcontroller/pkg/expression"
+	"github.com/hsnlab/dcontroller/pkg/object"
 )
 
 const demuxIndexStack = "__demux-index-stack"

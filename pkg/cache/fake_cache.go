@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"hsnlab/dcontroller/pkg/object"
+	"github.com/hsnlab/dcontroller/pkg/object"
 )
 
 var _ cache.Cache = &FakeRuntimeCache{}

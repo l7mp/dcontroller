@@ -10,10 +10,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	toolscache "k8s.io/client-go/tools/cache"
 
-	"hsnlab/dcontroller/pkg/cache"
-	"hsnlab/dcontroller/pkg/expression"
-	"hsnlab/dcontroller/pkg/object"
-	"hsnlab/dcontroller/pkg/util"
+	"github.com/hsnlab/dcontroller/pkg/cache"
+	"github.com/hsnlab/dcontroller/pkg/expression"
+	"github.com/hsnlab/dcontroller/pkg/object"
+	"github.com/hsnlab/dcontroller/pkg/util"
 )
 
 type unstruct = map[string]any

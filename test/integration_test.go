@@ -40,7 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
+	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
 )
 
 var _ = fmt.Sprintf("%d", 1)

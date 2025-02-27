@@ -3,7 +3,7 @@ package cache
 import (
 	toolscache "k8s.io/client-go/tools/cache"
 
-	"hsnlab/dcontroller/pkg/object"
+	"github.com/hsnlab/dcontroller/pkg/object"
 )
 
 // Store is like toolscache.Store but it also deep-copies objects

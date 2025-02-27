@@ -16,10 +16,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
-	"hsnlab/dcontroller/internal/testutils"
-	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	"hsnlab/dcontroller/pkg/object"
-	"hsnlab/dcontroller/pkg/operator"
+	"github.com/hsnlab/dcontroller/internal/testutils"
+	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/hsnlab/dcontroller/pkg/object"
+	"github.com/hsnlab/dcontroller/pkg/operator"
 )
 
 const serviceTypeAnnotationName = "dcontroller.io/service-type"

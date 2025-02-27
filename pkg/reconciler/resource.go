@@ -16,12 +16,12 @@ import (
 	runtimePredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	runtimeSource "sigs.k8s.io/controller-runtime/pkg/source"
 
-	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	viewv1a1 "hsnlab/dcontroller/pkg/api/view/v1alpha1"
-	"hsnlab/dcontroller/pkg/cache"
-	"hsnlab/dcontroller/pkg/object"
-	"hsnlab/dcontroller/pkg/predicate"
-	"hsnlab/dcontroller/pkg/util"
+	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
+	viewv1a1 "github.com/hsnlab/dcontroller/pkg/api/view/v1alpha1"
+	"github.com/hsnlab/dcontroller/pkg/cache"
+	"github.com/hsnlab/dcontroller/pkg/object"
+	"github.com/hsnlab/dcontroller/pkg/predicate"
+	"github.com/hsnlab/dcontroller/pkg/util"
 )
 
 type Resource interface {

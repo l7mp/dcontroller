@@ -10,8 +10,8 @@ import (
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/yaml"
 
-	opv1a1 "hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	dcontroller "hsnlab/dcontroller/pkg/controller"
+	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
+	dcontroller "github.com/hsnlab/dcontroller/pkg/controller"
 )
 
 var _ runtimeManager.Runnable = &Operator{}
