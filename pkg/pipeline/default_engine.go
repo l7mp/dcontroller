@@ -129,39 +129,15 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 		if err != nil {
 			return nil, err
 		}
-		delDelta := cache.NilDelta
-		if len(delDeltas) == 1 {
-			delDelta = delDeltas[0]
-		}
 
 		addDeltas, err := eng.evaluateAggregation(a, cache.Delta{Type: cache.Added, Object: delta.Object})
 		if err != nil {
 			return nil, err
 		}
-		addDelta := cache.NilDelta
-		if len(addDeltas) == 1 {
-			addDelta = addDeltas[0]
-		}
 
-		// consolidate: objects both in the deleted and added cache are updated
-		switch {
-		case delDelta.IsUnchanged() && addDelta.IsUnchanged():
-			// nothing happened: object wasn't in the view and it still isn't
-			// ds = []cache.Delta{{Type: cache.Updated, Object: nil}}
-			ds = []cache.Delta{}
-		case delDelta.IsUnchanged() && !addDelta.IsUnchanged():
-			// object added into the view
-			ds = []cache.Delta{addDelta}
-		case !delDelta.IsUnchanged() && addDelta.IsUnchanged():
-			// object removed from the view
-			ds = []cache.Delta{delDelta}
-		case ObjectKey(delDelta.Object) == ObjectKey(addDelta.Object):
-			// object updated
-			ds = []cache.Delta{{Type: cache.Updated, Object: addDelta.Object}}
-		default:
-			// aggregation affects the name and the name has changed!
-			ds = []cache.Delta{delDelta, addDelta}
-		}
+		eng.Log().V(5).Info("before consilidation", "del", delDeltas, "add", addDeltas)
+
+		ds = eng.consolidateUpdate(delDeltas, addDeltas)
 
 	case cache.Deleted:
 		old, ok, err := eng.baseViewStore[gvk].GetByKey(ObjectKey(delta.Object).String())
@@ -339,6 +315,60 @@ func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) ([]uns
 		return nil, NewAggregationError(
 			errors.New("unknown aggregation stage"))
 	}
+}
+
+// consolidate: objects both in the deleted and added cache are updated
+func (eng *defaultEngine) consolidateUpdate(dels, adds []cache.Delta) []cache.Delta {
+	// build an index into deltas
+	delidx := map[string]*cache.Delta{}
+	for i, del := range dels {
+		if !del.IsUnchanged() {
+			delidx[del.Object.GetName()] = &dels[i]
+		}
+	}
+
+	addidx := map[string]*cache.Delta{}
+	for i, add := range adds {
+		if !add.IsUnchanged() {
+			addidx[add.Object.GetName()] = &adds[i]
+		}
+	}
+
+	ds := []cache.Delta{}
+	// 1. "deleted+!added=deleted"
+	for _, del := range dels {
+		if del.IsUnchanged() {
+			continue
+		}
+		if _, ok := addidx[del.Object.GetName()]; !ok {
+			// del is !Unchanged() and add is either Unchanged() or missing
+			ds = append(ds, del)
+		}
+	}
+
+	// 2. "deleted+added=updated"
+	for _, del := range dels {
+		if del.IsUnchanged() {
+			continue
+		}
+		if add, ok := addidx[del.Object.GetName()]; ok {
+			// both known to be !Unchanged()
+			ds = append(ds, cache.Delta{Type: cache.Updated, Object: add.Object})
+		}
+	}
+
+	// 3. "!deleted+added=added"
+	for _, add := range adds {
+		if add.IsUnchanged() {
+			continue
+		}
+		if _, ok := delidx[add.Object.GetName()]; !ok {
+			// add is !Unchanged() and del is either Unchanged() or missing
+			ds = append(ds, add)
+		}
+	}
+
+	return ds
 }
 
 func (eng *defaultEngine) EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error) {
