@@ -266,7 +266,7 @@ func processRequest(ctx context.Context, c *Controller, req reconciler.Request) 
 	// Apply the resultant deltas
 	for _, d := range deltas {
 		c.log.V(4).Info("writing delta to target", "target", c.target.String(),
-			"delta-type", d.Type, "object", object.Dump(delta.Object))
+			"delta-type", d.Type, "object", object.Dump(d.Object))
 
 		if err := c.target.Write(ctx, d); err != nil {
 			return fmt.Errorf("cannot update target %s for delta %s: %w", req.GVK,
