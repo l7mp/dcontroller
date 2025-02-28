@@ -288,8 +288,8 @@ func AsMap(d any) (map[string]any, error) {
 	return ret, nil
 }
 
-// AsExpOrList returns an expression or an expression list.
-func AsExpOrList(d any) ([]Expression, error) {
+// AsExpOrExpList returns an expression or an expression list.
+func AsExpOrExpList(d any) ([]Expression, error) {
 	exp, ok := d.(Expression)
 	if !ok {
 		var expp *Expression

@@ -83,3 +83,65 @@ func GetBaseScheme() *runtime.Scheme {
 	appsv1.AddToScheme(scheme) //nolint:errcheck
 	return scheme
 }
+
+// DeepCopyAny clones an arbitrary value.
+func DeepCopyAny(value any) any {
+	switch v := value.(type) {
+	case bool, int64, float64, string:
+		return v
+	case []any:
+		newList := make([]any, len(v))
+		for i, item := range v {
+			newList[i] = DeepCopyAny(item)
+		}
+		return newList
+	case map[string]any:
+		newMap := make(map[string]any)
+		for k, item := range v {
+			newMap[k] = DeepCopyAny(item)
+		}
+		return newMap
+	default:
+		return v
+	}
+}
+
+// MergeAny merges two arbitrary values.
+func MergeAny(a, b any) (any, error) {
+	if a == nil {
+		return b, nil
+	}
+	switch vb := b.(type) {
+	case bool, int64, float64, string:
+		return b, nil
+	case []any:
+		if va, ok := a.([]any); ok {
+			return append(va, vb...), nil
+		}
+		return vb, nil
+	case map[string]any:
+		if va, ok := a.(map[string]any); ok {
+			ret := DeepCopyAny(va).(map[string]any)
+			for k, mva := range va {
+				if mvb, ok := vb[k]; ok {
+					x, err := MergeAny(mva, mvb)
+					if err != nil {
+						return nil, err
+					}
+					ret[k] = x
+				} else {
+					ret[k] = mva
+				}
+			}
+
+			for k, mvb := range vb {
+				if _, ok := va[k]; !ok {
+					ret[k] = mvb
+				}
+			}
+			return ret, nil
+		}
+		return vb, nil
+	}
+	return nil, fmt.Errorf("could not merge argument %q and %q", a, b)
+}

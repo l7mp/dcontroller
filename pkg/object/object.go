@@ -85,27 +85,6 @@ func DeepCopy(in Object) Object {
 	return out
 }
 
-func DeepCopyAny(value any) any {
-	switch v := value.(type) {
-	case bool, int64, float64, string:
-		return v
-	case []any:
-		newList := make([]any, len(v))
-		for i, item := range v {
-			newList[i] = DeepCopyAny(item)
-		}
-		return newList
-	case map[string]any:
-		newMap := make(map[string]any)
-		for k, item := range v {
-			newMap[k] = DeepCopyAny(item)
-		}
-		return newMap
-	default:
-		return v
-	}
-}
-
 // NewViewObjectList creates an empty object list.
 func NewViewObjectList(view string) ObjectList {
 	list := &unstructured.UnstructuredList{}

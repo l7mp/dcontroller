@@ -583,6 +583,88 @@ var _ = Describe("Expressions", func() {
 		})
 	})
 
+	Describe("Evaluating @merge", func() {
+		It("should merge basic objects", func() {
+			for _, tc := range []struct {
+				js  string
+				res any
+			}{
+				{
+					js:  `{"@merge":[1, true]}`,
+					res: true,
+				},
+				{
+					js:  `{"@merge":[1, 2]}`,
+					res: int64(2),
+				},
+				{
+					js:  `{"@merge":[1, 2.1]}`,
+					res: float64(2.1),
+				},
+				{
+					js:  `{"@merge":[1, "a"]}`,
+					res: "a",
+				},
+				{
+					js:  `{"@merge":[1, ["a","b"]]}`,
+					res: []any{"a", "b"},
+				},
+				{
+					js:  `{"@merge":[["a","b"],["c","d"]]}`,
+					res: []any{"a", "b", "c", "d"},
+				},
+				{
+					js: `{"@merge":[{"a":"aaa"},{"a":{"d":12}}]}`,
+					res: map[string]any{
+						"a": map[string]any{"d": int64(12)},
+					},
+				},
+				{
+					js: `{"@merge":[["a","aaa"],{"a":{"d":12}}]}`,
+					res: map[string]any{
+						"a": map[string]any{"d": int64(12)},
+					},
+				},
+				{
+					js: `{"@merge":[{"a":"aaa"},{"b":{"d":12}}]}`,
+					res: map[string]any{
+						"a": "aaa",
+						"b": map[string]any{"d": int64(12)},
+					},
+				},
+			} {
+				var exp Expression
+				err := json.Unmarshal([]byte(tc.js), &exp)
+				Expect(err).NotTo(HaveOccurred())
+
+				res, err := exp.Evaluate(EvalCtx{Object: nil, Log: logger})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res).To(Equal(tc.res))
+			}
+		})
+
+		It("should merge two JSONPath setters", func() {
+			jsonData := `{"@merge":[{"spec":{"a":"aaa"}},{"$.spec.b.d":12}]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			d, ok := res.(Unstructured)
+			Expect(ok).To(BeTrue())
+
+			Expect(d).To(HaveKey("spec"))
+			Expect(d["spec"]).To(HaveKey("a"))
+			Expect(d["spec"].(Unstructured)["a"]).To(Equal("aaa"))
+
+			Expect(d["spec"]).To(HaveKey("b"))
+			Expect(d["spec"].(Unstructured)["b"]).To(Equal(map[string]any{"d": int64(12)}))
+		})
+	})
+
 	Describe("Evaluating label selectors", func() {
 		It("should evaluate a @selector expression on a literal labelset", func() {
 			jsonData := `{"@selector":[{"matchLabels":{"app":"nginx"}},{"app":"nginx"}]}`

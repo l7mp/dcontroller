@@ -7,6 +7,7 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
+	"github.com/hsnlab/dcontroller/pkg/object"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 )
@@ -206,8 +207,31 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 	// list commands: must eval the arg themselves
 	if string(e.Op[0]) == "@" {
 		switch e.Op {
+		case "@merge":
+			args, err := AsExpOrExpList(e.Arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			var ret any
+			// evaluate expressons
+			for _, arg := range args {
+				res, err := arg.Evaluate(ctx)
+				if err != nil {
+					return nil, errors.New("failed to evaluate expression")
+				}
+				ret, err = object.MergeAny(ret, res)
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
+
+			return ret, nil
+
 		case "@filter":
-			args, err := AsExpOrList(e.Arg)
+			args, err := AsExpOrExpList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
@@ -256,7 +280,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 
 			// @in: [exp, list]
 		case "@any": //nolint:dupl
-			args, err := AsExpOrList(e.Arg)
+			args, err := AsExpOrExpList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
@@ -305,7 +329,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 
 			// @in: [exp, list]
 		case "@none": //nolint:dupl
-			args, err := AsExpOrList(e.Arg)
+			args, err := AsExpOrExpList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
@@ -353,7 +377,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			return v, nil
 
 		case "@all": // @in: [exp, list]
-			args, err := AsExpOrList(e.Arg)
+			args, err := AsExpOrExpList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}
@@ -401,7 +425,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			return v, nil
 
 		case "@map":
-			args, err := AsExpOrList(e.Arg)
+			args, err := AsExpOrExpList(e.Arg)
 			if err != nil {
 				return nil, NewExpressionError(e, err)
 			}

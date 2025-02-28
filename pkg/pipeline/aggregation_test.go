@@ -212,6 +212,38 @@ var _ = Describe("Aggregations", func() {
 
 		})
 
+		It("should evaluate a projection expression that contains a list of setters", func() {
+			jsonData := `
+'@aggregate':
+  - '@project':
+      '@merge':
+        - $.metadata.name: $.metadata.name
+        - $.metadata.namespace: $.metadata.namespace
+        - $.spec.a: 123`
+			ag := newAggregation(eng, []byte(jsonData))
+
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Updated, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Added))
+			obj := res[0].Object
+			Expect(obj.GetNamespace()).To(Equal("default"))
+			Expect(obj.GetName()).To(Equal("name"))
+			Expect(obj).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"namespace": "default",
+						"name":      "name",
+					},
+					"spec": unstruct{
+						"a": int64(123),
+					},
+				},
+			}))
+		})
+
 		It("should err for a projection that drops .metadata.name", func() {
 			jsonData := `{"@aggregate":[{"@project":{"spec":"$.spec"}}]}`
 			ag := newAggregation(eng, []byte(jsonData))
