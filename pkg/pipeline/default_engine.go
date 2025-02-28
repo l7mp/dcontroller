@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	toolscache "k8s.io/client-go/tools/cache"
 
 	"github.com/hsnlab/dcontroller/pkg/cache"
@@ -253,8 +252,9 @@ func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) ([]uns
 
 	// @demux is one to many
 	case "@unwind", "@demux":
-		if _, err := Normalize(eng, u); err != nil {
-			return nil, errors.New("@demux requires a valid .metadata.name")
+		name, err := expression.GetJSONPathExp("$.metadata.name", u)
+		if err != nil {
+			return nil, errors.New("@valid .metadata.name required")
 		}
 
 		arg, err := e.Arg.Evaluate(expression.EvalCtx{Object: u, Log: eng.log})
@@ -275,19 +275,6 @@ func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) ([]uns
 				return nil, errors.New("could not deepcopy object content")
 			}
 
-			// update the index stack
-			stack, ok, err := unstructured.NestedSlice(v, "metadata", demuxIndexStack)
-			if err != nil {
-				return nil, fmt.Errorf("@demux: cannot get index stack: %w", err)
-			}
-			if !ok {
-				stack = []any{}
-			}
-			stack = append(stack, int64(i))
-			if err := unstructured.SetNestedSlice(v, stack, "metadata", demuxIndexStack); err != nil {
-				return nil, fmt.Errorf("@demux: cannot set index: %w", err)
-			}
-
 			// the elem to the corresponding jsonpath
 			jp, err := e.Arg.GetLiteralString()
 			if err != nil {
@@ -297,6 +284,11 @@ func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) ([]uns
 			// must use the low-level jsonpath setter so that we retain the original object
 			if err := expression.SetJSONPathExp(jp, elem, v); err != nil {
 				return nil, err
+			}
+
+			// add index to name
+			if err := expression.SetJSONPathExp("$.metadata.name", fmt.Sprintf("%s-%d", name, i), v); err != nil {
+				return nil, fmt.Errorf("could add index to .metadata.name")
 			}
 
 			v, err = expression.AsObject(v)

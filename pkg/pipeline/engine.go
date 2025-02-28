@@ -3,17 +3,13 @@ package pipeline
 import (
 	"fmt"
 	"reflect"
-	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/hsnlab/dcontroller/pkg/cache"
-	"github.com/hsnlab/dcontroller/pkg/expression"
 	"github.com/hsnlab/dcontroller/pkg/object"
 )
-
-const demuxIndexStack = "__demux-index-stack"
 
 type gvk = schema.GroupVersionKind
 
@@ -73,26 +69,6 @@ func Normalize(eng Engine, content unstruct) (object.Object, error) {
 		return nil, NewInvalidObjectError("empty metadata/name in aggregation result")
 	}
 	metaMap["name"] = nameStr
-
-	// demux/unwind may add the index at the end of the name: unpack the index stack and update
-	// the name
-	is, ok := metaMap[demuxIndexStack]
-	if ok {
-		stack, err := expression.AsIntList(is)
-		if err != nil {
-			return nil, NewInvalidObjectError(fmt.Sprintf("invalid demux index stack: %q", is))
-		}
-		strs := make([]string, len(stack))
-		for i, x := range stack {
-			strs[i] = fmt.Sprintf("%d", x)
-		}
-		nameStr += fmt.Sprintf("-%s", strings.Join(strs, "-"))
-		metaMap["name"] = nameStr
-
-		// remove stack
-		delete(metaMap, demuxIndexStack)
-		content["metadata"] = metaMap
-	}
 
 	object.SetContent(obj, content)
 	// still needed
