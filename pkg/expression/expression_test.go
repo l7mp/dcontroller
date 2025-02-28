@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/grokify/mogo/encoding/base36"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap/zapcore"
@@ -812,6 +813,40 @@ var _ = Describe("Expressions", func() {
 			v, err = AsBool(res)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(v).To(BeTrue())
+		})
+
+		It("should evaluate a @hash expression", func() {
+			jsonData := `{"@hash":"$.spec"}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			v, err := AsString(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal("dorzm8"))
+
+			js, err := json.Marshal(obj1.Object["spec"])
+			Expect(err).NotTo(HaveOccurred())
+			h := base36.Md5Base36(string(js))
+			Expect(v).To(Equal(h[0:6]))
+
+			obj := object.DeepCopy(obj1)
+			obj.Object["spec"].(map[string]any)["a"] = int64(2)
+
+			ctx = EvalCtx{Object: obj.UnstructuredContent(), Log: logger}
+			res, err = exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			v, err = AsString(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal("9pxacx"))
+
+			js, err = json.Marshal(obj.Object["spec"])
+			Expect(err).NotTo(HaveOccurred())
+			h = base36.Md5Base36(string(js))
+			Expect(v).To(Equal(h[0:6]))
 		})
 	})
 

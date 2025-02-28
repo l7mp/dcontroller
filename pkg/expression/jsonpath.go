@@ -21,16 +21,19 @@ func GetJSONPath(ctx EvalCtx, key string) (any, error) {
 
 	// $... is object
 	subject := ctx.Object
+
 	// $$... is local subject (@map, @filter, etc.)
 	if len(key) >= 2 && key[0] == '$' && key[1] == '$' && ctx.Subject != nil {
 		// remove first $
 		key = key[1:]
 		subject = ctx.Subject
 	}
+
 	ret, err := GetJSONPathExp(key, subject)
 	if err != nil {
 		return nil, err
 	}
+
 	return ret, nil
 }
 

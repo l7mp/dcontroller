@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strings"
 
 	"github.com/go-logr/logr"
-	"github.com/hsnlab/dcontroller/pkg/object"
+	"github.com/grokify/mogo/encoding/base36"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
+
+	"github.com/hsnlab/dcontroller/pkg/object"
 )
 
 const ExpressionDumpMaxLevel = 10
@@ -780,6 +783,23 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			}
 
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+
+			return v, nil
+
+		case "@hash":
+			js, err := json.Marshal(arg)
+			if err != nil {
+				return nil, fmt.Errorf("@hash: failed to marshal value to JSON: %w", err)
+			}
+
+			v := base36.Md5Base36(string(js))
+			if len(v) < 6 {
+				v += strings.Repeat("x", 6-len(v))
+			} else {
+				v = v[0:6]
+			}
+
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
 
 			return v, nil
 
