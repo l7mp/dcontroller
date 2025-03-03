@@ -118,7 +118,7 @@ var _ = Describe("Aggregations", func() {
 				},
 			}))
 
-			res, err := ag.Evaluate(cache.Delta{Type: cache.Updated, Object: objs[0]})
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].Type).To(Equal(cache.Added))
@@ -137,7 +137,7 @@ var _ = Describe("Aggregations", func() {
 			jsonData := `{"@aggregate":[{"@project":{"metadata":{"name":"$.metadata.name","namespace":"$.metadata.namespace"}}}]}`
 			ag := newAggregation(eng, []byte(jsonData))
 
-			res, err := ag.Evaluate(cache.Delta{Type: cache.Updated, Object: objs[0]})
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].Type).To(Equal(cache.Added))
@@ -155,7 +155,7 @@ var _ = Describe("Aggregations", func() {
 			jsonData := `{"@aggregate":[{"@project":{"metadata":"$.metadata"}}]}`
 			ag := newAggregation(eng, []byte(jsonData))
 
-			res, err := ag.Evaluate(cache.Delta{Type: cache.Updated, Object: objs[0]})
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(res).To(HaveLen(1))
@@ -181,7 +181,7 @@ var _ = Describe("Aggregations", func() {
         namespace: $.metadata.namespace`
 			ag := newAggregation(eng, []byte(jsonData))
 
-			res, err := ag.Evaluate(cache.Delta{Type: cache.Updated, Object: objs[0]})
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].Type).To(Equal(cache.Added))
@@ -198,7 +198,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(val).To(Equal("d"))
 
 			// this should remove name:c and add name:d
-			res, err = ag.Evaluate(cache.Delta{Type: cache.Updated, Object: newObj})
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: newObj})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(2))
 			Expect(res[0].Type).To(Equal(cache.Deleted))
@@ -222,7 +222,7 @@ var _ = Describe("Aggregations", func() {
         - $.spec.a: 123`
 			ag := newAggregation(eng, []byte(jsonData))
 
-			res, err := ag.Evaluate(cache.Delta{Type: cache.Updated, Object: objs[0]})
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].Type).To(Equal(cache.Added))
@@ -248,7 +248,7 @@ var _ = Describe("Aggregations", func() {
 			jsonData := `{"@aggregate":[{"@project":{"spec":"$.spec"}}]}`
 			ag := newAggregation(eng, []byte(jsonData))
 
-			_, err := ag.Evaluate(cache.Delta{Type: cache.Updated, Object: objs[0]})
+			_, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -256,7 +256,7 @@ var _ = Describe("Aggregations", func() {
 			jsonData := `{"@aggregate":[{"@project":{"x": "$.spec.x"}}]}`
 			ag := newAggregation(eng, []byte(jsonData))
 
-			_, err := ag.Evaluate(cache.Delta{Type: cache.Updated, Object: objs[0]})
+			_, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).To(HaveOccurred())
 		})
 	})
@@ -265,7 +265,6 @@ var _ = Describe("Aggregations", func() {
 		It("should evaluate a simple projection expression", func() {
 			jsonData := `{"@aggregate":[{"@project":{"metadata":"$.metadata"}}]}`
 			ag := newAggregation(eng, []byte(jsonData))
-
 			Expect(ag.Expressions).To(HaveLen(1))
 
 			obj := &unstructured.Unstructured{}
@@ -273,7 +272,7 @@ var _ = Describe("Aggregations", func() {
 			obj.SetName("test-name")
 			obj.SetNamespace("test-ns")
 
-			res, err := ag.Evaluate(cache.Delta{Type: cache.Updated, Object: obj})
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].Type).To(Equal(cache.Added))

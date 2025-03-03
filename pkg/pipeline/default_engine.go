@@ -59,7 +59,7 @@ func (eng *defaultEngine) IsValidEvent(delta cache.Delta) bool {
 		delta.Type == cache.Upserted || delta.Type == cache.Replaced {
 		obj, ok, err := eng.baseViewStore[gvk].GetByKey(ObjectKey(delta.Object).String())
 		if err == nil && ok {
-			// duplicate0>not-valid
+			// duplicate->not-valid
 			return !object.DeepEqual(delta.Object, obj)
 		}
 	}
@@ -84,59 +84,50 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 	// find out whether an upsert is an update/replace or an add
 	delta = eng.handleUpsertEvent(delta)
 
-	ds, err := eng.evaluateAggregation(a, delta)
-	if err != nil {
-		return nil, err
-	}
-
-	eng.log.V(4).Info("aggregation: ready", "event-type", delta.Type, "result", util.Stringify(ds))
-
-	return ds, nil
-}
-
-func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta) ([]cache.Delta, error) {
-	gvk := delta.Object.GetObjectKind().GroupVersionKind()
-
-	// update local view cache
-	var ds []cache.Delta
+	// update the local view caches
+	ds := []cache.Delta{}
 	switch delta.Type {
 	case cache.Added:
-		eng.log.V(6).Info("aggregation: add using new object", "object", delta.Object)
-
-		objs, err := eng.evalAggregation(a, object.DeepCopy(delta.Object))
-		if err != nil {
-			return nil, fmt.Errorf("processing event %q: could not evaluate aggregation for new object %s: %w",
-				delta.Type, ObjectKey(delta.Object), err)
-		}
-
 		if err := eng.baseViewStore[gvk].Add(delta.Object); err != nil {
 			return nil, fmt.Errorf("processing event %q: could not add object %s to store: %w",
 				delta.Type, ObjectKey(delta.Object), err)
 		}
 
-		ds = []cache.Delta{}
-		for _, obj := range objs {
-			// @select shortcuts
-			ds = append(ds, cache.Delta{Type: cache.Added, Object: obj})
-		}
+		ds = append(ds, cache.Delta{
+			Type:   delta.Type,
+			Object: object.DeepCopy(delta.Object),
+		})
+
+		eng.log.V(6).Info("aggregation: add", "new-object", object.Dump(delta.Object))
 
 	case cache.Updated, cache.Replaced:
-		eng.log.V(6).Info("aggregate: replacing event with a Delete followed by an Add",
-			"event-type", delta.Type, "object", delta.Object)
-
-		delDeltas, err := eng.evaluateAggregation(a, cache.Delta{Type: cache.Deleted, Object: delta.Object})
+		old, ok, err := eng.baseViewStore[gvk].GetByKey(ObjectKey(delta.Object).String())
 		if err != nil {
 			return nil, err
 		}
-
-		addDeltas, err := eng.evaluateAggregation(a, cache.Delta{Type: cache.Added, Object: delta.Object})
-		if err != nil {
-			return nil, err
+		if !ok {
+			eng.log.V(4).Info("aggregation: ignoring update event for an unknown object",
+				"event-type", delta.Type, "object", ObjectKey(delta.Object))
+			return nil, nil
 		}
 
-		eng.Log().V(5).Info("before consilidation", "del", delDeltas, "add", addDeltas)
+		if err := eng.baseViewStore[gvk].Update(delta.Object); err != nil {
+			return nil, fmt.Errorf("processing event %q: could not add object %s to store: %w",
+				delta.Type, ObjectKey(delta.Object), err)
+		}
 
-		ds = eng.consolidateUpdate(delDeltas, addDeltas)
+		ds = append(ds, []cache.Delta{
+			{
+				Type:   cache.Deleted,
+				Object: old, // GgetByKey performs the deepcop
+			}, {
+				Type:   cache.Added,
+				Object: object.DeepCopy(delta.Object),
+			},
+		}...)
+
+		eng.log.V(6).Info("aggregation: update", "old-object", object.Dump(old),
+			"new-object", object.Dump(delta.Object))
 
 	case cache.Deleted:
 		old, ok, err := eng.baseViewStore[gvk].GetByKey(ObjectKey(delta.Object).String())
@@ -149,24 +140,17 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 			return nil, nil
 		}
 
-		eng.log.V(6).Info("aggregation: delete using existing object", "object", old)
-
-		objs, err := eng.evalAggregation(a, object.DeepCopy(old))
-		if err != nil {
-			return nil, fmt.Errorf("processing event %q: could not evaluate aggregation for deleted object %s: %w",
-				delta.Type, ObjectKey(delta.Object), err)
-		}
-
 		if err := eng.baseViewStore[gvk].Delete(old); err != nil {
 			return nil, fmt.Errorf("procesing event %q: could not delete object %s from store: %w",
 				delta.Type, ObjectKey(delta.Object), err)
 		}
 
-		ds = []cache.Delta{}
-		for _, obj := range objs {
-			// @select shortcuts
-			ds = append(ds, cache.Delta{Type: cache.Deleted, Object: obj})
-		}
+		ds = append(ds, cache.Delta{
+			Type:   cache.Deleted,
+			Object: old, // GgetByKey performs the deepcop
+		})
+
+		eng.log.V(6).Info("aggregation: delete using existing object", "object", old)
 
 	default:
 		eng.log.V(4).Info("aggregate: ignoring event", "event-type", delta.Type)
@@ -174,42 +158,62 @@ func (eng *defaultEngine) evaluateAggregation(a *Aggregation, delta cache.Delta)
 		return []cache.Delta{}, nil
 	}
 
-	return ds, nil
+	// no more touching of the local cache from this point!
+
+	// process the deltas
+	res := []cache.Delta{}
+	for _, d := range ds {
+		objs, err := eng.doAggregation(a, d.Object)
+		if err != nil {
+			return nil, fmt.Errorf("processing event %q: could not evaluate aggregation %s: %w",
+				delta.Type, a.String(), err)
+		}
+
+		for _, obj := range objs {
+			// @select shortcuts
+			res = append(res, cache.Delta{Type: d.Type, Object: obj})
+		}
+	}
+
+	res = eng.consolidateDeltas(delta, res)
+
+	eng.log.V(4).Info("aggregation: ready", "event-type", delta.Type, "result", util.Stringify(ds))
+
+	return res, nil
 }
 
-func (eng *defaultEngine) evalAggregation(a *Aggregation, obj object.Object) ([]object.Object, error) {
-	args := []unstruct{obj.UnstructuredContent()}
-	for _, s := range a.Expressions {
-		sres := []unstruct{}
-		for _, u := range args {
-			ret, err := eng.evalStage(&s, u)
+// doAggregation performs the actual aggregation by processing each stage. From this point we don't
+// know the type of the delta, just the object we process.
+func (eng *defaultEngine) doAggregation(a *Aggregation, obj object.Object) ([]object.Object, error) {
+	var res []unstruct
+
+	input := []unstruct{obj.UnstructuredContent()}
+	for i := range a.Expressions {
+		res = []unstruct{}
+		for _, u := range input {
+			us, err := eng.evalStage(a, &a.Expressions[i], u)
 			if err != nil {
 				return nil, err
 			}
-			sres = append(sres, ret...)
+			res = append(res, us...)
 		}
-		args = sres
+		input = res
 	}
 
 	ret := []object.Object{}
-	for _, u := range args {
-		obj, err := Normalize(eng, u)
+	for _, u := range res {
+		o, err := Normalize(eng, u)
 		if err != nil {
 			return nil, err
 		}
-		ret = append(ret, obj)
+		ret = append(ret, o)
 	}
-
-	eng.Log().V(5).Info("eval ready", "aggregation", a.String(), "result", ret)
 
 	return ret, nil
 }
 
-func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) ([]unstruct, error) {
-	if e.Arg == nil {
-		return nil, fmt.Errorf("no expression found in aggregation stage %s", e.String())
-	}
-
+// doStage evaluates a single aggregation stage.
+func (eng *defaultEngine) evalStage(_ *Aggregation, e *expression.Expression, u unstruct) ([]unstruct, error) {
 	switch e.Op {
 	// @select is one-to-one or one-to-zero
 	case "@select":
@@ -310,57 +314,67 @@ func (eng *defaultEngine) evalStage(e *expression.Expression, u unstruct) ([]uns
 }
 
 // consolidate: objects both in the deleted and added cache are updated
-func (eng *defaultEngine) consolidateUpdate(dels, adds []cache.Delta) []cache.Delta {
-	// build an index into deltas
-	delidx := map[string]*cache.Delta{}
-	for i, del := range dels {
-		if !del.IsUnchanged() {
-			delidx[del.Object.GetName()] = &dels[i]
-		}
+func (eng *defaultEngine) consolidateDeltas(orig cache.Delta, ds []cache.Delta) []cache.Delta {
+	if orig.Type != cache.Updated {
+		return ds
 	}
 
-	addidx := map[string]*cache.Delta{}
-	for i, add := range adds {
-		if !add.IsUnchanged() {
-			addidx[add.Object.GetName()] = &adds[i]
-		}
-	}
-
-	ds := []cache.Delta{}
-	// 1. "deleted+!added=deleted"
-	for _, del := range dels {
-		if del.IsUnchanged() {
+	// build indices into deltas
+	addidx, delidx := map[string]*cache.Delta{}, map[string]*cache.Delta{}
+	for i, d := range ds {
+		if d.IsUnchanged() {
 			continue
 		}
-		if _, ok := addidx[del.Object.GetName()]; !ok {
-			// del is !Unchanged() and add is either Unchanged() or missing
-			ds = append(ds, del)
+		switch d.Type {
+		case cache.Added:
+			if _, ok := addidx[d.Object.GetName()]; ok {
+				eng.log.Info("WARNING: decomposed update aggregation yields multiple Add "+
+					"deltas for the same object, this may yield spurious results",
+					"object", d.Object.GetName())
+			}
+			// use the latest
+			addidx[d.Object.GetName()] = &ds[i]
+
+		case cache.Deleted:
+			if _, ok := delidx[d.Object.GetName()]; ok {
+				eng.log.Info("WARNING: decomposed update aggregation yields multiple Delete "+
+					"deltas for the same object, this may yield spurious results",
+					"object", d.Object.GetName())
+			}
+			// use the latest
+			delidx[d.Object.GetName()] = &ds[i]
+
+		default:
+			eng.log.Info("ignoring delta of unknown type", "object",
+				d.Object.GetName(), "delta-type", d.Type)
+			continue
+		}
+	}
+
+	res := []cache.Delta{}
+
+	// 1. "deleted+!added=deleted"
+	for name, del := range delidx {
+		if _, ok := addidx[name]; !ok {
+			res = append(res, *del)
 		}
 	}
 
 	// 2. "deleted+added=updated"
-	for _, del := range dels {
-		if del.IsUnchanged() {
-			continue
-		}
-		if add, ok := addidx[del.Object.GetName()]; ok {
-			// both known to be !Unchanged()
-			ds = append(ds, cache.Delta{Type: cache.Updated, Object: add.Object})
+	for name := range delidx {
+		if add, ok := addidx[name]; ok {
+			res = append(res, cache.Delta{Type: cache.Updated, Object: add.Object})
 		}
 	}
 
 	// 3. "!deleted+added=added"
-	for _, add := range adds {
-		if add.IsUnchanged() {
-			continue
-		}
-		if _, ok := delidx[add.Object.GetName()]; !ok {
-			// add is !Unchanged() and del is either Unchanged() or missing
-			ds = append(ds, add)
+	for name, add := range addidx {
+		if _, ok := delidx[name]; !ok {
+			res = append(res, *add)
 		}
 	}
 
-	return ds
+	return res
 }
 
 func (eng *defaultEngine) EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error) {
