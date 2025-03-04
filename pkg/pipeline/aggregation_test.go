@@ -599,6 +599,103 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(BeEmpty())
 		})
+
+		It("should evaluate an update with demux expressions that set the object name", func() {
+			obj := object.NewViewObject("view")
+			// must have a valid name
+			object.SetContent(obj, unstruct{
+				"spec": unstruct{
+					"list": []any{"a", "b", "c"},
+				},
+			})
+			object.SetName(obj, "default", "name")
+
+			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"},{"@project":{"metadata":{"name":"$.spec.list"}}}]}`
+			ag := newAggregation(eng, []byte(jsonData))
+			Expect(ag.Expressions).To(HaveLen(2))
+
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(3))
+
+			Expect(res[0].Type).To(Equal(cache.Added))
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name": "a",
+					},
+				},
+			}))
+
+			Expect(res[1].Type).To(Equal(cache.Added))
+			Expect(res[1].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name": "b",
+					},
+				},
+			}))
+
+			Expect(res[2].Type).To(Equal(cache.Added))
+			Expect(res[2].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name": "c",
+					},
+				},
+			}))
+
+			// update the list
+			object.SetContent(obj, unstruct{
+				"spec": unstruct{
+					"list": []any{"c", "d"},
+				},
+			})
+			object.SetName(obj, "default", "name")
+
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(3))
+
+			Expect(res[0].Type).To(Equal(cache.Deleted))
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name": "a",
+					},
+				},
+			}))
+
+			Expect(res[1].Type).To(Equal(cache.Deleted))
+			Expect(res[1].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name": "b",
+					},
+				},
+			}))
+
+			Expect(res[2].Type).To(Equal(cache.Added))
+			Expect(res[2].Object).To(Equal(&unstructured.Unstructured{
+				Object: unstruct{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": unstruct{
+						"name": "d",
+					},
+				},
+			}))
+		})
 	})
 })
 

@@ -309,7 +309,7 @@ func (eng *defaultEngine) evalStage(_ *Aggregation, e *expression.Expression, u 
 
 	default:
 		return nil, NewAggregationError(
-			errors.New("unknown aggregation stage"))
+			errors.New("unknown aggregation op"))
 	}
 }
 
@@ -353,21 +353,21 @@ func (eng *defaultEngine) consolidateDeltas(orig cache.Delta, ds []cache.Delta) 
 
 	res := []cache.Delta{}
 
-	// 1. "deleted+!added=deleted"
+	// 1. deleted && !added -> deleted
 	for name, del := range delidx {
 		if _, ok := addidx[name]; !ok {
 			res = append(res, *del)
 		}
 	}
 
-	// 2. "deleted+added=updated"
-	for name := range delidx {
-		if add, ok := addidx[name]; ok {
+	// 2. deleted && added && deleted!=added -> updated
+	for name, del := range delidx {
+		if add, ok := addidx[name]; ok && !object.DeepEqual(add.Object, del.Object) {
 			res = append(res, cache.Delta{Type: cache.Updated, Object: add.Object})
 		}
 	}
 
-	// 3. "!deleted+added=added"
+	// 3. !deleted && added -> added
 	for name, add := range addidx {
 		if _, ok := delidx[name]; !ok {
 			res = append(res, *add)
