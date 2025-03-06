@@ -29,7 +29,7 @@ func GetJSONPath(ctx EvalCtx, key string) (any, error) {
 		subject = ctx.Subject
 	}
 
-	ret, err := GetJSONPathExp(key, subject)
+	ret, err := GetJSONPathRaw(key, subject)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func SetJSONPath(ctx EvalCtx, key string, value, data any) error {
 	}
 
 	// then call the low-level set util
-	if err := SetJSONPathExp(key, value, data); err != nil {
+	if err := SetJSONPathRaw(key, value, data); err != nil {
 		return fmt.Errorf("JSONPath expression error: cannot set "+
 			"key %q to value %q: %w", key, value, err)
 	}
@@ -93,9 +93,9 @@ func SetJSONPath(ctx EvalCtx, key string, value, data any) error {
 
 // low-level utils
 
-// GetJSONPathExp evaluates a JSONPath expression on the specified object and returns the result or
+// GetJSONPathRaw evaluates a JSONPath expression on the specified object and returns the result or
 // an error.
-func GetJSONPathExp(query string, object any) (any, error) {
+func GetJSONPathRaw(query string, object any) (any, error) {
 	je, err := jp.ParseString(query)
 	if err != nil {
 		return nil, err
@@ -112,10 +112,10 @@ func GetJSONPathExp(query string, object any) (any, error) {
 	return values[0], nil
 }
 
-// SetJSONPathExp sets a key (possibly represented with a JSONPath expression) to a value (can also
+// SetJSONPathRaw sets a key (possibly represented with a JSONPath expression) to a value (can also
 // be a JSONPath expression, which will be evaluated using the object argument) in the given data
 // structure.
-func SetJSONPathExp(key string, value, target any) error {
+func SetJSONPathRaw(key string, value, target any) error {
 	je, err := jp.ParseString(key)
 	if err != nil {
 		return err
@@ -124,14 +124,16 @@ func SetJSONPathExp(key string, value, target any) error {
 	return je.Set(target, value)
 }
 
-// lit := []Expression{}
-// for _, arg := range args {
-// 	lit = append(lit, Expression{Op: "@any", Literal: arg, Raw: util.Stringify(arg)})
-// }
-// argList, err := asExpList(exp.Arg)
-// Expect(err).NotTo(HaveOccurred())
-// argList = append(argList, Expression{
-// 	Op:      "@list",
-// 	Literal: lit,
-// })
-// exp.Arg.Literal = argList
+// SetJSONPathRawExp is the same as SetJSONPathRaw but takes the key as a string expression.
+func SetJSONPathRawExp(keyExp *Expression, value, data any) error {
+	key, err := keyExp.GetLiteralString()
+	if err != nil {
+		return err
+	}
+
+	if err := SetJSONPathRaw(key, value, data); err != nil {
+		return err
+	}
+
+	return nil
+}

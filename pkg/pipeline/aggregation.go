@@ -16,6 +16,7 @@ const aggregateOp = "@aggregate"
 // of objects in a view.
 type Aggregation struct {
 	*opv1a1.Aggregation
+	Stages []*Stage
 	engine Engine
 }
 
@@ -24,16 +25,24 @@ func NewAggregation(engine Engine, config *opv1a1.Aggregation) *Aggregation {
 	if config == nil {
 		return nil
 	}
-	return &Aggregation{
+
+	a := &Aggregation{
 		Aggregation: config,
+		Stages:      make([]*Stage, len(config.Expressions)),
 		engine:      engine,
 	}
+
+	for i, e := range config.Expressions {
+		a.Stages[i] = NewStage(engine, &e)
+	}
+
+	return a
 }
 
 func (a *Aggregation) String() string {
 	ss := []string{}
-	for _, e := range a.Expressions {
-		ss = append(ss, e.String())
+	for _, s := range a.Stages {
+		ss = append(ss, s.String())
 	}
 	return fmt.Sprintf("%s:[%s]", aggregateOp, strings.Join(ss, ","))
 }

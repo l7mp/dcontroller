@@ -87,19 +87,19 @@ var _ = Describe("JSONPath", func() {
 			obj, err := object.NewViewObjectFromNativeObject("Service", input)
 			Expect(err).NotTo(HaveOccurred())
 
-			res, err := GetJSONPathExp(`$.metadata.name`, obj.UnstructuredContent())
+			res, err := GetJSONPathRaw(`$.metadata.name`, obj.UnstructuredContent())
 			Expect(err).NotTo(HaveOccurred())
 			s, err := AsString(res)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(s).To(Equal("testservice-ok"))
 
-			res, err = GetJSONPathExp(`$["metadata"]["namespace"]`, obj.UnstructuredContent())
+			res, err = GetJSONPathRaw(`$["metadata"]["namespace"]`, obj.UnstructuredContent())
 			Expect(err).NotTo(HaveOccurred())
 			s, err = AsString(res)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(s).To(Equal("testnamespace"))
 
-			res, err = GetJSONPathExp(`$.metadata`, obj.UnstructuredContent())
+			res, err = GetJSONPathRaw(`$.metadata`, obj.UnstructuredContent())
 			Expect(err).NotTo(HaveOccurred())
 			d, ok := res.(Unstructured)
 			Expect(ok).To(BeTrue())
@@ -108,13 +108,13 @@ var _ = Describe("JSONPath", func() {
 			Expect(d).To(HaveKey("name"))
 			Expect(d["name"]).To(Equal("testservice-ok"))
 
-			res, err = GetJSONPathExp(`$.spec.ports[1].port`, obj.UnstructuredContent())
+			res, err = GetJSONPathRaw(`$.spec.ports[1].port`, obj.UnstructuredContent())
 			Expect(err).NotTo(HaveOccurred())
 			i, err := AsInt(res)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(i).To(Equal(int64(2)))
 
-			res, err = GetJSONPathExp(`$.spec.ports[?(@.name == 'udp-ok')].protocol`,
+			res, err = GetJSONPathRaw(`$.spec.ports[?(@.name == 'udp-ok')].protocol`,
 				obj.UnstructuredContent())
 			Expect(err).NotTo(HaveOccurred())
 			s, err = AsString(res)
@@ -138,14 +138,14 @@ var _ = Describe("JSONPath", func() {
 			})
 
 			// must use the alternative form
-			res, err := GetJSONPathExp(`$["metadata"]["annotations"]["kubernetes.io/service-name"]`,
+			res, err := GetJSONPathRaw(`$["metadata"]["annotations"]["kubernetes.io/service-name"]`,
 				obj.UnstructuredContent())
 			Expect(err).NotTo(HaveOccurred())
 			s, err := AsString(res)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(s).To(Equal("example"))
 
-			res, err = GetJSONPathExp(`$["metadata"]["annotations"]["kubernetes.io[service-name]"]`,
+			res, err = GetJSONPathRaw(`$["metadata"]["annotations"]["kubernetes.io[service-name]"]`,
 				obj.UnstructuredContent())
 			Expect(err).NotTo(HaveOccurred())
 			s, err = AsString(res)

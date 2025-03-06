@@ -18,6 +18,8 @@ type Engine interface {
 	EvaluateJoin(j *Join, delta cache.Delta) ([]cache.Delta, error)
 	// EvaluateAggregation evaluates an aggregation pipeline.
 	EvaluateAggregation(a *Aggregation, delta cache.Delta) ([]cache.Delta, error)
+	// EvaluateStage evaluates a single aggregation stage.
+	EvaluateStage(s *Stage, delta cache.Delta) ([]cache.Delta, error)
 	// IsValidEvent returns false for some invalid events, like null-events or duplicate
 	// events.
 	IsValidEvent(cache.Delta) bool
@@ -29,18 +31,19 @@ type Engine interface {
 	Log() logr.Logger
 }
 
-func Normalize(eng Engine, content unstruct) (object.Object, error) {
+func Normalize(eng Engine, delta cache.Delta) (cache.Delta, error) {
 	// Normalize always produces Views!
 	obj := object.NewViewObject(eng.View())
 
 	// metadata: must exist
+	content := delta.Object.UnstructuredContent()
 	meta, ok := content["metadata"]
 	if !ok {
-		return nil, NewInvalidObjectError("no metadata in object")
+		return cache.Delta{}, NewInvalidObjectError("no metadata in object")
 	}
 	metaMap, ok := meta.(unstruct)
 	if !ok {
-		return nil, NewInvalidObjectError("invalid metadata in object")
+		return cache.Delta{}, NewInvalidObjectError("invalid metadata in object")
 	}
 
 	// namespace: can be empty
@@ -48,7 +51,7 @@ func Normalize(eng Engine, content unstruct) (object.Object, error) {
 	namespace, ok := metaMap["namespace"]
 	if ok {
 		if reflect.ValueOf(namespace).Kind() != reflect.String {
-			return nil, NewInvalidObjectError(fmt.Sprintf("metadata/namespace must be "+
+			return cache.Delta{}, NewInvalidObjectError(fmt.Sprintf("metadata/namespace must be "+
 				"a string (current value %q)", namespace))
 		}
 		namespaceStr = namespace.(string)
@@ -58,15 +61,15 @@ func Normalize(eng Engine, content unstruct) (object.Object, error) {
 	// name must be defined
 	name, ok := metaMap["name"]
 	if !ok {
-		return nil, NewInvalidObjectError("missing /metadata/name")
+		return cache.Delta{}, NewInvalidObjectError("missing /metadata/name")
 	}
 	if reflect.ValueOf(name).Kind() != reflect.String {
-		return nil, NewInvalidObjectError(fmt.Sprintf("metadata/name must be a string "+
+		return cache.Delta{}, NewInvalidObjectError(fmt.Sprintf("metadata/name must be a string "+
 			"(current value %q)", name))
 	}
 	nameStr := name.(string)
 	if nameStr == "" {
-		return nil, NewInvalidObjectError("empty metadata/name in aggregation result")
+		return cache.Delta{}, NewInvalidObjectError("empty metadata/name in aggregation result")
 	}
 	metaMap["name"] = nameStr
 
@@ -75,5 +78,5 @@ func Normalize(eng Engine, content unstruct) (object.Object, error) {
 	obj.SetName(nameStr)
 	obj.SetNamespace(namespaceStr)
 
-	return obj, nil
+	return cache.Delta{Type: delta.Type, Object: obj}, nil
 }

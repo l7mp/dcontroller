@@ -644,8 +644,8 @@ var _ = Describe("Expressions", func() {
 			}
 		})
 
-		It("should merge two JSONPath setters", func() {
-			jsonData := `{"@merge":[{"spec":{"a":"aaa"}},{"$.spec.b.d":12}]}`
+		It("should merge two setters with a JSONPath setter", func() {
+			jsonData := `{"@merge":[{"spec":1},{"spec":{"a":"aaa"}},{"$.spec.b.d":12}]}`
 			var exp Expression
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())

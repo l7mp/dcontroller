@@ -105,7 +105,8 @@ func collapseDeltas(ds []cache.Delta) []cache.Delta {
 
 	for _, delta := range ds {
 		key := ObjectKey(delta.Object).String()
-		if d, ok := uniq[key]; ok && d.Type == cache.Deleted && (delta.Type == cache.Added || delta.Type == cache.Updated) {
+		if d, ok := uniq[key]; ok && d.Type == cache.Deleted && (delta.Type == cache.Added ||
+			delta.Type == cache.Updated || delta.Type == cache.Upserted) {
 			// del events come first
 			uniq[key] = cache.Delta{Type: cache.Updated, Object: delta.Object}
 		} else {
@@ -115,7 +116,7 @@ func collapseDeltas(ds []cache.Delta) []cache.Delta {
 
 	// first the deletes, then the updates and finally the adds
 	ret := []cache.Delta{}
-	for _, t := range []cache.DeltaType{cache.Deleted, cache.Updated, cache.Added, cache.Replaced, cache.Sync} {
+	for _, t := range []cache.DeltaType{cache.Deleted, cache.Updated, cache.Added, cache.Upserted, cache.Replaced, cache.Sync} {
 		for _, v := range uniq {
 			if v.Type == t {
 				ret = append(ret, v)

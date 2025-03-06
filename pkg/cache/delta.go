@@ -9,15 +9,15 @@ import (
 	"github.com/hsnlab/dcontroller/pkg/object"
 )
 
-type DeltaType = toolscache.DeltaType
+type DeltaType string
 
 const (
-	Added    = toolscache.Added
-	Deleted  = toolscache.Deleted
-	Updated  = toolscache.Updated
-	Replaced = toolscache.Replaced
-	Sync     = toolscache.Sync
-	Upserted = "Upserted" // for events that are either an update/replace or an add
+	Added    = DeltaType(toolscache.Added)
+	Deleted  = DeltaType(toolscache.Deleted)
+	Updated  = DeltaType(toolscache.Updated)
+	Replaced = DeltaType(toolscache.Replaced)
+	Sync     = DeltaType(toolscache.Sync)
+	Upserted = DeltaType("Upserted") // for events that are either an update/replace or an add
 )
 
 // NilDelta is a placeholder for a delta that means no change.

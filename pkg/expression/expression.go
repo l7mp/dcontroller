@@ -216,23 +216,21 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 				return nil, NewExpressionError(e, err)
 			}
 
-			var ret any
 			// evaluate expressons
 			for _, arg := range args {
 				res, err := arg.Evaluate(ctx)
 				if err != nil {
 					return nil, errors.New("failed to evaluate expression")
 				}
-				ret, err = object.MergeAny(ret, res)
+				ctx.Object, err = object.MergeAny(ctx.Object, res)
 				if err != nil {
 					return nil, err
 				}
-				ctx.Object = ret
 			}
 
-			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", ctx.Object)
 
-			return ret, nil
+			return ctx.Object, nil
 
 		case "@filter":
 			args, err := AsExpOrExpList(e.Arg)

@@ -140,7 +140,7 @@ var _ = Describe("Pipelines", func() {
 				Expect(eng.(*defaultEngine).baseViewStore[viewv1a1.GroupVersion.WithKind("dep")].List()).To(HaveLen(2))
 				Expect(eng.(*defaultEngine).baseViewStore).NotTo(HaveKey("pod"))
 
-				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: pod1})
+				deltas, err := p.Evaluate(cache.Delta{Type: cache.Upserted, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(eng.(*defaultEngine).baseViewStore).To(HaveKey(viewv1a1.GroupVersion.WithKind("pod")))
 
@@ -217,7 +217,7 @@ var _ = Describe("Pipelines", func() {
 				p := newPipeline(eng, []byte(jsonData))
 
 				eng.WithObjects(pod1, pod2, pod3, dep2, rs1, rs2)
-				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: dep1})
+				deltas, err := p.Evaluate(cache.Delta{Type: cache.Upserted, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(deltas).To(HaveLen(2))
@@ -283,7 +283,7 @@ var _ = Describe("Pipelines", func() {
 				p := newPipeline(eng, []byte(jsonData))
 
 				eng.WithObjects(pod1, pod2, pod3, dep2, rs1, rs2)
-				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: dep1})
+				deltas, err := p.Evaluate(cache.Delta{Type: cache.Upserted, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(deltas).To(HaveLen(2))
@@ -325,7 +325,7 @@ var _ = Describe("Pipelines", func() {
 
 				delta = deltas[1]
 				Expect(delta.IsUnchanged()).To(BeFalse())
-				Expect(delta.Type).To(Equal(cache.Added))
+				Expect(delta.Type).To(Equal(cache.Upserted))
 				Expect(delta.Object.GetName()).To(Equal("dep2--pod1"))
 				Expect(delta.Object.GetNamespace()).To(Equal("default"))
 				Expect(delta.Object.UnstructuredContent()["replicas"]).To(Equal(int64(1)))
@@ -605,7 +605,7 @@ var _ = Describe("Pipelines", func() {
 				}, "spec", "listeners")
 			eng.WithObjects(gateway)
 
-			deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: route})
+			deltas, err := p.Evaluate(cache.Delta{Type: cache.Upserted, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(deltas).To(HaveLen(1))
@@ -625,13 +625,13 @@ var _ = Describe("Pipelines", func() {
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 
 			route.SetNamespace("other")
-			deltas, err = p.Evaluate(cache.Delta{Type: cache.Added, Object: route})
+			deltas, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(deltas).To(HaveLen(1))
 			delta = deltas[0]
 			Expect(delta.IsUnchanged()).To(BeFalse())
-			Expect(delta.Type).To(Equal(cache.Added))
+			Expect(delta.Type).To(Equal(cache.Upserted))
 			Expect(delta.Object.GetName()).To(Equal("gateway--route"))
 			Expect(delta.Object.GetNamespace()).To(Equal("other"))
 		})
@@ -678,7 +678,7 @@ var _ = Describe("Pipelines", func() {
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
 			Expect(delta.IsUnchanged()).To(BeFalse())
-			Expect(delta.Type).To(Equal(cache.Added))
+			Expect(delta.Type).To(Equal(cache.Upserted))
 			Expect(delta.Object.GetName()).To(Equal("gateway--route"))
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 
@@ -737,7 +737,7 @@ var _ = Describe("Pipelines", func() {
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
 			Expect(delta.IsUnchanged()).To(BeFalse())
-			Expect(delta.Type).To(Equal(cache.Added))
+			Expect(delta.Type).To(Equal(cache.Upserted))
 			Expect(delta.Object.GetName()).To(Equal("test-endpointslice"))
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 
@@ -749,20 +749,28 @@ var _ = Describe("Pipelines", func() {
 			Expect(t).To(Equal("ClusterIP"))
 		})
 
-		It("survice a full JSON marshal-unmarshal roundtrip", func() {
+		It("survive a full JSON marshal-unmarshal roundtrip", func() {
 			jsonData := `{"@join":{"@and":[{"@eq":["$.Service.metadata.name","$[\"EndpointSlice\"][\"metadata\"][\"labels\"][\"kubernetes.io/service-name\"]"]},{"@eq":["$.Service.metadata.namespace","$.EndpointSlice.metadata.namespace"]}]},"@aggregate":[{"@project":{"metadata":{"name":"$.EndpointSlice.metadata.name","namespace":"$.EndpointSlice.metadata.namespace","annotations":{"dcontroller.io/service-type":"$.Service.spec.type"}}}}]}`
 			p1 := newPipeline(nil, []byte(jsonData))
+			Expect(p1.Join).NotTo(BeNil())
+			Expect(p1.Join.Join).NotTo(BeNil())
+			Expect(p1.Aggregation).NotTo(BeNil())
+			Expect(p1.Aggregation.Aggregation).NotTo(BeNil())
 
 			js, err := json.Marshal(p1)
 			Expect(err).NotTo(HaveOccurred())
 
-			// cannot test json equivalence: map key order is arbitrary
-			// instead, parse back the json produced
-			var p2 *Pipeline
+			// cannot test json equivalence: map key order is arbitrary instead, parse
+			// back the json produced into a serialized Pipeline
+			var p2 opv1a1.Pipeline
 			err = json.Unmarshal(js, &p2)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(p2.Join).NotTo(BeNil())
+			Expect(p2.Aggregation).NotTo(BeNil())
 
-			Expect(p2).To(Equal(p1))
+			// compare the serializable representations
+			Expect(p2.Join).To(Equal(p1.Join.Join))
+			Expect(p2.Aggregation).To(Equal(p1.Aggregation.Aggregation))
 		})
 	})
 })

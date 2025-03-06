@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	runtimePredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	runtimeSource "sigs.k8s.io/controller-runtime/pkg/source"
@@ -231,17 +232,44 @@ func (t *target) update(ctx context.Context, delta cache.Delta) error {
 
 	//nolint:nolintlint
 	switch delta.Type { //nolint:exhaustive
-	case cache.Added:
-		t.log.V(4).Info("create", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
-		return c.Create(ctx, delta.Object)
+	case cache.Added, cache.Upserted:
+		t.log.V(2).Info("add/upsert", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
+
+		gvk, err := t.Resource.GetGVK()
+		if err != nil {
+			return err
+		}
+		obj := object.New()
+		obj.SetGroupVersionKind(gvk)
+		obj.SetName(delta.Object.GetName())
+		obj.SetNamespace(delta.Object.GetNamespace())
+
+		if res, err := controllerutil.CreateOrUpdate(context.TODO(), c, obj, func() error {
+			obj.SetUnstructuredContent(delta.Object.UnstructuredContent())
+			obj.SetGroupVersionKind(gvk)
+			obj.SetName(delta.Object.GetName())
+			obj.SetNamespace(delta.Object.GetNamespace())
+			return nil
+		}); err != nil {
+			return fmt.Errorf("create/update resource %s/%s failed with operation code %s: %w",
+				delta.Object.GetNamespace(), delta.Object.GetName(), res, err)
+		}
+
+		return nil
+
 	case cache.Updated, cache.Replaced:
-		t.log.Info("update", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
+		t.log.V(2).Info("update", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
+
 		return c.Update(ctx, delta.Object)
+
 	case cache.Deleted:
-		t.log.V(4).Info("delete", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
+		t.log.V(2).Info("delete", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
+
 		return c.Delete(ctx, delta.Object)
+
 	default:
-		t.log.V(2).Info("target: ignoring delta", "type", delta.Type)
+		t.log.V(3).Info("target: ignoring delta", "type", delta.Type)
+
 		return nil
 	}
 }
@@ -251,7 +279,7 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 
 	//nolint:nolintlint
 	switch delta.Type { //nolint:exhaustive
-	case cache.Added, cache.Updated, cache.Replaced:
+	case cache.Added, cache.Updated, cache.Upserted, cache.Replaced:
 		t.log.V(4).Info("update-patch", "event-type", delta.Type,
 			"key", client.ObjectKeyFromObject(delta.Object).String())
 

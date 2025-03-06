@@ -3,11 +3,13 @@ package pipeline
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 
 	"github.com/go-logr/logr"
 	toolscache "k8s.io/client-go/tools/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hsnlab/dcontroller/pkg/cache"
 	"github.com/hsnlab/dcontroller/pkg/expression"
@@ -163,57 +165,59 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 	// process the deltas
 	res := []cache.Delta{}
 	for _, d := range ds {
-		objs, err := eng.doAggregation(a, d.Object)
+		resds, err := eng.doAggregation(a, d)
 		if err != nil {
 			return nil, fmt.Errorf("processing event %q: could not evaluate aggregation %s: %w",
 				delta.Type, a.String(), err)
 		}
 
-		for _, obj := range objs {
-			// @select shortcuts
-			res = append(res, cache.Delta{Type: d.Type, Object: obj})
-		}
+		res = append(res, resds...)
 	}
 
-	res = eng.consolidateDeltas(delta, res)
+	res = eng.consolidateDeltas(res)
 
-	eng.log.V(4).Info("aggregation: ready", "event-type", delta.Type, "result", util.Stringify(ds))
+	eng.log.V(4).Info("aggregation: ready", "event-type", delta.Type, "result", util.Stringify(res))
 
 	return res, nil
 }
 
-// doAggregation performs the actual aggregation by processing each stage. From this point we don't
-// know the type of the delta, just the object we process.
-func (eng *defaultEngine) doAggregation(a *Aggregation, obj object.Object) ([]object.Object, error) {
-	var res []unstruct
-
-	input := []unstruct{obj.UnstructuredContent()}
-	for i := range a.Expressions {
-		res = []unstruct{}
-		for _, u := range input {
-			us, err := eng.evalStage(a, &a.Expressions[i], u)
+// doAggregation performs the actual aggregation by processing each stage.
+func (eng *defaultEngine) doAggregation(a *Aggregation, delta cache.Delta) ([]cache.Delta, error) {
+	var res []cache.Delta
+	input := []cache.Delta{delta}
+	for _, s := range a.Stages {
+		res = []cache.Delta{}
+		for _, d := range input {
+			if d.IsUnchanged() {
+				continue
+			}
+			resds, err := eng.EvaluateStage(s, d)
 			if err != nil {
 				return nil, err
 			}
-			res = append(res, us...)
+			res = append(res, resds...)
 		}
 		input = res
 	}
 
-	ret := []object.Object{}
-	for _, u := range res {
-		o, err := Normalize(eng, u)
+	ret := []cache.Delta{}
+	for _, d := range res {
+		retd, err := Normalize(eng, d)
 		if err != nil {
 			return nil, err
 		}
-		ret = append(ret, o)
+		ret = append(ret, retd)
 	}
 
 	return ret, nil
 }
 
-// doStage evaluates a single aggregation stage.
-func (eng *defaultEngine) evalStage(_ *Aggregation, e *expression.Expression, u unstruct) ([]unstruct, error) {
+// EvaluateStage evaluates a single aggregation stage.
+func (eng *defaultEngine) EvaluateStage(s *Stage, delta cache.Delta) ([]cache.Delta, error) {
+	e := s.Expression
+	u := delta.Object.UnstructuredContent()
+
+	ret := []cache.Delta{}
 	switch e.Op {
 	// @select is one-to-one or one-to-zero
 	case "@select":
@@ -229,14 +233,9 @@ func (eng *defaultEngine) evalStage(_ *Aggregation, e *expression.Expression, u 
 		}
 
 		// default is no change
-		var vs []unstruct
 		if b {
-			vs = []unstruct{u}
+			ret = packDeltas(eng.targetView, delta.Type, []unstruct{u})
 		}
-
-		eng.log.V(5).Info("eval ready", "aggregation", e.String(), "result", vs)
-
-		return vs, nil
 
 	// @project is one-to-one
 	case "@project":
@@ -245,20 +244,18 @@ func (eng *defaultEngine) evalStage(_ *Aggregation, e *expression.Expression, u 
 			return nil, err
 		}
 
-		v, err := expression.AsObject(res)
+		u, err := expression.AsObject(res)
 		if err != nil {
 			return nil, err
 		}
 
-		eng.log.V(5).Info("eval ready", "aggregation", e.String(), "result", v)
-
-		return []unstruct{v}, nil
+		ret = packDeltas(eng.targetView, delta.Type, []unstruct{u})
 
 	// @demux is one to many
 	case "@unwind", "@demux":
-		name, err := expression.GetJSONPathExp("$.metadata.name", u)
+		name, err := expression.GetJSONPathRaw("$.metadata.name", u)
 		if err != nil {
-			return nil, errors.New("@valid .metadata.name required")
+			return nil, errors.New("valid .metadata.name required")
 		}
 
 		arg, err := e.Arg.Evaluate(expression.EvalCtx{Object: u, Log: eng.log})
@@ -286,13 +283,13 @@ func (eng *defaultEngine) evalStage(_ *Aggregation, e *expression.Expression, u 
 			}
 
 			// must use the low-level jsonpath setter so that we retain the original object
-			if err := expression.SetJSONPathExp(jp, elem, v); err != nil {
+			if err := expression.SetJSONPathRaw(jp, elem, v); err != nil {
 				return nil, err
 			}
 
 			// add index to name
-			if err := expression.SetJSONPathExp("$.metadata.name", fmt.Sprintf("%s-%d", name, i), v); err != nil {
-				return nil, fmt.Errorf("could add index to .metadata.name")
+			if err := expression.SetJSONPathRaw("$.metadata.name", fmt.Sprintf("%s-%d", name, i), v); err != nil {
+				return nil, fmt.Errorf("could not add index to .metadata.name")
 			}
 
 			v, err = expression.AsObject(v)
@@ -303,21 +300,110 @@ func (eng *defaultEngine) evalStage(_ *Aggregation, e *expression.Expression, u 
 			vs = append(vs, v)
 		}
 
-		eng.log.V(5).Info("eval ready", "aggregation", e.String(), "result", util.Stringify(vs))
+		ret = packDeltas(eng.targetView, delta.Type, vs)
 
-		return vs, nil
+	// @mux is many to one
+	// this Op is riddled with corner cases, use only if you know what you are doing
+	case "@gather", "@mux":
+		args, err := expression.AsExpOrExpList(e.Arg)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(args) != 2 {
+			return nil, errors.New("expected two arguments")
+		}
+		idPath := args[0]
+		elemPath := args[1]
+
+		// object's ID
+		id, err := idPath.Evaluate(expression.EvalCtx{Object: u, Log: eng.log})
+		if err != nil {
+			return nil, fmt.Errorf("error querying object id: %w", err)
+		}
+		if id == nil {
+			return nil, errors.New("empty object id")
+		}
+
+		// object's elem
+		elem, err := elemPath.Evaluate(expression.EvalCtx{Object: u, Log: eng.log})
+		if err != nil {
+			return nil, fmt.Errorf("error querying object element: %w", err)
+		}
+		if elem == nil {
+			return nil, errors.New("empty object element")
+		}
+
+		// iterate without the added/deleted item to find out what's in the cache
+		gathered := []any{}
+		for _, o := range s.inCache.List() {
+			// ignore cached object on Delete
+			if client.ObjectKeyFromObject(o) == client.ObjectKeyFromObject(delta.Object) {
+				continue
+			}
+
+			oid, err := idPath.Evaluate(expression.EvalCtx{Object: o.UnstructuredContent(), Log: eng.log})
+			if err != nil {
+				return nil, err
+			}
+
+			if !reflect.DeepEqual(id, oid) {
+				continue
+			}
+
+			// store.List deepcopies
+			oelem, err := elemPath.Evaluate(expression.EvalCtx{Object: o.UnstructuredContent(), Log: eng.log})
+			if err != nil {
+				return nil, err
+			}
+			gathered = append(gathered, oelem)
+		}
+
+		var t cache.DeltaType
+		switch delta.Type {
+		case cache.Added:
+			// we generate an Added delta even when the list is updated:
+			// delta-consolidation will turn that into an Upsert eventually
+			t = cache.Added
+			gathered = append(gathered, elem)
+
+			if err := s.inCache.Add(delta.Object); err != nil {
+				return nil, err
+			}
+		case cache.Deleted:
+			// if resultant list is non-empty, we generate an Upsert delta (Added will
+			// be turned into an IUpsert eventually), otherwise we generate a Delete
+			if len(gathered) > 0 {
+				t = cache.Added
+			} else {
+				t = cache.Deleted
+			}
+
+			if err := s.inCache.Delete(delta.Object); err != nil {
+				return nil, err
+			}
+		default:
+		}
+
+		if err := expression.SetJSONPathRawExp(&elemPath, gathered, u); err != nil {
+			return nil, err
+		}
+
+		ret = packDeltas(eng.targetView, t, []unstruct{u})
 
 	default:
 		return nil, NewAggregationError(
 			errors.New("unknown aggregation op"))
 	}
+
+	eng.log.V(5).Info("eval ready", "aggregation", e.String(), "result", util.Stringify(ret))
+
+	return ret, nil
 }
 
 // consolidate: objects both in the deleted and added cache are updated
-func (eng *defaultEngine) consolidateDeltas(orig cache.Delta, ds []cache.Delta) []cache.Delta {
-	if orig.Type != cache.Updated {
-		return ds
-	}
+func (eng *defaultEngine) consolidateDeltas(ds []cache.Delta) []cache.Delta {
+	res := []cache.Delta{}
 
 	// build indices into deltas
 	addidx, delidx := map[string]*cache.Delta{}, map[string]*cache.Delta{}
@@ -327,21 +413,13 @@ func (eng *defaultEngine) consolidateDeltas(orig cache.Delta, ds []cache.Delta) 
 		}
 		switch d.Type {
 		case cache.Added:
-			if _, ok := addidx[d.Object.GetName()]; ok {
-				eng.log.Info("WARNING: decomposed update aggregation yields multiple Add "+
-					"deltas for the same object, this may yield spurious results",
-					"object", d.Object.GetName())
-			}
-			// use the latest
+			// decomposed update aggregations may yield multiple Added deltas for the
+			// same object, this may yield spurious results - use the latest
 			addidx[d.Object.GetName()] = &ds[i]
 
 		case cache.Deleted:
-			if _, ok := delidx[d.Object.GetName()]; ok {
-				eng.log.Info("WARNING: decomposed update aggregation yields multiple Delete "+
-					"deltas for the same object, this may yield spurious results",
-					"object", d.Object.GetName())
-			}
-			// use the latest
+			// decomposed update aggregations may yield multiple Deleted deltas for the
+			// same object, this may yield spurious results - use the latest
 			delidx[d.Object.GetName()] = &ds[i]
 
 		default:
@@ -350,8 +428,6 @@ func (eng *defaultEngine) consolidateDeltas(orig cache.Delta, ds []cache.Delta) 
 			continue
 		}
 	}
-
-	res := []cache.Delta{}
 
 	// 1. deleted && !added -> deleted
 	for name, del := range delidx {
@@ -367,10 +443,13 @@ func (eng *defaultEngine) consolidateDeltas(orig cache.Delta, ds []cache.Delta) 
 		}
 	}
 
-	// 3. !deleted && added -> added
+	// 3. !deleted && added -> added (use upsert to be on the safe side)
 	for name, add := range addidx {
 		if _, ok := delidx[name]; !ok {
-			res = append(res, *add)
+			res = append(res, cache.Delta{
+				Type:   cache.Upserted,
+				Object: add.Object,
+			})
 		}
 	}
 
@@ -667,4 +746,17 @@ func deepCopy(value any) any {
 	default:
 		return v
 	}
+}
+
+func packDeltas(targetView string, deltaType cache.DeltaType, vs []unstruct) []cache.Delta {
+	ret := []cache.Delta{}
+	for _, v := range vs {
+		obj := object.NewViewObject(targetView)
+		obj.SetUnstructuredContent(v)
+		ret = append(ret, cache.Delta{
+			Type:   deltaType,
+			Object: obj,
+		})
+	}
+	return ret
 }

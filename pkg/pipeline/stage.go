@@ -7,7 +7,7 @@ import (
 
 var _ Evaluator = &Stage{}
 
-// State is a single operation in an aggregation.
+// Stage is a single operation in an aggregation.
 type Stage struct {
 	*expression.Expression
 	inCache *cache.Store
