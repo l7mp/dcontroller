@@ -227,6 +227,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 				if err != nil {
 					return nil, err
 				}
+				ctx.Object = ret
 			}
 
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", ret)

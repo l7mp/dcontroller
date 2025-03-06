@@ -664,6 +664,23 @@ var _ = Describe("Expressions", func() {
 			Expect(d["spec"]).To(HaveKey("b"))
 			Expect(d["spec"].(Unstructured)["b"]).To(Equal(map[string]any{"d": int64(12)}))
 		})
+
+		It("should merge two JSONPath setters that modify the same field", func() {
+			jsonData := `{"@merge":[{"spec":[1,2]},{"$.spec":{"@sum":"$.spec"}},{"$.spec":{"@concat":["spec-","$.spec"]}}]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			d, ok := res.(Unstructured)
+			Expect(ok).To(BeTrue())
+
+			Expect(d).To(HaveKey("spec"))
+			Expect(d["spec"]).To(Equal("spec-3"))
+		})
 	})
 
 	Describe("Evaluating label selectors", func() {

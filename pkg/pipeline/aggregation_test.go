@@ -218,14 +218,14 @@ var _ = Describe("Aggregations", func() {
   - '@project':
       '@merge':
         - $.metadata.name: $.metadata.name
-        - $.metadata.namespace: $.metadata.namespace
+        - $.metadata.namespace: "default"
         - $.spec.a: 123`
 			ag := newAggregation(eng, []byte(jsonData))
 
 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
-			Expect(res[0].Type).To(Equal(cache.Added))
+			Expect(res[0].Type).To(Equal(cache.Upserted))
 			obj := res[0].Object
 			Expect(obj.GetNamespace()).To(Equal("default"))
 			Expect(obj.GetName()).To(Equal("name"))
