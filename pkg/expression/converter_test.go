@@ -276,10 +276,11 @@ var _ = Describe("Converters", func() {
 			_, err := AsList(xs)
 			Expect(err).To(HaveOccurred())
 		})
-		It("should err for nil", func() {
+		It("should return an empty list for nil", func() {
 			var xs any = nil
-			_, err := AsList(xs)
-			Expect(err).To(HaveOccurred())
+			vs, err := AsList(xs)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vs).To(Equal([]any{}))
 		})
 	})
 

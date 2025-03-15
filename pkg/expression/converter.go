@@ -15,6 +15,10 @@ func IsList(d any) bool {
 }
 
 func AsList(d any) ([]any, error) {
+	if d == nil {
+		return []any{}, nil
+	}
+
 	if !IsList(d) {
 		return nil, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}

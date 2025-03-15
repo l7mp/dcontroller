@@ -704,7 +704,7 @@ var _ = Describe("Aggregations", func() {
 				}))
 		})
 
-		It("a demux expression pointing to a nonexistent key should err", func() {
+		It("a demux expression pointing to a nonexistent key should return a nil delta", func() {
 			obj := object.NewViewObject("view")
 			// must have a valid name
 			object.SetContent(obj, unstruct{
@@ -716,8 +716,9 @@ var _ = Describe("Aggregations", func() {
 			ag := newAggregation(eng, []byte(jsonData))
 			Expect(ag.Expressions).To(HaveLen(1))
 
-			_, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
-			Expect(err).To(HaveOccurred())
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(BeEmpty())
 		})
 
 		It("should evaluate a demux expression with an empty list to a nil delta", func() {
