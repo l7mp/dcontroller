@@ -278,9 +278,8 @@ var _ = Describe("Converters", func() {
 		})
 		It("should return an empty list for nil", func() {
 			var xs any = nil
-			vs, err := AsList(xs)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(vs).To(Equal([]any{}))
+			_, err := AsList(xs)
+			Expect(err).To(HaveOccurred())
 		})
 	})
 

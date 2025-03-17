@@ -263,9 +263,12 @@ func (eng *defaultEngine) EvaluateStage(s *Stage, delta cache.Delta) ([]cache.De
 			return nil, err
 		}
 
-		list, err := expression.AsList(arg)
-		if err != nil {
-			return nil, err
+		list := []any{}
+		if arg != nil {
+			list, err = expression.AsList(arg)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		vs := []unstruct{}
