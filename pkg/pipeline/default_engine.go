@@ -416,13 +416,13 @@ func (eng *defaultEngine) consolidateDeltas(ds []cache.Delta) []cache.Delta {
 		}
 		switch d.Type {
 		case cache.Added:
-			// decomposed update aggregations may yield multiple Added deltas for the
-			// same object, this may yield spurious results - use the latest
+			// TODO decomposed update aggregations may yield multiple Added deltas for
+			// the same object, this may yield spurious results - use the latest
 			addidx[d.Object.GetName()] = &ds[i]
 
 		case cache.Deleted:
-			// decomposed update aggregations may yield multiple Deleted deltas for the
-			// same object, this may yield spurious results - use the latest
+			// TODO decomposed update aggregations may yield multiple Deleted deltas
+			// for the same object, this may yield spurious results - use the latest
 			delidx[d.Object.GetName()] = &ds[i]
 
 		default:

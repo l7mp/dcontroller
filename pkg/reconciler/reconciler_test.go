@@ -476,11 +476,10 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
-			// Register source
+			// Register target
 			target := NewTarget(mgr, opv1a1.Target{Resource: opv1a1.Resource{Kind: "view"}, Type: "Patcher"})
 
 			// Start the manager
-			// go mgr.Start(ctx) // will stop with a context cancelled erro
 			go func() { mgr.Start(ctx) }()
 
 			// Get view cache
@@ -510,15 +509,34 @@ var _ = Describe("Reconciler", func() {
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Modified))
 			res := view.DeepCopy()
-			// Updater patches!
 			object.SetContent(res, map[string]any{"a": int64(1), "b": int64(2)})
-			// object.SetContent(res, map[string]any{"b": int64(2)})
 			Expect(event.Object.(object.Object)).To(Equal(res))
 
+			// TODO this fails since status updates need a working client with a functional Get...
+			// // Update the status
+			// view3 := object.DeepCopy(view2)
+			// Expect(unstructured.SetNestedField(view3.UnstructuredContent(),
+			// 	map[string]any{"b": int64(2)}, "status")).NotTo(HaveOccurred())
+			// err = target.Write(ctx, cache.Delta{Type: cache.Updated, Object: view3})
+			// Expect(err).NotTo(HaveOccurred())
+
+			// event, ok = tryWatchWatcher(watcher, interval)
+			// Expect(ok).To(BeTrue())
+			// Expect(event.Type).To(Equal(watch.Modified))
+
+			// // Updater patches!
+			// res = view.DeepCopy()
+			// object.SetContent(res, map[string]any{"a": int64(1), "b": int64(2)})
+			// Expect(unstructured.SetNestedField(res.UnstructuredContent(),
+			// 	map[string]any{"b": int64(2)}, "status")).NotTo(HaveOccurred())
+			// Expect(event.Object.(object.Object)).To(Equal(res))
+
 			// Push a delete to the target
-			view2 = object.DeepCopy(view)
-			object.SetContent(view2, map[string]any{"a": int64(1)})
-			err = target.Write(ctx, cache.Delta{Type: cache.Deleted, Object: view2})
+			view4 := object.DeepCopy(view)
+			object.SetContent(view4, map[string]any{"a": int64(1)})
+			// TODO: this will work in a patch but how do do this from a pipeline???
+			Expect(unstructured.SetNestedField(view4.UnstructuredContent(), nil, "status")).NotTo(HaveOccurred())
+			err = target.Write(ctx, cache.Delta{Type: cache.Deleted, Object: view4})
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok = tryWatchWatcher(watcher, interval)

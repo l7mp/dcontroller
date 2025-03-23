@@ -227,6 +227,8 @@ func (t *target) Write(ctx context.Context, delta cache.Delta) error {
 }
 
 func (t *target) update(ctx context.Context, delta cache.Delta) error {
+	t.log.V(5).Info("updating target", "delta-type", delta.Type, "object", object.Dump(delta.Object))
+
 	c := t.mgr.GetClient()
 
 	//nolint:nolintlint
@@ -303,6 +305,8 @@ func (t *target) update(ctx context.Context, delta cache.Delta) error {
 }
 
 func (t *target) patch(ctx context.Context, delta cache.Delta) error {
+	t.log.V(5).Info("patching target", "delta-type", delta.Type, "object", object.Dump(delta.Object))
+
 	c := t.mgr.GetClient()
 
 	//nolint:nolintlint
@@ -311,16 +315,11 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 		t.log.V(4).Info("update-patch", "event-type", delta.Type,
 			"key", client.ObjectKeyFromObject(delta.Object).String())
 
-		patch, err := json.Marshal(object.DeepCopy(delta.Object).UnstructuredContent())
-		if err != nil {
-			return err
-		}
-
-		oldObj := object.New()
-		oldObj.SetGroupVersionKind(delta.Object.GroupVersionKind())
-		oldObj.SetName(delta.Object.GetName())
-		oldObj.SetNamespace(delta.Object.GetNamespace())
-		if err := c.Get(ctx, client.ObjectKeyFromObject(oldObj), oldObj); err != nil {
+		obj := object.New()
+		obj.SetGroupVersionKind(delta.Object.GroupVersionKind())
+		obj.SetName(delta.Object.GetName())
+		obj.SetNamespace(delta.Object.GetNamespace())
+		if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
 			return err
 		}
 
@@ -329,7 +328,31 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 		// return c.Patch(ctx, result, client.RawPatch(types.StrategicMergePatchType, patch))
 
 		// fall back to simple merge patches
-		return c.Patch(ctx, oldObj, client.RawPatch(types.MergePatchType, patch))
+		patch, err := json.Marshal(object.DeepCopy(delta.Object).UnstructuredContent())
+		if err != nil {
+			return err
+		}
+		if err := c.Patch(ctx, obj, client.RawPatch(types.MergePatchType, patch)); err != nil {
+			return err
+		}
+
+		// Patch does not update the status so we have to do this separately
+		// must copy status here otherwise Patch may reewrite it
+		newStatus, hasStatus, _ := unstructured.NestedMap(delta.Object.UnstructuredContent(), "status")
+		if hasStatus {
+			if err := unstructured.SetNestedMap(obj.Object, newStatus, "status"); err != nil {
+				return err
+			}
+
+			patch, err = json.Marshal(obj)
+			if err != nil {
+				return err
+			}
+
+			return c.Status().Patch(ctx, obj, client.RawPatch(types.MergePatchType, patch))
+		}
+
+		return nil
 
 	case cache.Deleted:
 		// apply the patch locally so that we fully control the behavior
