@@ -1,6 +1,6 @@
 ###########
 # Build the manager binary
-FROM docker.io/golang:1.22-alpine as builder
+FROM docker.io/golang:1.23-alpine as builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
