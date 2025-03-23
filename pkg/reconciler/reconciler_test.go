@@ -341,6 +341,7 @@ var _ = Describe("Reconciler", func() {
 			// object.SetContent(view2, map[string]any{"a": int64(1), "b": int64(2)})
 			object.SetContent(res, map[string]any{"b": int64(2)})
 			Expect(object.DeepEqual(res, event.Object.(object.Object))).To(BeTrue())
+			// Expect(res).To(Equal(event.Object.(object.Object)))
 
 			// Push a delete to the target
 			err = target.Write(ctx, cache.Delta{Type: cache.Deleted, Object: view2})
@@ -361,7 +362,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
-			// Register target
+			// Register an updater target
 			group, version := "", "v1"
 			target := NewTarget(mgr, opv1a1.Target{
 				Resource: opv1a1.Resource{
@@ -391,10 +392,6 @@ var _ = Describe("Reconciler", func() {
 				Version: "v1",
 				Kind:    "Pod",
 			}))
-			// make a Get so that we get a full object (tracker returns only a runtime.Object)
-
-			// getFromClient := &corev1.Pod{}
-			// Expect(c.Get(ctx, client.ObjectKeyFromObject(pod), getFromClient)).NotTo(HaveOccurred())
 			getFromClient, err := object.ConvertRuntimeObjectToClientObject(getFromTracker)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getFromClient.GetObjectKind().GroupVersionKind()).To(Equal(schema.GroupVersionKind{
@@ -413,8 +410,8 @@ var _ = Describe("Reconciler", func() {
 			// Push update to the target
 			newPod := object.DeepCopy(pod2)
 			unstructured.RemoveNestedField(newPod.UnstructuredContent(), "spec", "containers")
-
 			unstructured.SetNestedField(newPod.UnstructuredContent(), "Always", "spec", "restartPolicy")
+
 			err = target.Write(ctx, cache.Delta{Type: cache.Updated, Object: newPod})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -426,6 +423,7 @@ var _ = Describe("Reconciler", func() {
 				Version: "v1",
 				Kind:    "Pod",
 			}))
+
 			getFromClient, err = object.ConvertRuntimeObjectToClientObject(getFromTracker)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getFromClient.GetObjectKind().GroupVersionKind()).To(Equal(schema.GroupVersionKind{
@@ -438,6 +436,34 @@ var _ = Describe("Reconciler", func() {
 			Expect(p.GetNamespace()).To(Equal("testns"))
 			Expect(p.Spec.Containers).To(BeEmpty())
 			Expect(p.Spec.RestartPolicy).To(Equal(corev1.RestartPolicy("Always")))
+
+			// Set the status
+			unstructured.SetNestedField(newPod.UnstructuredContent(), map[string]any{
+				"message": "testmessage",
+				"reason":  "testreason",
+			}, "status")
+
+			err = target.Write(ctx, cache.Delta{Type: cache.Updated, Object: newPod})
+			Expect(err).NotTo(HaveOccurred())
+
+			getFromTracker, err = tracker.Get(gvr, "testns", "testpod")
+			Expect(err).NotTo(HaveOccurred())
+			getFromClient, err = object.ConvertRuntimeObjectToClientObject(getFromTracker)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(getFromClient.GetObjectKind().GroupVersionKind()).To(Equal(schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			}))
+			p = getFromClient.(*corev1.Pod)
+			Expect(p.GetName()).To(Equal("testpod"))
+			Expect(p.GetNamespace()).To(Equal("testns"))
+			Expect(p.Spec.Containers).To(BeEmpty())
+			Expect(p.Spec.RestartPolicy).To(Equal(corev1.RestartPolicy("Always")))
+			Expect(p.Status).To(Equal(corev1.PodStatus{
+				Message: "testmessage",
+				Reason:  "testreason",
+			}))
 
 			// Delete from the target
 			err = target.Write(ctx, cache.Delta{Type: cache.Deleted, Object: newPod})

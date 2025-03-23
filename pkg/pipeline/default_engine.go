@@ -273,7 +273,7 @@ func (eng *defaultEngine) EvaluateStage(s *Stage, delta cache.Delta) ([]cache.De
 
 		vs := []unstruct{}
 		for i, elem := range list {
-			a := deepCopy(u)
+			a := object.DeepCopyAny(u)
 			v, ok := a.(unstruct)
 			if !ok {
 				return nil, errors.New("could not deepcopy object content")
@@ -728,27 +728,6 @@ func containsDelta(ds []cache.Delta, delta cache.Delta) bool {
 			n.Object.GetObjectKind().GroupVersionKind() &&
 			delta.Object.GetName() == n.Object.GetName()
 	})
-}
-
-func deepCopy(value any) any {
-	switch v := value.(type) {
-	case bool, int64, float64, string:
-		return v
-	case []any:
-		newList := make([]any, len(v))
-		for i, item := range v {
-			newList[i] = deepCopy(item)
-		}
-		return newList
-	case map[string]any:
-		newMap := make(map[string]any)
-		for k, item := range v {
-			newMap[k] = deepCopy(item)
-		}
-		return newMap
-	default:
-		return v
-	}
 }
 
 func packDeltas(targetView string, deltaType cache.DeltaType, vs []unstruct) []cache.Delta {

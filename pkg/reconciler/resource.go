@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	runtimePredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	runtimeSource "sigs.k8s.io/controller-runtime/pkg/source"
@@ -232,7 +231,7 @@ func (t *target) update(ctx context.Context, delta cache.Delta) error {
 
 	//nolint:nolintlint
 	switch delta.Type { //nolint:exhaustive
-	case cache.Added, cache.Upserted:
+	case cache.Added, cache.Upserted, cache.Updated, cache.Replaced:
 		t.log.V(2).Info("add/upsert", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
 
 		gvk, err := t.Resource.GetGVK()
@@ -244,23 +243,52 @@ func (t *target) update(ctx context.Context, delta cache.Delta) error {
 		obj.SetName(delta.Object.GetName())
 		obj.SetNamespace(delta.Object.GetNamespace())
 
-		if res, err := controllerutil.CreateOrUpdate(context.TODO(), c, obj, func() error {
-			obj.SetUnstructuredContent(delta.Object.UnstructuredContent())
+		// WARNING: the Update target cannot be used to delete labels and annotations, use
+		// the Patcher target for that (this is because we don't want the user to remove
+		// important labels/annotations accidentally and taking care of each in the
+		// pipeline may be too difficult)
+		//
+		// Use our own CreateOrUpdate that will also update the status
+		res, err := CreateOrUpdate(context.TODO(), c, obj, func() error {
+			// remove stuff that's no longer there
+			for k := range obj.UnstructuredContent() {
+				if k == "metadata" {
+					continue
+				}
+				if _, ok, _ := unstructured.NestedFieldNoCopy(delta.Object.UnstructuredContent(), k); !ok {
+					unstructured.RemoveNestedField(obj.UnstructuredContent(), k)
+				}
+			}
+
+			// then update the content with new keys: metadata and status will be handled separately
+			for k, v := range delta.Object.UnstructuredContent() {
+				if k == "metadata" {
+					continue
+				}
+
+				if err := unstructured.SetNestedField(obj.UnstructuredContent(), v, k); err != nil {
+					t.log.Error(err, "failed to update object field during update",
+						"object", client.ObjectKeyFromObject(obj).String(), "key", k)
+					continue
+				}
+			}
+
+			mergeMetadata(obj, delta.Object)
+
+			// restore metadata
 			obj.SetGroupVersionKind(gvk)
 			obj.SetName(delta.Object.GetName())
 			obj.SetNamespace(delta.Object.GetNamespace())
+
 			return nil
-		}); err != nil {
-			return fmt.Errorf("create/update resource %s/%s failed with operation code %s: %w",
-				delta.Object.GetNamespace(), delta.Object.GetName(), res, err)
+		})
+
+		if err != nil {
+			return fmt.Errorf("create/update resource %s failed with operation code %s: %w",
+				client.ObjectKeyFromObject(delta.Object).String(), res, err)
 		}
 
 		return nil
-
-	case cache.Updated, cache.Replaced:
-		t.log.V(2).Info("update", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
-
-		return c.Update(ctx, delta.Object)
 
 	case cache.Deleted:
 		t.log.V(2).Info("delete", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
@@ -352,4 +380,30 @@ func removeNested(m map[string]any) map[string]any {
 		}
 	}
 	return result
+}
+
+func mergeMetadata(obj, new object.Object) {
+	labels := obj.GetLabels()
+	newLabels := new.GetLabels()
+	if newLabels != nil {
+		if labels == nil {
+			labels = map[string]string{}
+		}
+		for k, v := range newLabels {
+			labels[k] = v
+		}
+		obj.SetLabels(labels)
+	}
+
+	annotations := obj.GetAnnotations()
+	newAnnotations := new.GetAnnotations()
+	if newAnnotations != nil {
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		for k, v := range newAnnotations {
+			annotations[k] = v
+		}
+		obj.SetAnnotations(annotations)
+	}
 }
