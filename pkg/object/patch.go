@@ -85,13 +85,6 @@ func patch(o, m any) any {
 			v := patch(vo, v)
 			retm[k] = v
 		}
-		// for k, v := range litmo {
-		// 	_, ok := litmm[k]
-		// 	if !ok {
-		// 		retm[k] = deepCopy(v)
-		// 		continue
-		// 	}
-		// }
 		return retm
 	default:
 		// this should never happen so we should panic here but we won't

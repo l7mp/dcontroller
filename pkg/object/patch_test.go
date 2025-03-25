@@ -129,5 +129,20 @@ var _ = Describe("Object patching", func() {
 				"e":          []any{int64(10), int64(20)},
 			}))
 		})
+
+		It("should delete a key from a map by setting it to nil", func() {
+			obj := NewViewObject("view")
+			SetContent(obj, map[string]any{"a": "x", "d": 1.1, "e": map[string]any{"q": "x", "r": "y"}})
+			patch := map[string]any{"e": map[string]any{"q": nil}}
+			err := Patch(obj, patch)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
+				"apiVersion": "view.dcontroller.io/v1alpha1",
+				"kind":       "view",
+				"a":          "x",
+				"d":          float64(1.1),
+				"e":          map[string]any{"r": "y"},
+			}))
+		})
 	})
 })
