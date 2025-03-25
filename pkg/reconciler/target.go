@@ -180,11 +180,8 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 			return err
 		}
 
-		// TODO: strategic merge patch fails with error "unable to find api field in struct
-		// Unstructured for the json field \"metadata\""}"
-		// return c.Patch(ctx, result, client.RawPatch(types.StrategicMergePatchType, patch))
-
-		// fall back to simple merge patches
+		// TODO: strategic merge patch would need the schema, so we must fall back to
+		// simple merge-patches here
 		patch, err := json.Marshal(object.DeepCopy(delta.Object).UnstructuredContent())
 		if err != nil {
 			return err
@@ -213,7 +210,7 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 
 	case cache.Deleted:
 		// apply the patch locally so that we fully control the behavior
-		patch := removeNested(delta.Object.UnstructuredContent())
+		patch := removeNestedMap(delta.Object.UnstructuredContent())
 
 		// make sure we do not remove crucial metadata: the GVK and the namespace/name
 		gvk := delta.Object.GroupVersionKind()
@@ -232,7 +229,7 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 			"object", client.ObjectKeyFromObject(delta.Object),
 			"patch", util.Stringify(patch), "raw-patch", string(b))
 
-		if err := c.Patch(context.Background(), delta.Object, client.RawPatch(types.StrategicMergePatchType, b)); err != nil {
+		if err := c.Patch(context.Background(), delta.Object, client.RawPatch(types.MergePatchType, b)); err != nil {
 			if !apierrors.IsNotFound(err) {
 				return err
 			}
@@ -247,16 +244,31 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 	}
 }
 
-func removeNested(m map[string]any) map[string]any {
+func removeNestedMap(m map[string]any) map[string]any {
 	result := make(map[string]any)
 	for k, v := range m {
-		if nestedMap, ok := v.(map[string]any); ok {
-			result[k] = removeNested(nestedMap)
-		} else if nestedSlice, ok := v.([]any); ok {
-			// TODO: handle nested slices!!!!
-			result[k] = nestedSlice
-		} else {
+		switch x := v.(type) {
+		case bool, int64, float64, string:
 			result[k] = nil
+		case map[string]any:
+			result[k] = removeNestedMap(x)
+		case []any:
+			result[k] = removeNestedList(x)
+		}
+	}
+	return result
+}
+
+func removeNestedList(l []any) []any {
+	result := make([]any, len(l))
+	for k, v := range l {
+		switch x := v.(type) {
+		case bool, int64, float64, string:
+			result[k] = nil
+		case map[string]any:
+			result[k] = removeNestedMap(x)
+		case []any:
+			result[k] = removeNestedList(x)
 		}
 	}
 	return result
