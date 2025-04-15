@@ -192,8 +192,8 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 
 		// Patch does not update the status so we have to do this separately
 		// must copy status here otherwise Patch may reewrite it
-		newStatus, hasStatus, _ := unstructured.NestedMap(delta.Object.UnstructuredContent(), "status")
-		if hasStatus {
+		newStatus, hasStatus, err := unstructured.NestedMap(delta.Object.UnstructuredContent(), "status")
+		if err == nil && hasStatus {
 			if err := unstructured.SetNestedMap(obj.Object, newStatus, "status"); err != nil {
 				return err
 			}
