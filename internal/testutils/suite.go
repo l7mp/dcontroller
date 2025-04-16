@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/ginkgo/v2" //nolint:stylecheck
 
 	"go.uber.org/zap/zapcore"
 	appsv1 "k8s.io/api/apps/v1"
@@ -47,7 +47,7 @@ func NewSuite(loglevel int) (*SuiteContext, error) {
 		DestWriter:      GinkgoWriter,
 		StacktraceLevel: zapcore.Level(4),
 		TimeEncoder:     zapcore.RFC3339NanoTimeEncoder,
-		Level:           zapcore.Level(loglevel),
+		Level:           zapcore.Level(loglevel), //nolint:gosec
 	}
 	log := zap.New(zap.UseFlagOptions(&opts))
 	s.Log = log
