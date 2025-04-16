@@ -46,30 +46,31 @@ controllers:
       "@aggregate":
         - "@project":
             metadata:
-              name: $.EndpointSlice.metadata.name
-              namespace: $.EndpointSlice.metadata.namespace
+              name: $.ServiceView.metadata.name
+              namespace: $.ServiceView.metadata.namespace
             spec: $.ServiceView.spec
             endpoints: $.EndpointSlice.endpoints
-            id:
-              name: $.ServiceView.spec.serviceName
-              namespace: $.ServiceView.metadata.namespace
-              type: $.ServiceView.spec.type
-              protocol: $.ServiceView.spec.ports.protocol
-              port: $.ServiceView.spec.ports.port
         - "@unwind": $.endpoints
         - "@select":
             "@eq": ["$.endpoints.conditions.ready", true]
         - "@unwind": $.endpoints.addresses
         - "@project":
-            # use @merge so that expressions are applied in order
+            metadata:
+              namespace: $.metadata.namespace
+            spec:
+              serviceName: $.spec.serviceName
+              type: $.spec.type
+              port: $.spec.ports.port
+              targetPort: $.spec.ports.targetPort
+              protocol: $.spec.ports.protocol
+              address: $.endpoints.addresses
+        - "@project":
             "@merge":
-              - {metadata: $.metadata}
-              - {spec: $.spec}
-              - {"$.spec.address": $.endpoints.addresses}
-              - "$.metadata.name":
+              metadata:
+                name:
                   "@concat":
-                    - $.id.name
+                    - $.spec.serviceName
                     - "-"
                     - { "@hash": $.spec }
     target:
-      kind: EndpointSliceView
+      kind: EndpointView

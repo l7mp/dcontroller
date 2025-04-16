@@ -78,4 +78,4 @@ controllers:
                     - "-"
                     - $.id.port
     target:
-      kind: EndpointSliceView
+      kind: EndpointView

@@ -30,9 +30,9 @@ import (
 )
 
 const (
-	OperatorSpec                          = "examples/endpointslice-controller/endpointslice-controller-spec.yaml"
-	OperatorGatherSpec                    = "examples/endpointslice-controller/endpointslice-controller-gather-spec.yaml"
-	EndpointSliceControllerAnnotationName = "dcontroller.io/endpointslice-controller-enabled"
+	OperatorSpec                    = "examples/endpointslice-controller/endpointslice-controller-spec.yaml"
+	OperatorGatherSpec              = "examples/endpointslice-controller/endpointslice-controller-gather-spec.yaml"
+	EndpointSliceCtrlAnnotationName = "dcontroller.io/endpointslice-controller-enabled"
 )
 
 var (
@@ -125,7 +125,7 @@ type endpointSliceController struct {
 func NewEndpointSliceController(mgr manager.Manager, log logr.Logger) (*endpointSliceController, error) {
 	r := &endpointSliceController{
 		Client: mgr.GetClient(),
-		log:    log.WithName("endpointSlice-ctrl"),
+		log:    log.WithName("endpointslice-ctrl"),
 	}
 
 	on := true
@@ -139,7 +139,7 @@ func NewEndpointSliceController(mgr manager.Manager, log logr.Logger) (*endpoint
 
 	src, err := dreconciler.NewSource(mgr, opv1a1.Source{
 		Resource: opv1a1.Resource{
-			Kind: "EndpointSliceView",
+			Kind: "EndpointView",
 		},
 	}).GetSource()
 	if err != nil {
@@ -174,12 +174,12 @@ func (r *endpointSliceController) Reconcile(ctx context.Context, req dreconciler
 		name := obj.GetName()
 		namespace := obj.GetNamespace()
 
-		r.log.Info("Add/update EndpointSliceView object", "name", name, "namespace", namespace, "spec", fmt.Sprintf("%#v", spec))
+		r.log.Info("Add/update EndpointView object", "name", name, "namespace", namespace, "spec", fmt.Sprintf("%#v", spec))
 
 		// handle upsert event
 
 	case cache.Deleted:
-		r.log.Info("Delete EndpointSliceView object", "name", req.Name, "namespace", req.Namespace)
+		r.log.Info("Delete EndpointView object", "name", req.Name, "namespace", req.Namespace)
 
 		// handle delete event
 

@@ -1,9 +1,24 @@
 package testutils
 
-import "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+import (
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
 
 var (
-	// TestSvc is an object def used for testing.
+	TestNs = &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testnamespace",
+		},
+	}
+
+	TestNs2 = &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "other",
+		},
+	}
+
 	TestSvc = &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": "v1",
@@ -28,7 +43,6 @@ var (
 		},
 	}
 
-	// TestEndpointSlice is an object def used for testing.
 	TestEndpointSlice = &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": "discovery.k8s.io/v1",
@@ -79,7 +93,6 @@ var (
 		},
 	}
 
-	// TestConfigMap is an object def used for testing.
 	TestConfigMap = &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": "v1",
@@ -95,7 +108,6 @@ var (
 		},
 	}
 
-	// TestDeployment is an object def used for testing.
 	TestDeployment = &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": "apps/v1",
@@ -133,7 +145,6 @@ var (
 		},
 	}
 
-	// TestPod is an object def used for testing.
 	TestPod = &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": "/v1",

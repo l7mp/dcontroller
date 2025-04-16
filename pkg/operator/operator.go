@@ -7,14 +7,14 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
+	runtimeMgr "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/yaml"
 
 	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
 	dcontroller "github.com/hsnlab/dcontroller/pkg/controller"
 )
 
-var _ runtimeManager.Runnable = &Operator{}
+var _ runtimeMgr.Runnable = &Operator{}
 
 // Options can be used to customize the Operator's behavior.
 type Options struct {
@@ -30,7 +30,7 @@ type Options struct {
 
 type Operator struct {
 	name        string
-	mgr         runtimeManager.Manager
+	mgr         runtimeMgr.Manager
 	spec        *opv1a1.OperatorSpec
 	controllers []*dcontroller.Controller // maybe nil
 	ctx         context.Context
@@ -39,7 +39,7 @@ type Operator struct {
 }
 
 // New creates a new operator.
-func New(name string, mgr runtimeManager.Manager, spec *opv1a1.OperatorSpec, opts Options) *Operator {
+func New(name string, mgr runtimeMgr.Manager, spec *opv1a1.OperatorSpec, opts Options) *Operator {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -68,7 +68,7 @@ func New(name string, mgr runtimeManager.Manager, spec *opv1a1.OperatorSpec, opt
 }
 
 // NewFromFile creates a new operator from a serialized operator spec.
-func NewFromFile(name string, mgr runtimeManager.Manager, file string, opts Options) (*Operator, error) {
+func NewFromFile(name string, mgr runtimeMgr.Manager, file string, opts Options) (*Operator, error) {
 	b, err := os.ReadFile(file)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
@@ -111,19 +111,25 @@ func (op *Operator) Start(ctx context.Context) error {
 	op.log.Info("starting")
 	op.ctx = ctx
 
-	// close the error channel
-	if op.errorChan != nil {
-		go func() {
-			defer close(op.errorChan)
-			<-ctx.Done()
-		}()
-	}
+	// // close the error channel
+	// if op.errorChan != nil {
+	// 	go func() {
+	// 		defer close(op.errorChan)
+	// 		<-ctx.Done()
+	// 	}()
+	// }
+
+	defer func() {
+		if op.errorChan != nil {
+			close(op.errorChan)
+		}
+	}()
 
 	return op.mgr.Start(ctx)
 }
 
 // GetManager returns the controller runtime manager associated with the operator.
-func (op *Operator) GetManager() runtimeManager.Manager {
+func (op *Operator) GetManager() runtimeMgr.Manager {
 	return op.mgr
 }
 

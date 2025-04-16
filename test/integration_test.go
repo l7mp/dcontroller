@@ -18,7 +18,6 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -42,8 +41,6 @@ import (
 
 	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
 )
-
-var _ = fmt.Sprintf("%d", 1)
 
 // Define utility constants for object names and testing timeouts/durations and intervals.
 const (

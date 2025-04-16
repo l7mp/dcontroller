@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	runtimeController "sigs.k8s.io/controller-runtime/pkg/controller"
+	runtimeCtrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -81,7 +81,7 @@ func NewController(config *rest.Config, options runtimeManager.Options) (Control
 	}
 
 	// Create a controller to watch and reconcile the Operator CRD.
-	c, err := runtimeController.New("operator-controller", mgr, runtimeController.Options{
+	c, err := runtimeCtrl.New("operator-controller", mgr, runtimeCtrl.Options{
 		Reconciler: controller,
 	})
 	if err != nil {
