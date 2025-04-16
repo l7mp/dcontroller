@@ -47,8 +47,8 @@ controllers:
       "@aggregate":
         - "@project":
             metadata:
-              name: $.EndpointSlice.metadata.name
-              namespace: $.EndpointSlice.metadata.namespace
+              name: $.ServiceView.metadata.name
+              namespace: $.ServiceView.metadata.namespace
             spec: $.ServiceView.spec
             endpoints: $.EndpointSlice.endpoints
             id:
@@ -65,17 +65,21 @@ controllers:
             - $.id
             - $.endpoints.addresses
         - "@project":
-            # use @merge so that expressions are applied in order
-            "@merge":
-              - {metadata: $.metadata}
-              - {spec: $.spec}
-              - {"$.spec.addresses": $.endpoints.addresses}
-              - "$.metadata.name":
-                  "@concat":
-                    - $.id.name
-                    - "-"
-                    - $.id.protocol
-                    - "-"
-                    - $.id.port
+            metadata:
+              namespace: $.metadata.namespace
+              name:
+                "@concat":
+                  - $.id.name
+                  - "-"
+                  - $.id.protocol
+                  - "-"
+                  - $.id.port
+            spec:
+              serviceName: $.spec.serviceName
+              type: $.spec.type
+              port: $.spec.ports.port
+              targetPort: $.spec.ports.targetPort
+              protocol: $.spec.ports.protocol
+              addresses: $.endpoints.addresses
     target:
       kind: EndpointView
