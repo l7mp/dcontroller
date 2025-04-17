@@ -218,11 +218,10 @@ var _ = Describe("Aggregations", func() {
 			jsonData := `
 '@aggregate':
   - '@project':
-      '@merge':
-        - metadata:
-            name: name
-            namespace: default
-        - spec: 123`
+      - metadata:
+          name: name
+          namespace: default
+      - spec: 123`
 			ag := newAggregation(eng, []byte(jsonData))
 
 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
@@ -241,7 +240,6 @@ var _ = Describe("Aggregations", func() {
 						"name":      "name",
 					},
 					"spec": int64(123),
-					"c":    "c",
 				},
 			}))
 		})
@@ -250,10 +248,10 @@ var _ = Describe("Aggregations", func() {
 			jsonData := `
 '@aggregate':
   - '@project':
-      '@merge':
-        - $.metadata.name: $.metadata.name
-        - $.metadata.namespace: "default"
-        - $.spec.a: 123`
+      - $.metadata.name: $.metadata.name
+      - $.metadata.namespace: "default"
+      - $.spec.a: 123
+      - $.spec.b: $.spec.b`
 			ag := newAggregation(eng, []byte(jsonData))
 
 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
@@ -275,7 +273,6 @@ var _ = Describe("Aggregations", func() {
 						"a": int64(123),
 						"b": unstruct{"c": int64(2)},
 					},
-					"c": "c",
 				},
 			}))
 		})
@@ -284,10 +281,9 @@ var _ = Describe("Aggregations", func() {
 			jsonData := `
 '@aggregate':
   - '@project':
-      '@merge':
-        - {metadata: {name: name2}}
-        - $.metadata.namespace: "default2"
-        - $.spec.a: 123`
+      - {metadata: {name: name2}}
+      - $.metadata.namespace: "default2"
+      - $.spec.a: $.spec.b`
 			ag := newAggregation(eng, []byte(jsonData))
 
 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
@@ -306,10 +302,8 @@ var _ = Describe("Aggregations", func() {
 						"name":      "name2",
 					},
 					"spec": unstruct{
-						"a": int64(123),
-						"b": unstruct{"c": int64(2)},
+						"a": unstruct{"c": int64(2)},
 					},
-					"c": "c",
 				},
 			}))
 		})

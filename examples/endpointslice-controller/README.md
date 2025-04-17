@@ -126,8 +126,8 @@ The pipeline is as follows.
            protocol: $.spec.ports.protocol
            address: $.endpoints.addresses
      - "@project":
-         "@merge":
-           metadata:
+         - "$.": $.
+         - metadata:
              name:
                "@concat":
                  - $.spec.serviceName

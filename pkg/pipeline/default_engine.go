@@ -244,7 +244,21 @@ func (eng *defaultEngine) EvaluateStage(s *Stage, delta cache.Delta) ([]cache.De
 			return nil, err
 		}
 
-		u, err := expression.AsObject(res)
+		us, err := expression.AsObjectOrObjectList(res)
+		if err != nil {
+			return nil, err
+		}
+
+		// if project receives a list, merge the resultant objects
+		var v any
+		for _, u := range us {
+			v, err = object.MergeAny(v, u)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		u, err := expression.AsObject(v)
 		if err != nil {
 			return nil, err
 		}

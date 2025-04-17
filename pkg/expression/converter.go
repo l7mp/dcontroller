@@ -341,3 +341,16 @@ func AsObjectList(d any) ([]Unstructured, error) {
 	}
 	return ret, nil
 }
+
+// AsObjectOrObjectList returns an object or an expression list.
+func AsObjectOrObjectList(d any) ([]Unstructured, error) {
+	if vs, err := AsObject(d); err == nil {
+		return []Unstructured{vs}, nil
+	}
+
+	if vs, err := AsObjectList(d); err == nil {
+		return vs, nil
+	}
+
+	return nil, fmt.Errorf("argument is not an object or an object list: %s", util.Stringify(d))
+}
