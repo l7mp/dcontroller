@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	viewv1a1 "github.com/hsnlab/dcontroller/pkg/api/view/v1alpha1"
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 )
 
 // Ensure CompositeCache implements cache.Cache

@@ -7,8 +7,8 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/hsnlab/dcontroller/pkg/cache"
-	"github.com/hsnlab/dcontroller/pkg/object"
+	"github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/object"
 )
 
 type gvk = schema.GroupVersionKind

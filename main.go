@@ -34,9 +34,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"github.com/hsnlab/dcontroller/internal/buildinfo"
-	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/hsnlab/dcontroller/pkg/operator"
+	"github.com/l7mp/dcontroller/internal/buildinfo"
+	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/operator"
 )
 
 var (

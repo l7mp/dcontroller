@@ -6,9 +6,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 
-	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	viewv1a1 "github.com/hsnlab/dcontroller/pkg/api/view/v1alpha1"
-	"github.com/hsnlab/dcontroller/pkg/util"
+	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/util"
 )
 
 type Resource interface {

@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/json"
 
-	"github.com/hsnlab/dcontroller/pkg/object"
+	"github.com/l7mp/dcontroller/pkg/object"
 )
 
 var _ = Describe("JSONPath", func() {

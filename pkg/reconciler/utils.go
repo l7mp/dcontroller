@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"github.com/hsnlab/dcontroller/pkg/object"
+	"github.com/l7mp/dcontroller/pkg/object"
 )
 
 // CreateOrUpdate creates or updates the given object in the Kubernetes cluster. The object's

@@ -1,5 +1,5 @@
 # Build variables
-PACKAGE = github.com/hsnlab/dcontroller
+PACKAGE = github.com/l7mp/dcontroller
 BUILD_DIR ?= bin/
 VERSION ?= $(shell (git describe --tags --abbrev=8 --always --long) | tr "/" "-")
 COMMIT_HASH ?= $(shell git rev-parse --short HEAD 2>/dev/null)
@@ -10,7 +10,7 @@ GOARGS = -trimpath
 
 # Image URL to use all building/pushing image targets
 IMG ?= retvari/dcontroller:latest
-HELM_URL ?= "https://hsnlab.github.io/dcontroller/"
+HELM_URL ?= "https://l7mp.github.io/dcontroller/"
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.30.0

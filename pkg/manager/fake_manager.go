@@ -22,8 +22,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	ccache "github.com/hsnlab/dcontroller/pkg/cache"
-	"github.com/hsnlab/dcontroller/pkg/object"
+	ccache "github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/object"
 )
 
 var _ manager.Manager = &FakeRuntimeManager{}

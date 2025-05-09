@@ -11,6 +11,6 @@ entries:
     name: dcontroller
     type: application
     urls:
-    - https://hsnlab.github.io/dcontroller/dcontroller-0.0.0.tgz
+    - https://l7mp.github.io/dcontroller/dcontroller-0.0.0.tgz
     version: 0.0.0
 generated: "2024-10-06T21:24:38.954664017+02:00"

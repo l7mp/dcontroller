@@ -6,9 +6,9 @@ import (
 
 	"github.com/go-logr/logr"
 
-	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/hsnlab/dcontroller/pkg/cache"
-	"github.com/hsnlab/dcontroller/pkg/util"
+	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/util"
 )
 
 var _ Evaluator = &Pipeline{}

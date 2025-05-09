@@ -5,7 +5,7 @@ plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: dcontroller
-repo: github.com/hsnlab/dcontroller
+repo: github.com/l7mp/dcontroller
 resources:
 - api:
     crdVersion: v1
@@ -14,6 +14,6 @@ resources:
   domain: dcontroller.io
   group: operator
   kind: Operator
-  path: github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1
+  path: github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1
   version: v1alpha1
 version: "3"

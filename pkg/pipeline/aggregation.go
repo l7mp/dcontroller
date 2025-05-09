@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/hsnlab/dcontroller/pkg/cache"
+	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/cache"
 )
 
 var _ Evaluator = &Aggregation{}

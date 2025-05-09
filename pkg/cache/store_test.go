@@ -6,7 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/hsnlab/dcontroller/pkg/object"
+	"github.com/l7mp/dcontroller/pkg/object"
 )
 
 var _ = Describe("Store", func() {

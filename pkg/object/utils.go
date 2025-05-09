@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
-	"github.com/hsnlab/dcontroller/pkg/util"
+	"github.com/l7mp/dcontroller/pkg/util"
 )
 
 var scheme = runtime.NewScheme()

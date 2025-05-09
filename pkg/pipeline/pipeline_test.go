@@ -11,11 +11,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/yaml"
 
-	"github.com/hsnlab/dcontroller/internal/testutils"
-	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	viewv1a1 "github.com/hsnlab/dcontroller/pkg/api/view/v1alpha1"
-	"github.com/hsnlab/dcontroller/pkg/cache"
-	"github.com/hsnlab/dcontroller/pkg/object"
+	"github.com/l7mp/dcontroller/internal/testutils"
+	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/object"
 )
 
 var (

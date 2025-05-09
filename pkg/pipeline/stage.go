@@ -1,8 +1,8 @@
 package pipeline
 
 import (
-	"github.com/hsnlab/dcontroller/pkg/cache"
-	"github.com/hsnlab/dcontroller/pkg/expression"
+	"github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/expression"
 )
 
 var _ Evaluator = &Stage{}

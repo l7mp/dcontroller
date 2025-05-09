@@ -14,10 +14,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 
-	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/hsnlab/dcontroller/pkg/cache"
-	"github.com/hsnlab/dcontroller/pkg/object"
-	"github.com/hsnlab/dcontroller/pkg/util"
+	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/object"
+	"github.com/l7mp/dcontroller/pkg/util"
 )
 
 // Target is a generic writer that knows how to create controller runtime objects in a target resource.

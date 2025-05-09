@@ -41,7 +41,7 @@ controllers](https://hackernoon.com/level-triggering-and-reconciliation-in-kuber
 Deploy Δ-controller with Helm:
 
 ``` console
-helm repo add dcontroller https://hsnlab.github.io/dcontroller/
+helm repo add dcontroller https://l7mp.github.io/dcontroller/
 helm repo update
 helm install dcontroller dcontroller/dcontroller
 ```

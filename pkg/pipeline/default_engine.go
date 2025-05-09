@@ -11,10 +11,10 @@ import (
 	toolscache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hsnlab/dcontroller/pkg/cache"
-	"github.com/hsnlab/dcontroller/pkg/expression"
-	"github.com/hsnlab/dcontroller/pkg/object"
-	"github.com/hsnlab/dcontroller/pkg/util"
+	"github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/expression"
+	"github.com/l7mp/dcontroller/pkg/object"
+	"github.com/l7mp/dcontroller/pkg/util"
 )
 
 type unstruct = map[string]any

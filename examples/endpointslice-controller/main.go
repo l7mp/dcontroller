@@ -21,12 +21,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/hsnlab/dcontroller/pkg/cache"
-	dmanager "github.com/hsnlab/dcontroller/pkg/manager"
-	dobject "github.com/hsnlab/dcontroller/pkg/object"
-	doperator "github.com/hsnlab/dcontroller/pkg/operator"
-	dreconciler "github.com/hsnlab/dcontroller/pkg/reconciler"
+	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/cache"
+	dmanager "github.com/l7mp/dcontroller/pkg/manager"
+	dobject "github.com/l7mp/dcontroller/pkg/object"
+	doperator "github.com/l7mp/dcontroller/pkg/operator"
+	dreconciler "github.com/l7mp/dcontroller/pkg/reconciler"
 )
 
 const (

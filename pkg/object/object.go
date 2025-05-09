@@ -6,7 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	viewv1a1 "github.com/hsnlab/dcontroller/pkg/api/view/v1alpha1"
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 )
 
 // Object is an alias for a Kubernetes unstructured object used internally as an object

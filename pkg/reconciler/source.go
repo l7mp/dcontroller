@@ -10,8 +10,8 @@ import (
 	runtimePredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	runtimeSource "sigs.k8s.io/controller-runtime/pkg/source"
 
-	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/hsnlab/dcontroller/pkg/predicate"
+	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/predicate"
 )
 
 // Source is a generic watch source that knows how to create controller runtime sources.

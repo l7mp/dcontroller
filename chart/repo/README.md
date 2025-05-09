@@ -5,7 +5,7 @@
 Register the repository with Helm.
 
 ``` console
-helm repo add dcontroller https://hsnlab.github.io/dcontroller/
+helm repo add dcontroller https://l7mp.github.io/dcontroller/
 helm repo update
 ```
 

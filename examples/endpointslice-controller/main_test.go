@@ -22,13 +22,13 @@ import (
 	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/hsnlab/dcontroller/internal/testutils"
-	opv1a1 "github.com/hsnlab/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/hsnlab/dcontroller/pkg/cache"
-	dmanager "github.com/hsnlab/dcontroller/pkg/manager"
-	"github.com/hsnlab/dcontroller/pkg/object"
-	doperator "github.com/hsnlab/dcontroller/pkg/operator"
-	dreconciler "github.com/hsnlab/dcontroller/pkg/reconciler"
+	"github.com/l7mp/dcontroller/internal/testutils"
+	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/cache"
+	dmanager "github.com/l7mp/dcontroller/pkg/manager"
+	"github.com/l7mp/dcontroller/pkg/object"
+	doperator "github.com/l7mp/dcontroller/pkg/operator"
+	dreconciler "github.com/l7mp/dcontroller/pkg/reconciler"
 )
 
 var (
