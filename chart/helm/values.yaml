@@ -1,4 +1,0 @@
-image:
-  name: docker.io/retvari/dcontroller
-  tag: latest
-  pullPolicy: Always

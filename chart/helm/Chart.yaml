@@ -1,8 +1,0 @@
-apiVersion: v2
-name: dcontroller
-description: A Helm chart for deploying dcontroller
-type: application
-version: 0.0.0
-appVersion: 0.0.0
-maintainers:
-  - name: rg0now
