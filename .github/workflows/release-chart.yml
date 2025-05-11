@@ -1,0 +1,43 @@
+name: Release chart
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  chart-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Build chart
+        run: |
+          make chart
+
+      - name: Set git config
+        run: |
+          git config --global user.email "l7mp.info@gmail.com"
+          git config --global user.name "BotL7mp"
+
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.WEB_PAT_TOKEN }}
+          path: gh-pages
+          repository: l7mp/dcontroller
+          ref: gh-pages
+
+      - name: Copy build artifacts
+        run: |
+          cd gh-pages
+          cp -r ../chart/repo/* .
+          git add .
+          git commit -m "Update helm charts"
+          git push origin gh-pages
