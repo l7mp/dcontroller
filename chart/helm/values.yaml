@@ -1,4 +1,4 @@
 image:
-  name: docker.io/retvari/dcontroller
+  name: docker.io/l7mp/dcontroller
   tag: latest
   pullPolicy: Always
