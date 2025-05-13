@@ -1,14 +1,16 @@
 apiVersion: v1
 entries:
-  sdwan-operator:
+  dcontroller:
   - apiVersion: v2
-    appVersion: 1.0.0
-    created: "2025-05-13T21:08:56.652526934Z"
-    description: A Helm chart for the SD-WAN operator
-    digest: ad87021663ed47ab5374edceebbf0f52339be9107c8c0b637e9a5ecc20a08781
-    name: sdwan-operator
+    appVersion: 0.0.0
+    created: "2025-05-13T21:11:00.591440508Z"
+    description: A Helm chart for deploying dcontroller
+    digest: 09e487f7d609c06001036569c8c889c593f0f7e78799c2c6d2eee1a98fc9cfe3
+    maintainers:
+    - name: rg0now
+    name: dcontroller
     type: application
     urls:
-    - https://l7mp.github.io/sdwan-operator/sdwan-operator-0.1.0.tgz
-    version: 0.1.0
-generated: "2025-05-13T21:08:56.651666531Z"
+    - https://l7mp.github.io/dcontroller/dcontroller-0.0.0.tgz
+    version: 0.0.0
+generated: "2025-05-13T21:11:00.590882541Z"
