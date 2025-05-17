@@ -867,6 +867,84 @@ var _ = Describe("Expressions", func() {
 		})
 	})
 
+	Describe("Evaluating conditional commands", func() {
+		// @cond
+		It("should evaluate a basic true @cond expression", func() {
+			jsonData := `{"@cond":[true, 1, 2]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsInt(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(int64(1)))
+		})
+
+		It("should evaluate a basic false @cond expression", func() {
+			jsonData := `{"@cond":[false, 1, 2]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsInt(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(int64(2)))
+		})
+
+		It("should evaluate a true @cond expression and shortcut", func() {
+			jsonData := `{"@cond":[{"@eq":["$.spec.a", 1]},"$.spec.b.c","$.$$"]}` // "else" branch blows up
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsInt(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(int64(2)))
+		})
+
+		It("should evaluate a true @cond expression and shortcut", func() {
+			jsonData := `{"@cond":[{"@eq":["$.spec.a", "x"]},"$.$$","$.spec.b.c"]}` // "true" branch blows up
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsInt(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(int64(2)))
+		})
+
+		It("should evaluate a complex @cond expression", func() {
+			jsonData := `{"@cond":[{"@eq":["$.spec.a",2]},"$.$$",{"@cond":[{"@eq":["$.metadata.name","name"]},"$.spec.a","$.$$"]}]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsInt(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(int64(1)))
+		})
+	})
+
 	Describe("Evaluating list commands", func() {
 		// @filter
 		It("should evaluate a @filter expression on a literal list", func() {

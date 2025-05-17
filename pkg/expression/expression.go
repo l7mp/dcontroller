@@ -205,30 +205,110 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 		return ret, nil
 	}
 
+	// @cond: conditional must eval the arg
+	if string(e.Op[0]) == "@" {
+		switch e.Op {
+		case "@cond":
+			args, err := AsExpOrExpList(e.Arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			if len(args) != 2 && len(args) != 3 {
+				return nil, NewExpressionError(e,
+					errors.New("invalid arguments: expected 2 (if/then) or 3 (if/then/else) arguments"))
+			}
+
+			// conditional
+			ce, err := args[0].Evaluate(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to evaluate conditional: %w", err)
+			}
+
+			c, err := AsBool(ce)
+			if err != nil {
+				return nil, NewExpressionError(e, fmt.Errorf("expected conditional to evaluate "+
+					"to boolean: %w", err))
+			}
+
+			var v any
+			if c {
+				// then branch
+				arg, err := args[1].Evaluate(ctx)
+				if err != nil {
+					return nil, fmt.Errorf("failed to evaluate \"true\" branch: %w", err)
+				}
+				v = arg
+
+			} else if len(args) == 3 {
+				// else branch
+				arg, err := args[2].Evaluate(ctx)
+				if err != nil {
+					return nil, fmt.Errorf("failed to evaluate \"false\" branch: %w", err)
+				}
+				v = arg
+			}
+
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			return v, nil
+		}
+	}
+
 	// list commands: must eval the arg themselves
 	if string(e.Op[0]) == "@" {
 		switch e.Op {
-		// case "@merge":
-		// 	args, err := AsExpOrExpList(e.Arg)
-		// 	if err != nil {
-		// 		return nil, NewExpressionError(e, err)
-		// 	}
+		// list bool
+		case "@and":
+			args, err := AsExpOrExpList(e.Arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
 
-		// 	// evaluate expressons
-		// 	for _, arg := range args {
-		// 		res, err := arg.Evaluate(ctx)
-		// 		if err != nil {
-		// 			return nil, errors.New("failed to evaluate expression")
-		// 		}
-		// 		ctx.Object, err = object.MergeAny(ctx.Object, res)
-		// 		if err != nil {
-		// 			return nil, err
-		// 		}
-		// 	}
+			v := true
+			for _, arg := range args {
+				r, err := arg.Evaluate(ctx)
+				if err != nil {
+					return nil, fmt.Errorf("failed to evaluate argument: %w", err)
+				}
+				c, err := AsBool(r)
+				if err != nil {
+					return nil, NewExpressionError(e, err)
+				}
+				if !c {
+					v = false
+					break
+				}
+			}
 
-		// 	ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", ctx.Object)
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
 
-		// 	return ctx.Object, nil
+			return v, nil
+
+		case "@or":
+			args, err := AsExpOrExpList(e.Arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			v := false
+			for _, arg := range args {
+				r, err := arg.Evaluate(ctx)
+				if err != nil {
+					return nil, fmt.Errorf("failed to evaluate argument: %w", err)
+				}
+				c, err := AsBool(r)
+				if err != nil {
+					return nil, NewExpressionError(e, err)
+				}
+				if c {
+					v = true
+					break
+				}
+			}
+
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
+
+			return v, nil
 
 		case "@filter":
 			args, err := AsExpOrExpList(e.Arg)
