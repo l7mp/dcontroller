@@ -619,37 +619,6 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
 			return v, nil
 
-			// list bool
-		case "@and":
-			args, err := AsBoolList(arg)
-			if err != nil {
-				return nil, NewExpressionError(e, err)
-			}
-
-			v := true
-			for i := range args {
-				v = v && args[i]
-			}
-
-			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
-
-			return v, nil
-
-		case "@or":
-			args, err := AsBoolList(arg)
-			if err != nil {
-				return nil, NewExpressionError(e, err)
-			}
-
-			v := false
-			for i := range args {
-				v = v || args[i]
-			}
-
-			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
-
-			return v, nil
-
 			// binary
 		case "@lt":
 			is, fs, kind, err := AsBinaryIntOrFloatList(arg)

@@ -343,6 +343,34 @@ var _ = Describe("Expressions", func() {
 			Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
 		})
 
+		It("should shortcut a boolean @and expression", func() {
+			jsonData := `{"@and":[true, {"@eq": [10, 11]}, "$.$$"]}` // last arg blows up
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
+			Expect(reflect.ValueOf(res).Bool()).To(BeFalse())
+		})
+
+		It("should shortcut a boolean @or expression", func() {
+			jsonData := `{"@or":[false, {"@eq": [10, 10]}, "$.$$"]}` // last arg blows up
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
+			Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
+		})
+
 		It("should deserialize and evaluate a compound JSONPath expression", func() {
 			jsonData := `{"@lt": ["$.spec.a", "$.spec.b.c"]}`
 			var exp Expression
