@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -76,7 +77,13 @@ func (c *ViewCacheInformer) AddEventHandler(handler toolscache.ResourceEventHand
 }
 
 func (c *ViewCacheInformer) AddEventHandlerWithResyncPeriod(handler toolscache.ResourceEventHandler, resyncPeriod time.Duration) (toolscache.ResourceEventHandlerRegistration, error) {
-	// In this implementation, we ignore the custom resyncPeriod as we're not actually syncing with an API server
+	// Ignore custom resyncPeriod as we're not actually syncing with an API server
+	return c.AddEventHandler(handler)
+}
+
+func (c *ViewCacheInformer) AddEventHandlerWithOptions(handler toolscache.ResourceEventHandler, _ toolscache.HandlerOptions) (toolscache.ResourceEventHandlerRegistration, error) {
+	// Ignore handler options: this would be useful to change the resync period that we do not
+	// need anyway and change the logger which we do not support either
 	return c.AddEventHandler(handler)
 }
 
@@ -169,6 +176,13 @@ func (c *ViewCacheInformer) Run(stopCh <-chan struct{}) {
 	<-stopCh
 }
 
+func (c *ViewCacheInformer) RunWithContext(ctx context.Context) {
+	defer c.stopped.Store(true)
+
+	// We don't need to run anything continuously, just wait for the stop signal
+	<-ctx.Done()
+}
+
 func (c *ViewCacheInformer) HasSynced() bool {
 	// Since we're not syncing with an API server, we can consider it always synced
 	return true
@@ -183,8 +197,13 @@ func (c *ViewCacheInformer) AddIndexers(indexers toolscache.Indexers) error {
 	return c.cache.AddIndexers(indexers)
 }
 
-func (c *ViewCacheInformer) SetWatchErrorHandler(handler toolscache.WatchErrorHandler) error {
-	c.log.Info("SetWatchErrorHandler: not impllemented")
+func (c *ViewCacheInformer) SetWatchErrorHandler(_ toolscache.WatchErrorHandler) error {
+	c.log.Info("SetWatchErrorHandler: not implemented")
+	return nil
+}
+
+func (c *ViewCacheInformer) SetWatchErrorHandlerWithContext(_ toolscache.WatchErrorHandlerWithContext) error {
+	c.log.Info("SetWatchErrorHandlerWithContext: not implemented")
 	return nil
 }
 

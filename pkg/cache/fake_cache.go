@@ -244,27 +244,6 @@ func (e eventHandlerWrapper) OnDelete(obj interface{}) {
 	e.handler.(legacyResourceEventHandler).OnDelete(obj)
 }
 
-// AddIndexers does nothing.  TODO(community): Implement this.
-func (f *FakeInformer) AddIndexers(indexers toolscache.Indexers) error {
-	return nil
-}
-
-// GetIndexer does nothing.  TODO(community): Implement this.
-func (f *FakeInformer) GetIndexer() toolscache.Indexer {
-	return nil
-}
-
-// Informer returns the fake Informer.
-func (f *FakeInformer) Informer() toolscache.SharedIndexInformer {
-	return f
-}
-
-// HasSynced implements the Informer interface.  Returns f.Synced.
-func (f *FakeInformer) HasSynced() bool {
-	return f.Synced
-}
-
-// AddEventHandler implements the Informer interface.  Adds an EventHandler to the fake Informers. TODO(community): Implement Registration.
 func (f *FakeInformer) AddEventHandler(handler toolscache.ResourceEventHandler) (toolscache.ResourceEventHandlerRegistration, error) {
 	f.handlers = append(f.handlers, eventHandlerWrapper{handler})
 
@@ -275,9 +254,8 @@ func (f *FakeInformer) AddEventHandler(handler toolscache.ResourceEventHandler) 
 	return nil, nil
 }
 
-// Run implements the Informer interface.  Increments f.RunCount.
-func (f *FakeInformer) Run(<-chan struct{}) {
-	f.RunCount++
+func (f *FakeInformer) AddEventHandlerWithOptions(handler toolscache.ResourceEventHandler, _ toolscache.HandlerOptions) (toolscache.ResourceEventHandlerRegistration, error) {
+	return f.AddEventHandler(handler)
 }
 
 // Add fakes an Add event for obj.
@@ -301,42 +279,31 @@ func (f *FakeInformer) Delete(obj metav1.Object) {
 	}
 }
 
-// AddEventHandlerWithResyncPeriod does nothing.  TODO(community): Implement this.
 func (f *FakeInformer) AddEventHandlerWithResyncPeriod(handler toolscache.ResourceEventHandler, _ time.Duration) (toolscache.ResourceEventHandlerRegistration, error) {
 	return f.AddEventHandler(handler)
 }
 
-// RemoveEventHandler does nothing.  TODO(community): Implement this.
+func (f *FakeInformer) AddEventHandlerWithContext(handler toolscache.ResourceEventHandler, _ time.Duration) (toolscache.ResourceEventHandlerRegistration, error) {
+	return f.AddEventHandler(handler)
+}
+
 func (f *FakeInformer) RemoveEventHandler(handle toolscache.ResourceEventHandlerRegistration) error {
 	return nil
 }
 
-// GetStore does nothing.  TODO(community): Implement this.
-func (f *FakeInformer) GetStore() toolscache.Store {
+func (f *FakeInformer) AddIndexers(indexers toolscache.Indexers) error          { return nil }
+func (f *FakeInformer) GetIndexer() toolscache.Indexer                          { return nil }
+func (f *FakeInformer) Informer() toolscache.SharedIndexInformer                { return f }
+func (f *FakeInformer) HasSynced() bool                                         { return f.Synced }
+func (f *FakeInformer) GetStore() toolscache.Store                              { return nil }
+func (f *FakeInformer) GetController() toolscache.Controller                    { return nil }
+func (f *FakeInformer) LastSyncResourceVersion() string                         { return "" }
+func (f *FakeInformer) SetWatchErrorHandler(toolscache.WatchErrorHandler) error { return nil }
+func (f *FakeInformer) SetTransform(t toolscache.TransformFunc) error           { return nil }
+func (f *FakeInformer) Run(<-chan struct{})                                     { f.RunCount++ }
+func (f *FakeInformer) RunWithContext(_ context.Context)                        { f.RunCount++ }
+func (f *FakeInformer) IsStopped() bool                                         { return false }
+
+func (f *FakeInformer) SetWatchErrorHandlerWithContext(toolscache.WatchErrorHandlerWithContext) error {
 	return nil
-}
-
-// GetController does nothing.  TODO(community): Implement this.
-func (f *FakeInformer) GetController() toolscache.Controller {
-	return nil
-}
-
-// LastSyncResourceVersion does nothing.  TODO(community): Implement this.
-func (f *FakeInformer) LastSyncResourceVersion() string {
-	return ""
-}
-
-// SetWatchErrorHandler does nothing.  TODO(community): Implement this.
-func (f *FakeInformer) SetWatchErrorHandler(toolscache.WatchErrorHandler) error {
-	return nil
-}
-
-// SetTransform does nothing.  TODO(community): Implement this.
-func (f *FakeInformer) SetTransform(t toolscache.TransformFunc) error {
-	return nil
-}
-
-// IsStopped does nothing.  TODO(community): Implement this.
-func (f *FakeInformer) IsStopped() bool {
-	return false
 }
