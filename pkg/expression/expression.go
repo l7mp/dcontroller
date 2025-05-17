@@ -239,7 +239,6 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 					return nil, fmt.Errorf("failed to evaluate \"true\" branch: %w", err)
 				}
 				v = arg
-
 			} else if len(args) == 3 {
 				// else branch
 				arg, err := args[2].Evaluate(ctx)
