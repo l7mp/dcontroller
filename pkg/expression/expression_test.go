@@ -971,6 +971,67 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(v).To(Equal(int64(1)))
 		})
+
+		// @definedOr
+		It("should evaluate a basic true @definedOr expression", func() {
+			jsonData := `{"@definedOr":[1, 2]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsInt(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(int64(1)))
+		})
+
+		It("should evaluate a basic false @definedOr expression", func() {
+			jsonData := `{"@definedOr":["$.dummy", 2]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsInt(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(int64(2)))
+		})
+
+		It("should evaluate a true @definedOr expression using JSONpath", func() {
+			jsonData := `{"@definedOr":["$.metadata.namespace", 2]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsString(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal("default"))
+		})
+
+		It("should evaluate a false @definedOr expression using JSONpath", func() {
+			jsonData := `{"@definedOr":["$.dummy", "$.metadata.namespace"]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsString(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal("default"))
+		})
 	})
 
 	Describe("Evaluating list commands", func() {

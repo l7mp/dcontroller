@@ -251,6 +251,34 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
+
+		case "@definedOr": // useful for setting defaults
+			args, err := AsExpOrExpList(e.Arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			if len(args) != 2 {
+				return nil, NewExpressionError(e,
+					errors.New("invalid arguments: expected 2 arguments"))
+			}
+
+			// conditional
+			v, err := args[0].Evaluate(ctx)
+			if err != nil {
+				return nil, err
+			}
+			fmt.Printf("--------- \"%#v\"\n", v)
+
+			if v == nil {
+				v, err = args[1].Evaluate(ctx)
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
+			return v, nil
 		}
 	}
 
