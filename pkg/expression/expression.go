@@ -6,6 +6,7 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/grokify/mogo/encoding/base36"
@@ -114,6 +115,10 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 		ret, err := GetJSONPath(ctx, str)
 		if err != nil {
 			return nil, err
+		}
+
+		if ret == "@now" {
+			ret = time.Now().UTC().Format("2006-01-02T15:04:05Z07:00")
 		}
 
 		ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", ret)

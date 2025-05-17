@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/grokify/mogo/encoding/base36"
 	. "github.com/onsi/ginkgo/v2"
@@ -125,6 +126,24 @@ var _ = Describe("Expressions", func() {
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.String))
 			Expect(reflect.ValueOf(res).String()).To(Equal("a10"))
+		})
+
+		It("should evaluate a @now expression", func() {
+			jsonData := `"@now"`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			now := time.Now()
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).NotTo(BeNil())
+			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.String))
+
+			t, err := time.Parse(time.RFC3339, res.(string))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(t).To(BeTemporally("~", now, 1*time.Second))
 		})
 	})
 
