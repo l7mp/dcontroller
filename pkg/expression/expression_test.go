@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/grokify/mogo/encoding/base36"
 	. "github.com/onsi/ginkgo/v2"
@@ -129,6 +130,43 @@ var _ = Describe("Expressions", func() {
 	})
 
 	Describe("Evaluating compound expressions", func() {
+		It("should deserialize and evaluate a @now expression", func() {
+			jsonData := `"@now"`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exp).To(Equal(Expression{
+				Op: "@now",
+			}))
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			t := time.Now().UTC().Format(time.RFC3339)
+			Expect(res).To(Equal(t))
+		})
+
+		It("should deserialize and evaluate a nested @now expression", func() {
+			jsonData := `{"a": "@now"}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exp).To(Equal(Expression{
+				Op: "@dict",
+				Literal: map[string]Expression{
+					"a": {
+						Op: "@now",
+					},
+				},
+			}))
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			t := time.Now().UTC().Format(time.RFC3339)
+			o := Unstructured{"a": t}
+			Expect(res).To(Equal(o))
+		})
 		It("should deserialize and evaluate a nil expression", func() {
 			jsonData := `{"@isnil": 1}`
 			var exp Expression

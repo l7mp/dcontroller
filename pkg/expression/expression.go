@@ -6,6 +6,7 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/grokify/mogo/encoding/base36"
@@ -35,6 +36,12 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 	}
 
 	switch e.Op {
+
+	case "@now":
+		v := time.Now().UTC().Format(time.RFC3339)
+		ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", v)
+		return v, nil
+
 	case "@bool":
 		lit := e.Literal
 		if e.Arg != nil {
