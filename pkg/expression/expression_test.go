@@ -142,19 +142,23 @@ var _ = Describe("Expressions", func() {
 			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
-			t := time.Now().UTC().Format(time.RFC3339)
-			Expect(res).To(Equal(t))
+			Expect(res).NotTo(BeNil())
+			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.String))
+
+			t, err := time.Parse(time.RFC3339, res.(string))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(t).To(BeTemporally("~", time.Now(), time.Second))
 		})
 
 		It("should deserialize and evaluate a nested @now expression", func() {
-			jsonData := `{"a": "@now"}`
+			jsonData := `{"time": "@now"}`
 			var exp Expression
 			err := json.Unmarshal([]byte(jsonData), &exp)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(exp).To(Equal(Expression{
 				Op: "@dict",
 				Literal: map[string]Expression{
-					"a": {
+					"time": {
 						Op: "@now",
 					},
 				},
@@ -163,10 +167,14 @@ var _ = Describe("Expressions", func() {
 			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
-			t := time.Now().UTC().Format(time.RFC3339)
-			o := Unstructured{"a": t}
-			Expect(res).To(Equal(o))
+			Expect(res).NotTo(BeNil())
+			Expect(res).To(HaveKey("time"))
+
+			t, err := time.Parse(time.RFC3339, res.(map[string]any)["time"].(string))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(t).To(BeTemporally("~", time.Now(), time.Second))
 		})
+
 		It("should deserialize and evaluate a nil expression", func() {
 			jsonData := `{"@isnil": 1}`
 			var exp Expression
