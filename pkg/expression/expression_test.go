@@ -127,9 +127,7 @@ var _ = Describe("Expressions", func() {
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.String))
 			Expect(reflect.ValueOf(res).String()).To(Equal("a10"))
 		})
-	})
 
-	Describe("Evaluating compound expressions", func() {
 		It("should deserialize and evaluate a @now expression", func() {
 			jsonData := `"@now"`
 			var exp Expression
@@ -149,7 +147,9 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(t).To(BeTemporally("~", time.Now(), time.Second))
 		})
+	})
 
+	Describe("Evaluating compound expressions", func() {
 		It("should deserialize and evaluate a nested @now expression", func() {
 			jsonData := `{"time": "@now"}`
 			var exp Expression
