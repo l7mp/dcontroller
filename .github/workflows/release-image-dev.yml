@@ -8,7 +8,7 @@ on:
       - '.github/workflows/**'
       - 'test/**'
     branches:
-      - 'main'
+      - 'master'
 
 jobs:
   push_image:
