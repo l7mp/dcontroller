@@ -21,7 +21,7 @@ type Interface interface {
 	ToPredicate() (predicate.TypedPredicate[client.Object], error)
 }
 
-// FromPredicate converts a seriaized Predicate into a native controller runtime predicate.
+// FromPredicate converts a serialized Predicate into a native controller runtime predicate.
 func FromPredicate(predicate Predicate) (predicate.TypedPredicate[client.Object], error) {
 	return predicate.ToPredicate()
 }

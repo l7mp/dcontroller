@@ -94,8 +94,8 @@ func (p *Pipeline) Evaluate(delta cache.Delta) ([]cache.Delta, error) {
 		res = deltas
 	}
 
-	eng.Log().V(1).Info("eval ready", "event-type", delta.Type,
-		"object", ObjectKey(delta.Object), "result", util.Stringify(res))
+	eng.Log().V(1).Info("eval ready", "event-type", delta.Type, "object", ObjectKey(delta.Object),
+		"result", util.Stringify(res))
 
 	return res, nil
 }

@@ -145,7 +145,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 
 	// Create the pipeline
 	pipeline, err := pipeline.NewPipeline(c.kind, baseviews, c.config.Pipeline,
-		logger.WithName("pipeline").WithValues("controller", c.name, "kind/view", c.kind))
+		logger.WithName("pipeline").WithValues("controller", c.name, "target-kind", c.kind))
 	if err != nil {
 		return c, c.PushCriticalError(fmt.Errorf("failed to create pipleline for controller %s: %w",
 			c.name, err))
