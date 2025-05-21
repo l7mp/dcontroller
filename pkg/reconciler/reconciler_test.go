@@ -873,7 +873,7 @@ var _ = Describe("Reconciler", func() {
 			// Patch to the target
 			newPod := object.DeepCopy(pod2)
 			unstructured.RemoveNestedField(newPod.UnstructuredContent(), "spec", "containers")
-			//nolint:errchekc
+			//nolint:errcheck
 			unstructured.SetNestedField(newPod.UnstructuredContent(), "Always", "spec", "restartPolicy")
 			err = target.Write(ctx, cache.Delta{Type: cache.Updated, Object: newPod})
 			Expect(err).NotTo(HaveOccurred())

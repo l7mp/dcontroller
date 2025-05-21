@@ -441,9 +441,7 @@ func (eng *defaultEngine) consolidateDeltas(ds []cache.Delta) []cache.Delta {
 		case cache.Deleted:
 			// @gather may create an add followed by a delete (e.g., when removing
 			// lists): let delete remove all earlier adds
-			if _, ok := addidx[name]; ok {
-				delete(addidx, name)
-			}
+			delete(addidx, name)
 
 			// decomposed update aggregations may yield multiple Deleted deltas for the
 			// same object, this may yield spurious results - use the latest
