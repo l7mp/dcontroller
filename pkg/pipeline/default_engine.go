@@ -143,7 +143,7 @@ func (eng *defaultEngine) EvaluateAggregation(a *Aggregation, delta cache.Delta)
 		}
 
 		if err := eng.baseViewStore[gvk].Delete(old); err != nil {
-			return nil, fmt.Errorf("procesing event %q: could not delete object %s from store: %w",
+			return nil, fmt.Errorf("processing event %q: could not delete object %s from store: %w",
 				delta.Type, ObjectKey(delta.Object), err)
 		}
 
@@ -354,7 +354,8 @@ func (eng *defaultEngine) EvaluateStage(s *Stage, delta cache.Delta) ([]cache.De
 		// iterate without the added/deleted item to find out what's in the cache
 		gathered := []any{}
 		for _, o := range s.inCache.List() {
-			// ignore cached object on Delete
+			// ignore cached object on Delete: the below can only happen on delete, no
+			// need to check delta
 			if client.ObjectKeyFromObject(o) == client.ObjectKeyFromObject(delta.Object) {
 				continue
 			}
@@ -368,19 +369,20 @@ func (eng *defaultEngine) EvaluateStage(s *Stage, delta cache.Delta) ([]cache.De
 				continue
 			}
 
-			// store.List deepcopies
+			// store.List makes a deepcopy
 			oelem, err := elemPath.Evaluate(expression.EvalCtx{Object: o.UnstructuredContent(), Log: eng.log})
 			if err != nil {
 				return nil, err
 			}
+
 			gathered = append(gathered, oelem)
 		}
 
 		var t cache.DeltaType
 		switch delta.Type {
 		case cache.Added:
-			// we generate an Added delta even when the list is updated:
-			// delta-consolidation will turn that into an Upsert eventually
+			// Upsert: we generate an Added delta even when a list is updated,
+			// delta-consolidation will turn that back into an Upsert eventually
 			t = cache.Added
 			gathered = append(gathered, elem)
 
@@ -388,8 +390,9 @@ func (eng *defaultEngine) EvaluateStage(s *Stage, delta cache.Delta) ([]cache.De
 				return nil, err
 			}
 		case cache.Deleted:
-			// if resultant list is non-empty, we generate an Upsert delta (Added will
-			// be turned into an IUpsert eventually), otherwise we generate a Delete
+			// Upsert: if resultant list is non-empty, we generate an Upsert delta
+			// (Added will be turned into an Upsert eventually), otherwise we generate
+			// a Delete
 			if len(gathered) > 0 {
 				t = cache.Added
 			} else {
@@ -428,39 +431,46 @@ func (eng *defaultEngine) consolidateDeltas(ds []cache.Delta) []cache.Delta {
 		if d.IsUnchanged() {
 			continue
 		}
+		name := d.Object.GetName()
 		switch d.Type {
 		case cache.Added:
-			// TODO decomposed update aggregations may yield multiple Added deltas for
-			// the same object, this may yield spurious results - use the latest
-			addidx[d.Object.GetName()] = &ds[i]
+			// decomposed update aggregations may yield multiple Added deltas for the
+			// same object, this may yield spurious results - use the latest
+			addidx[name] = &ds[i]
 
 		case cache.Deleted:
-			// TODO decomposed update aggregations may yield multiple Deleted deltas
-			// for the same object, this may yield spurious results - use the latest
-			delidx[d.Object.GetName()] = &ds[i]
+			// @gather may create an add followed by a delete (e.g., when removing
+			// lists): let delete remove all earlier adds
+			if _, ok := addidx[name]; ok {
+				delete(addidx, name)
+			}
+
+			// decomposed update aggregations may yield multiple Deleted deltas for the
+			// same object, this may yield spurious results - use the latest
+			delidx[name] = &ds[i]
 
 		default:
-			eng.log.Info("ignoring delta of unknown type", "object",
-				d.Object.GetName(), "delta-type", d.Type)
+			eng.log.Info("ignoring delta of unknown type", "object", name,
+				"delta-type", d.Type)
 			continue
 		}
 	}
 
-	// 1. deleted && !added -> deleted
+	// deleted && !added -> deleted
 	for name, del := range delidx {
 		if _, ok := addidx[name]; !ok {
 			res = append(res, *del)
 		}
 	}
 
-	// 2. deleted && added && deleted!=added -> updated
+	// deleted && added && deleted!=added -> updated
 	for name, del := range delidx {
 		if add, ok := addidx[name]; ok && !object.DeepEqual(add.Object, del.Object) {
 			res = append(res, cache.Delta{Type: cache.Updated, Object: add.Object})
 		}
 	}
 
-	// 3. !deleted && added -> added (use upsert to be on the safe side)
+	// !deleted && added -> added (use upsert to be on the safe side)
 	for name, add := range addidx {
 		if _, ok := delidx[name]; !ok {
 			res = append(res, cache.Delta{
@@ -553,13 +563,13 @@ func (eng *defaultEngine) evaluateJoin(j *Join, delta cache.Delta) ([]cache.Delt
 		os, err := eng.evalJoin(j, old)
 		if err != nil {
 			return nil, NewJoinError(
-				fmt.Errorf("procesing event %q: could not evaluate join for deleted object %s: %w",
+				fmt.Errorf("processing event %q: could not evaluate join for deleted object %s: %w",
 					delta.Type, ObjectKey(delta.Object), err))
 		}
 
 		if err := eng.baseViewStore[gvk].Delete(old); err != nil {
 			return nil, NewJoinError(
-				fmt.Errorf("procesing event %q: could not delete object %s from store: %w",
+				fmt.Errorf("processing event %q: could not delete object %s from store: %w",
 					delta.Type, ObjectKey(delta.Object), err))
 		}
 

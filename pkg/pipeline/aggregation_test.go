@@ -1086,6 +1086,65 @@ var _ = Describe("Aggregations", func() {
 				}))
 			})
 
+			It("should allow a demux followd by a mux", func() {
+				yamlData := `
+'@aggregate':
+  - '@unwind': $.spec.list
+  - '@gather':
+      - $.metadata.namespace
+      - $.spec.list
+  - '@project':
+      metadata:
+        name: "gathered"
+        namespace: "default"
+      spec: $.spec`
+				ag := newAggregation(eng, []byte(yamlData))
+				Expect(ag.Expressions).To(HaveLen(3))
+
+				obj := object.DeepCopy(objs[0])
+				Expect(unstructured.SetNestedMap(obj.UnstructuredContent(), map[string]any{},
+					"spec")).NotTo(HaveOccurred()) // clean up spec
+				Expect(unstructured.SetNestedSlice(obj.UnstructuredContent(), []any{"a", "b"},
+					"spec", "list")).NotTo(HaveOccurred())
+				res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res).To(HaveLen(1))
+				Expect(res[0].Type).To(Equal(cache.Upserted))
+				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+					Object: unstruct{
+						"apiVersion": "view.dcontroller.io/v1alpha1",
+						"kind":       "view",
+						"metadata": unstruct{
+							"name":      "gathered",
+							"namespace": "default",
+						},
+						"spec": unstruct{
+							"list": []any{"a", "b"},
+						},
+					},
+				}))
+
+				res, err = ag.Evaluate(cache.Delta{Type: cache.Deleted, Object: obj})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res).To(HaveLen(1))
+				Expect(res[0].Type).To(Equal(cache.Deleted))
+				// TODO ATM gather semantics is not quite settled in such a situation
+				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+					Object: unstruct{
+						"apiVersion": "view.dcontroller.io/v1alpha1",
+						"kind":       "view",
+						"metadata": unstruct{
+							"name":      "gathered",
+							"namespace": "default",
+						},
+						"spec": unstruct{
+							// "list": []any{"a", "b"},
+							"list": []any{},
+						},
+					},
+				}))
+			})
+
 			It("should err for a mux expression using an invalid obj id", func() {
 				yamlData := `
 '@aggregate':

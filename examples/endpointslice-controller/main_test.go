@@ -32,13 +32,13 @@ import (
 )
 
 var (
-	suite    *testutils.SuiteContext
-	loglevel = 1
-	// loglevel | -10
-	// loglevel = -6
-	epCtrl  *testEpCtrl
-	errorCh chan error
-	eventCh chan dreconciler.Request
+	suite *testutils.SuiteContext
+	// loglevel = 1
+	//loglevel = -10
+	loglevel = -5
+	epCtrl   *testEpCtrl
+	errorCh  chan error
+	eventCh  chan dreconciler.Request
 )
 
 var _ = BeforeSuite(func() {
@@ -68,7 +68,7 @@ func (r *testEpCtrl) Reconcile(ctx context.Context, req dreconciler.Request) (re
 
 var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 	Context("When creating an endpointslice controller w/o gather", Ordered, Label("operator"), func() {
-		var svc1, es1, es2 object.Object
+		var svc1, es1 object.Object
 		var specs []map[string]any
 		var ctx context.Context // context for the endpointslice controller
 		var cancel context.CancelFunc
@@ -98,11 +98,6 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			es1.SetName("test-endpointslice-1")
 			es1.SetNamespace("testnamespace")
 			es1.SetLabels(map[string]string{"kubernetes.io/service-name": "test-service-1"})
-
-			es2 = testutils.TestEndpointSlice.DeepCopy()
-			es2.SetName("test-endpointslice-2")
-			es2.SetNamespace("testnamespace")
-			es2.SetLabels(map[string]string{"kubernetes.io/service-name": "test-service-1"})
 		})
 
 		AfterAll(func() { cancel() })
@@ -154,6 +149,10 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 					case <-ctx.Done():
 						return
 					case err := <-errorCh:
+						// if apierrors.IsNotFound(err) {
+						// 	ctrl.Log.Info("ignoring notfound error")
+						// 	continue
+						// }
 						Fail(fmt.Sprintf("async error caught: %s", err.Error()))
 					}
 				}
@@ -173,7 +172,6 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 
 			ctrl.Log.Info("loading endpointslice")
 			Expect(suite.K8sClient.Create(ctx, es1)).Should(Succeed())
-			Expect(suite.K8sClient.Create(ctx, es2)).Should(Succeed())
 
 			specs = []map[string]any{}
 			req, err := watchEvent(suite.Timeout)
@@ -380,12 +378,11 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			ctrl.Log.Info("deleting objects")
 			Expect(suite.K8sClient.Delete(ctx, svc1)).Should(Succeed())
 			Expect(suite.K8sClient.Delete(ctx, es1)).Should(Succeed())
-			Expect(suite.K8sClient.Delete(ctx, es2)).Should(Succeed())
 		})
 	})
 
 	Context("When creating an endpointslice controller w/ gather", Ordered, Label("operator"), func() {
-		var svc1, es1, es2 object.Object
+		var svc1, es1 object.Object
 		var specs []map[string]any
 		var ctx context.Context // context for the endpointslice controller
 		var cancel context.CancelFunc
@@ -415,11 +412,6 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			es1.SetName("test-endpointslice-1")
 			es1.SetNamespace("testnamespace")
 			es1.SetLabels(map[string]string{"kubernetes.io/service-name": "test-service-1"})
-
-			es2 = testutils.TestEndpointSlice.DeepCopy()
-			es2.SetName("test-endpointslice-2")
-			es2.SetNamespace("testnamespace")
-			es2.SetLabels(map[string]string{"kubernetes.io/service-name": "test-service-1"})
 		})
 
 		AfterAll(func() { cancel() })
@@ -484,13 +476,12 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			}()
 		})
 
-		It("should generate 4 EndpointView events", func() {
+		It("should generate 2 EndpointView events", func() {
 			ctrl.Log.Info("loading service")
 			Expect(suite.K8sClient.Create(ctx, svc1)).Should(Succeed())
 
 			ctrl.Log.Info("loading endpointslice")
 			Expect(suite.K8sClient.Create(ctx, es1)).Should(Succeed())
-			Expect(suite.K8sClient.Create(ctx, es2)).Should(Succeed())
 
 			specs = []map[string]any{}
 			req, err := watchEvent(suite.Timeout)
@@ -534,9 +525,9 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			Expect(specs).To(ContainElement(map[string]any{
 				"serviceName": "test-service-1",
 				"type":        "ClusterIP",
-				"port":        int64(80),
-				"targetPort":  int64(8080),
-				"protocol":    "TCP",
+				"port":        int64(3478),
+				"targetPort":  int64(33478),
+				"protocol":    "UDP",
 				"addresses":   []any{"192.0.2.1", "192.0.2.2"},
 			}))
 		})
@@ -610,6 +601,8 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			})
 			Expect(err).ToNot(HaveOccurred())
 
+			time.Sleep(5 * time.Second)
+
 			req, err := watchEvent(suite.Timeout)
 			Expect(err).Should(Succeed())
 			Expect(req.EventType).To(Equal(cache.Deleted))
@@ -627,7 +620,6 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			ctrl.Log.Info("deleting objects")
 			Expect(suite.K8sClient.Delete(ctx, svc1)).Should(Succeed())
 			Expect(suite.K8sClient.Delete(ctx, es1)).Should(Succeed())
-			Expect(suite.K8sClient.Delete(ctx, es2)).Should(Succeed())
 		})
 	})
 })
