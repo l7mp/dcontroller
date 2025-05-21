@@ -225,7 +225,25 @@ func (c *ViewCache) Delete(obj object.Object) error {
 		return err
 	}
 
-	if err := cache.Delete(obj); err != nil {
+	// grab the object from the cache and then delete the grabbed object, this handles the
+	// problems when the caller uses delete with an old object version
+	key, err := toolscache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+	if err != nil {
+		return err
+	}
+
+	existingObj, exists, err := cache.GetByKey(key)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return apierrors.NewNotFound(schema.GroupResource{
+			Group:    obj.GetObjectKind().GroupVersionKind().Group,
+			Resource: obj.GetObjectKind().GroupVersionKind().Kind,
+		}, key)
+	}
+
+	if err := cache.Delete(existingObj); err != nil {
 		return err
 	}
 
@@ -233,7 +251,7 @@ func (c *ViewCache) Delete(obj object.Object) error {
 	if err != nil {
 		return err
 	}
-	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Deleted, nil, obj, false)
+	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Deleted, nil, existingObj.(object.Object), false)
 
 	return nil
 }
