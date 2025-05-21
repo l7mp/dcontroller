@@ -93,7 +93,7 @@ func (t *target) update(ctx context.Context, delta cache.Delta) error {
 	case cache.Added, cache.Upserted, cache.Updated, cache.Replaced:
 		t.log.V(2).Info("add/upsert", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
 
-		gvk, err := t.Resource.GetGVK()
+		gvk, err := t.GetGVK()
 		if err != nil {
 			return err
 		}

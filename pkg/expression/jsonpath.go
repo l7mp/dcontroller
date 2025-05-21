@@ -13,9 +13,10 @@ func GetJSONPath(ctx EvalCtx, key string) (any, error) {
 	}
 
 	// handle root ref "$." that is not handled by ojg/jp for some reason
-	if key == "$." {
+	switch key {
+	case "$.":
 		key = "$" // $ "$" will be stripped, plain "" is accepted as a root ref
-	} else if key == "$$." {
+	case "$$.":
 		key = "$$" // $ "$$" will be stripped, plain "" is accepted as a root ref
 	}
 

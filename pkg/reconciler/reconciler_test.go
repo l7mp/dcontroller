@@ -330,7 +330,7 @@ var _ = Describe("Reconciler", func() {
 			err = vcache.Add(oldObj)
 			Expect(err).NotTo(HaveOccurred())
 
-			req, ok := tryWatchReq(watcher, 5*interval)
+			_, ok := tryWatchReq(watcher, 5*interval)
 			Expect(ok).To(BeFalse())
 
 			// Get the object and check
@@ -344,7 +344,7 @@ var _ = Describe("Reconciler", func() {
 			err = vcache.Update(oldObj, newObj)
 			Expect(err).NotTo(HaveOccurred())
 
-			req, ok = tryWatchReq(watcher, interval)
+			req, ok := tryWatchReq(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(req).To(Equal(Request{
 				Namespace: "default",
@@ -369,7 +369,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Try to obtain the view from the watcher
-			req, ok = tryWatchReq(watcher, interval)
+			_, ok = tryWatchReq(watcher, interval)
 			Expect(ok).To(BeFalse())
 
 			// Get the object and check
@@ -873,7 +873,6 @@ var _ = Describe("Reconciler", func() {
 			// Patch to the target
 			newPod := object.DeepCopy(pod2)
 			unstructured.RemoveNestedField(newPod.UnstructuredContent(), "spec", "containers")
-			//nolint:errcheck
 			unstructured.SetNestedField(newPod.UnstructuredContent(), "Always", "spec", "restartPolicy")
 			err = target.Write(ctx, cache.Delta{Type: cache.Updated, Object: newPod})
 			Expect(err).NotTo(HaveOccurred())

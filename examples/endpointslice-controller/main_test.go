@@ -34,7 +34,7 @@ import (
 var (
 	suite *testutils.SuiteContext
 	// loglevel = 1
-	//loglevel = -10
+	// loglevel = -10
 	loglevel = -5
 	epCtrl   *testEpCtrl
 	errorCh  chan error

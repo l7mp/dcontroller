@@ -92,7 +92,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 	c.processor = processor
 
 	// Create the target
-	c.kind = config.Target.Resource.Kind // the kind of the target
+	c.kind = config.Target.Kind // the kind of the target
 	c.target = reconciler.NewTarget(mgr, config.Target)
 
 	// Create the reconciler
@@ -172,7 +172,7 @@ func (c *Controller) GetWatcher() chan reconciler.Request { return c.watcher }
 func (c *Controller) SetPipeline(pipeline pipeline.Evaluator) { c.pipeline = pipeline }
 
 // ReportErrors returns a short report on the error stack of the controller.
-func (c *Controller) ReportErrors() []string { return c.errorReporter.Report() }
+func (c *Controller) ReportErrors() []string { return c.Report() }
 
 // Start starts running the controller. The Start function blocks until the context is closed or an
 // error occurs, and it will stop running when the context is closed.
@@ -201,7 +201,7 @@ func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 
 	var condition metav1.Condition
 	switch {
-	case c.errorReporter.IsEmpty():
+	case c.IsEmpty():
 		condition = metav1.Condition{
 			Type:               string(opv1a1.ControllerConditionReady),
 			Status:             metav1.ConditionTrue,
@@ -210,7 +210,7 @@ func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 			Reason:             string(opv1a1.ControllerReasonReady),
 			Message:            "Controller is up and running",
 		}
-	case c.errorReporter.IsCritical():
+	case c.IsCritical():
 		condition = metav1.Condition{
 			Type:               string(opv1a1.ControllerConditionReady),
 			Status:             metav1.ConditionFalse,
@@ -233,7 +233,7 @@ func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 	conditions := []metav1.Condition{condition}
 	status.Conditions = conditions
 
-	status.LastErrors = c.errorReporter.Report()
+	status.LastErrors = c.Report()
 
 	return status
 }
