@@ -63,11 +63,11 @@ func TestReconciler(t *testing.T) {
 	RunSpecs(t, "Controller")
 }
 
-type testReconciler struct{}
+type testReconciler struct{ watcher chan Request }
 
 func (r *testReconciler) Reconcile(ctx context.Context, req Request) (reconcile.Result, error) {
 	log.V(4).Info("reconcile", "request", req)
-	watcher <- req
+	r.watcher <- req
 	return reconcile.Result{}, nil
 }
 
@@ -130,7 +130,7 @@ var _ = Describe("Reconciler", func() {
 			on := true
 			c, err := runtimeCtrl.NewTyped("test-controller", mgr, runtimeCtrl.TypedOptions[Request]{
 				SkipNameValidation: &on,
-				Reconciler:         &testReconciler{},
+				Reconciler:         &testReconciler{watcher: watcher},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -143,7 +143,6 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Start the manager
-			// go mgr.Start(ctx) // will stop with a context cancelled erro
 			go func() { mgr.Start(ctx) }()
 
 			// Push a view object
@@ -266,7 +265,7 @@ var _ = Describe("Reconciler", func() {
 			on := true
 			c, err := runtimeCtrl.NewTyped("test-controller", mgr, runtimeCtrl.TypedOptions[Request]{
 				SkipNameValidation: &on,
-				Reconciler:         &testReconciler{},
+				Reconciler:         &testReconciler{watcher: watcher},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -294,6 +293,237 @@ var _ = Describe("Reconciler", func() {
 					Kind:    "Pod",
 				},
 			}))
+		})
+
+		It("should be able to watch and filter views by a predicate", func() {
+			// Start manager and push a native object into the runtime client fake
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			// Get view cache
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			Expect(vcache).NotTo(BeNil())
+
+			s := opv1a1.Source{
+				Resource: opv1a1.Resource{Kind: "view"},
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"app": "test"},
+				},
+			}
+			on := true
+			c, err := runtimeCtrl.NewTyped("test-controller-labeled", mgr, runtimeCtrl.TypedOptions[Request]{
+				SkipNameValidation: &on,
+				Reconciler:         &testReconciler{watcher: watcher},
+			})
+
+			Expect(err).NotTo(HaveOccurred())
+			src, err := NewSource(mgr, s).GetSource()
+			Expect(err).NotTo(HaveOccurred())
+			err = c.Watch(src)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Start the manager
+			go func() { mgr.Start(ctx) }()
+
+			// Push an unlabeled view object
+			err = vcache.Add(oldObj)
+			Expect(err).NotTo(HaveOccurred())
+
+			req, ok := tryWatchReq(watcher, 5*interval)
+			Expect(ok).To(BeFalse())
+
+			// Get the object and check
+			res := object.NewViewObject("view")
+			Expect(vcache.Get(ctx, client.ObjectKeyFromObject(oldObj), res)).NotTo(HaveOccurred())
+			Expect(res.GetLabels()).To(BeNil())
+
+			// Add the label and update
+			newObj := object.DeepCopy(oldObj)
+			newObj.SetLabels(map[string]string{"app": "test"})
+			err = vcache.Update(oldObj, newObj)
+			Expect(err).NotTo(HaveOccurred())
+
+			req, ok = tryWatchReq(watcher, interval)
+			Expect(ok).To(BeTrue())
+			Expect(req).To(Equal(Request{
+				Namespace: "default",
+				Name:      "viewname",
+				EventType: cache.Updated,
+				GVK: schema.GroupVersionKind{
+					Group:   viewv1a1.GroupVersion.Group,
+					Version: viewv1a1.GroupVersion.Version,
+					Kind:    "view",
+				},
+			}))
+
+			// Get the object and check
+			res = object.NewViewObject("view")
+			Expect(vcache.Get(ctx, client.ObjectKeyFromObject(oldObj), res)).NotTo(HaveOccurred())
+			Expect(res.GetLabels()).To(Equal(map[string]string{"app": "test"}))
+
+			// Remove the label from the view object
+			newObj = object.DeepCopy(oldObj)
+			newObj.SetLabels(map[string]string{})
+			err = vcache.Update(oldObj, newObj)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Try to obtain the view from the watcher
+			req, ok = tryWatchReq(watcher, interval)
+			Expect(ok).To(BeFalse())
+
+			// Get the object and check
+			res = object.NewViewObject("view")
+			Expect(vcache.Get(ctx, client.ObjectKeyFromObject(oldObj), res)).NotTo(HaveOccurred())
+			Expect(res.GetLabels()).To(Equal(map[string]string{})) // we have just added a zero value
+
+			// Restore the label and change the content
+			newObj = object.DeepCopy(oldObj)
+			newObj.SetLabels(map[string]string{"app": "test"})
+			object.SetContent(view, map[string]any{"a": int64(1)})
+			err = vcache.Update(oldObj, newObj)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Try to obtain the view from the watcher
+			req, ok = tryWatchReq(watcher, interval)
+			Expect(ok).To(BeTrue())
+			Expect(req).To(Equal(Request{
+				Namespace: "default",
+				Name:      "viewname",
+				EventType: cache.Updated,
+				GVK: schema.GroupVersionKind{
+					Group:   viewv1a1.GroupVersion.Group,
+					Version: viewv1a1.GroupVersion.Version,
+					Kind:    "view",
+				},
+			}))
+
+			// Get the object and check
+			res = object.NewViewObject("view")
+			Expect(vcache.Get(ctx, client.ObjectKeyFromObject(oldObj), res)).NotTo(HaveOccurred())
+			Expect(res.GetLabels()).To(Equal(map[string]string{"app": "test"}))
+
+			// Delete the view object
+			err = vcache.Delete(oldObj)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Try to obtain the view from the watcher
+			req, ok = tryWatchReq(watcher, 50*interval)
+			Expect(ok).To(BeTrue())
+			Expect(req).To(Equal(Request{
+				Namespace: "default",
+				Name:      "viewname",
+				EventType: cache.Deleted,
+				GVK: schema.GroupVersionKind{
+					Group:   viewv1a1.GroupVersion.Group,
+					Version: viewv1a1.GroupVersion.Version,
+					Kind:    "view",
+				},
+			}))
+		})
+
+		It("should get a watch event on a controller using a labeled watch for a labeled native object", func() {
+			podL := pod.DeepCopy()
+			podL.SetLabels(map[string]string{"app": "test"})
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger}, podL)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			// Register source
+			group, version := "", "v1"
+			s := opv1a1.Source{
+				Resource: opv1a1.Resource{
+					Group:   &group,
+					Version: &version,
+					Kind:    "Pod",
+				},
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"app": "test"},
+				},
+			}
+
+			// Get view cache
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			Expect(vcache).NotTo(BeNil())
+
+			// Create runtime controller
+			on := true
+			c, err := runtimeCtrl.NewTyped("test-controller", mgr, runtimeCtrl.TypedOptions[Request]{
+				SkipNameValidation: &on,
+				Reconciler:         &testReconciler{watcher: watcher},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create a source
+			src, err := NewSource(mgr, s).GetSource()
+			Expect(err).NotTo(HaveOccurred())
+
+			// Watch the source
+			err = c.Watch(src)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Start the manager
+			go func() { mgr.Start(ctx) }()
+
+			// Try to obtain the view from the watcher
+			req, ok := tryWatchReq(watcher, interval)
+			Expect(ok).To(BeTrue())
+			Expect(req).To(Equal(Request{
+				Namespace: "default",
+				Name:      "podname",
+				EventType: cache.Added,
+				GVK: schema.GroupVersionKind{
+					Group:   "",
+					Version: "v1",
+					Kind:    "Pod",
+				},
+			}))
+		})
+
+		It("should suppress watch events on a controller using a labeled watch for an un labeled native object", func() {
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger}, pod)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			// Register source
+			group, version := "", "v1"
+			s := opv1a1.Source{
+				Resource: opv1a1.Resource{
+					Group:   &group,
+					Version: &version,
+					Kind:    "Pod",
+				},
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"app": "test"},
+				},
+			}
+
+			// Get view cache
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			Expect(vcache).NotTo(BeNil())
+
+			// Create runtime controller
+			on := true
+			c, err := runtimeCtrl.NewTyped("test-controller", mgr, runtimeCtrl.TypedOptions[Request]{
+				SkipNameValidation: &on,
+				Reconciler:         &testReconciler{watcher: watcher},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create a source
+			src, err := NewSource(mgr, s).GetSource()
+			Expect(err).NotTo(HaveOccurred())
+
+			// Watch the source
+			err = c.Watch(src)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Start the manager
+			go func() { mgr.Start(ctx) }()
+
+			// Try to obtain the view from the watcher
+			_, ok := tryWatchReq(watcher, 10*interval)
+			Expect(ok).To(BeFalse())
 		})
 	})
 
