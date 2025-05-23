@@ -16,7 +16,7 @@ import (
 
 const ExpressionDumpMaxLevel = 10
 
-type Unstructured = map[string]any
+type unstruct = map[string]any
 type GVK = schema.GroupVersionKind
 
 type EvalCtx struct {
@@ -165,7 +165,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 		return ret, nil
 
 	case "@dict":
-		ret := Unstructured{}
+		ret := unstruct{}
 		if e.Arg != nil {
 			// eval stacked expressions stored in e.Arg
 			v, err := e.Arg.Evaluate(ctx)
@@ -174,7 +174,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			}
 
 			// must be Unstructured
-			vs, ok := v.(Unstructured)
+			vs, ok := v.(unstruct)
 			if !ok {
 				return nil, NewExpressionError(e, errors.New("argument must be a map"))
 			}
@@ -210,7 +210,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 		return ret, nil
 	}
 
-	// @cond: conditional must eval the arg
+	// ops that must eval the arg themselves
 	if string(e.Op[0]) == "@" {
 		switch e.Op {
 		case "@cond":
@@ -272,7 +272,6 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			if err != nil {
 				return nil, err
 			}
-			fmt.Printf("--------- \"%#v\"\n", v)
 
 			if v == nil {
 				v, err = args[1].Evaluate(ctx)
@@ -283,6 +282,44 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
+
+		case "@set":
+			// @set[arg1,arg2,arg2] copies arg1, and updates arg2:arg3 and returns the result
+			//
+			// e.g., {"@set":["$.list","$.list[?(@.x=='y')].z",123}` takes the list at "$.list"
+			// and updates the elem for which the conditional JSONpath expression
+			// $.list[?(@.x=='y')].z to 123 and returns the result
+			args, err := AsExpOrExpList(e.Arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			if len(args) != 3 {
+				return nil, NewExpressionError(e,
+					errors.New("invalid arguments: expected 3 arguments"))
+			}
+
+			ret, err := args[0].Evaluate(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			// key and value both must be a literals but we must not eval them now,
+			// SetJSONPath requires uneval'd keys and values
+			key, err := AsString(args[1].Literal)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+			value := args[2].Literal
+
+			if err := SetJSONPath(ctx, key, value, ret); err != nil {
+				return nil, NewExpressionError(e,
+					fmt.Errorf("could not deference JSON \"set\" expression: %w", err))
+			}
+
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
+
+			return ret, nil
 		}
 	}
 
@@ -882,10 +919,10 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			return v, nil
 
 		default:
-			return nil, NewExpressionError(e, errors.New("unknown op"))
+			return nil, NewExpressionError(e, fmt.Errorf("unknown op %q", e.Op))
 		}
 	}
 
 	// literal map
-	return Unstructured{e.Op: arg}, nil
+	return unstruct{e.Op: arg}, nil
 }

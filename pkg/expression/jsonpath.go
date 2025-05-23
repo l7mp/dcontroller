@@ -57,8 +57,8 @@ func SetJSONPath(ctx EvalCtx, key string, value, data any) error {
 	// copy: if key is a JSONpath root ref and the result is a map, overwrite the entire map
 	// if d, ok := data.(Unstructured); ok && key == "$." {
 	if key == "$." {
-		d, okd := data.(Unstructured)
-		val, okv := value.(Unstructured)
+		d, okd := data.(unstruct)
+		val, okv := value.(unstruct)
 		if !okd || !okv {
 			return fmt.Errorf("JSONPath expression error: cannot set root object of type %T "+
 				"to value %q of type %T, only map types can be copied with %q", d,
@@ -78,7 +78,7 @@ func SetJSONPath(ctx EvalCtx, key string, value, data any) error {
 	}
 
 	// if not a JSONpath, just set it as is
-	if d, ok := data.(Unstructured); ok && key[0] != '$' {
+	if d, ok := data.(unstruct); ok && key[0] != '$' {
 		d[key] = value
 		return nil
 	}

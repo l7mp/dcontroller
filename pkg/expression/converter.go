@@ -314,24 +314,24 @@ func AsExpOrExpList(d any) ([]Expression, error) {
 	return []Expression{exp}, nil
 }
 
-func AsObject(d any) (Unstructured, error) {
+func AsObject(d any) (unstruct, error) {
 	val := reflect.ValueOf(d)
 	if val.Kind() == reflect.Map {
 		p := val.Interface()
-		if u, ok := p.(Unstructured); ok && u != nil {
+		if u, ok := p.(unstruct); ok && u != nil {
 			return u, nil
 		}
 	}
 	return nil, fmt.Errorf("argument is not an object: %s", util.Stringify(d))
 }
 
-func AsObjectList(d any) ([]Unstructured, error) {
+func AsObjectList(d any) ([]unstruct, error) {
 	if !IsList(d) {
 		return nil, fmt.Errorf("argument is not a list: %s", util.Stringify(d))
 	}
 
 	dv := reflect.ValueOf(d)
-	ret := []Unstructured{}
+	ret := []unstruct{}
 	for i := 0; i < dv.Len(); i++ {
 		arg, err := AsObject(dv.Index(i).Interface())
 		if err != nil {
@@ -343,9 +343,9 @@ func AsObjectList(d any) ([]Unstructured, error) {
 }
 
 // AsObjectOrObjectList returns an object or an expression list.
-func AsObjectOrObjectList(d any) ([]Unstructured, error) {
+func AsObjectOrObjectList(d any) ([]unstruct, error) {
 	if vs, err := AsObject(d); err == nil {
-		return []Unstructured{vs}, nil
+		return []unstruct{vs}, nil
 	}
 
 	if vs, err := AsObjectList(d); err == nil {
