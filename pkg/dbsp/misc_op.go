@@ -133,6 +133,10 @@ func NewInput(name string) *InputOp {
 	}
 }
 
+func (n *InputOp) OpType() OperatorType              { return OpTypeLinear }
+func (n *InputOp) IsTimeInvariant() bool             { return true }
+func (n *InputOp) HasZeroPreservationProperty() bool { return true }
+
 func (n *InputOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err

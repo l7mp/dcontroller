@@ -402,9 +402,217 @@ var _ = Describe("Linear Operators", func() {
 	})
 })
 
-// GroupByKeyEvaluator extracts a grouping key and value from a document
-// Add these tests at the end of linear_op_test.go
+// Unwind tests
+// Simple extractor that gets an array field by name
+type ArrayExtractor struct {
+	fieldName string
+}
 
+func NewArrayExtractor(fieldName string) *ArrayExtractor {
+	return &ArrayExtractor{fieldName: fieldName}
+}
+
+func (e *ArrayExtractor) Evaluate(doc Document) ([]Document, error) {
+	value, exists := doc[e.fieldName]
+	if !exists {
+		return []Document{}, nil // No array field found
+	}
+
+	// Return the array wrapped in the expected format
+	return []Document{{"array": value}}, nil
+}
+
+func (e *ArrayExtractor) String() string {
+	return fmt.Sprintf("extract_array('%s')", e.fieldName)
+}
+
+// Simple setter that replaces array field with single element
+type ArrayElementSetter struct {
+	originalField string // Original array field name
+	newField      string // New field name for the element
+}
+
+func NewArrayElementSetter(originalField, newField string) *ArrayElementSetter {
+	return &ArrayElementSetter{
+		originalField: originalField,
+		newField:      newField,
+	}
+}
+
+func (s *ArrayElementSetter) Evaluate(input Document) ([]Document, error) {
+	// Input should have "document" and "element" keys
+	originalDoc, hasDoc := input["document"]
+	element, hasElement := input["element"]
+
+	if !hasDoc || !hasElement {
+		return nil, fmt.Errorf("expected input with 'document' and 'element' keys")
+	}
+
+	doc, ok := originalDoc.(Document)
+	if !ok {
+		return nil, fmt.Errorf("'document' field must be a Document")
+	}
+
+	// Create new document by copying original and replacing array with element
+	result := make(Document)
+	for k, v := range doc {
+		if k != s.originalField {
+			result[k] = v // Copy other fields
+		}
+	}
+
+	// Set the new field to the current element
+	result[s.newField] = element
+
+	return []Document{result}, nil
+}
+
+func (s *ArrayElementSetter) String() string {
+	return fmt.Sprintf("set_element('%s' -> '%s')", s.originalField, s.newField)
+}
+
+var _ = Describe("UnwindOp", func() {
+	Describe("basic functionality", func() {
+		It("should unwind a simple array", func() {
+			// Create evaluators for this specific test
+			extractor := NewArrayExtractor("tags")
+			setter := NewArrayElementSetter("tags", "tag")
+			unwind := NewUnwind(extractor, setter)
+
+			// Original document with array
+			doc := Document{"name": "user1", "tags": []any{"red", "blue", "green"}}
+			input, err := SingletonZSet(doc)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := unwind.Process(input)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Size()).To(Equal(3))
+
+			// Verify all three unwound documents exist
+			docs, err := result.GetDocuments()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(docs).To(ContainElement(Document{"name": "user1", "tag": "red"}))
+			Expect(docs).To(ContainElement(Document{"name": "user1", "tag": "blue"}))
+			Expect(docs).To(ContainElement(Document{"name": "user1", "tag": "green"}))
+		})
+
+		It("should handle empty arrays", func() {
+			extractor := NewArrayExtractor("tags")
+			setter := NewArrayElementSetter("tags", "tag")
+			unwind := NewUnwind(extractor, setter)
+
+			doc := Document{"name": "user1", "tags": []any{}}
+			input, err := SingletonZSet(doc)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := unwind.Process(input)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Size()).To(Equal(0)) // No documents produced
+		})
+
+		It("should handle documents without arrays", func() {
+			extractor := NewArrayExtractor("tags")
+			setter := NewArrayElementSetter("tags", "tag")
+			unwind := NewUnwind(extractor, setter)
+
+			doc := Document{"name": "user1"}
+			input, err := SingletonZSet(doc)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := unwind.Process(input)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Size()).To(Equal(0))
+		})
+
+		It("should handle non-array values gracefully", func() {
+			extractor := NewArrayExtractor("tags")
+			setter := NewArrayElementSetter("tags", "tag")
+			unwind := NewUnwind(extractor, setter)
+
+			doc := Document{"name": "user1", "tags": "not-an-array"}
+			input, err := SingletonZSet(doc)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := unwind.Process(input)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Size()).To(Equal(0)) // Skipped gracefully
+		})
+	})
+
+	Describe("multiplicity handling", func() {
+		It("should preserve multiplicities when unwinding", func() {
+			extractor := NewArrayExtractor("tags")
+			setter := NewArrayElementSetter("tags", "tag")
+			unwind := NewUnwind(extractor, setter)
+
+			doc := Document{"name": "user1", "tags": []any{"red", "blue"}}
+			input := NewDocumentZSet()
+			err := input.AddDocumentMutate(doc, 3) // Multiplicity of 3
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := unwind.Process(input)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Size()).To(Equal(6)) // 2 elements × 3 multiplicity
+
+			// Check specific multiplicities
+			redMult, err := result.GetMultiplicity(Document{"name": "user1", "tag": "red"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(redMult).To(Equal(3))
+
+			blueMult, err := result.GetMultiplicity(Document{"name": "user1", "tag": "blue"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(blueMult).To(Equal(3))
+		})
+	})
+
+	Describe("complex scenarios", func() {
+		It("should handle nested objects in arrays", func() {
+			extractor := NewArrayExtractor("orders")
+			setter := NewArrayElementSetter("orders", "order")
+			unwind := NewUnwind(extractor, setter)
+
+			doc := Document{
+				"user": "alice",
+				"orders": []any{
+					map[string]any{"id": "1", "total": 100},
+					map[string]any{"id": "2", "total": 200},
+				},
+			}
+			input, err := SingletonZSet(doc)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := unwind.Process(input)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Size()).To(Equal(2))
+
+			docs, err := result.GetDocuments()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(docs).To(ContainElement(Document{
+				"user":  "alice",
+				"order": map[string]any{"id": "1", "total": 100},
+			}))
+			Expect(docs).To(ContainElement(Document{
+				"user":  "alice",
+				"order": map[string]any{"id": "2", "total": 200},
+			}))
+		})
+	})
+
+	Describe("operator properties", func() {
+		It("should have correct operator type", func() {
+			extractor := NewArrayExtractor("tags")
+			setter := NewArrayElementSetter("tags", "tag")
+			unwind := NewUnwind(extractor, setter)
+
+			Expect(unwind.OpType()).To(Equal(OpTypeLinear))
+			Expect(unwind.IsTimeInvariant()).To(BeTrue())
+			Expect(unwind.HasZeroPreservationProperty()).To(BeTrue())
+			Expect(unwind.Arity()).To(Equal(1))
+		})
+	})
+})
+
+// Gather tests
 // GroupByKeyEvaluator extracts a grouping key and value from a document
 type GroupByKeyEvaluator struct {
 	keyField   string

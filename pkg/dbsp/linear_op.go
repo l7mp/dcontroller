@@ -91,6 +91,90 @@ func (n *SelectionOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	return result, nil
 }
 
+// UnwindOp flattens arrays within documents.
+type UnwindOp struct {
+	BaseOp
+	// Returns the array to unwind in the "list" elem of a doc.
+	extractEval Evaluator
+	// Sets the current array element (given in the "element" key of the input do) back into
+	// the document (given in "document").
+	setEval Evaluator
+}
+
+func NewUnwind(extractEval, setEval Evaluator) *UnwindOp {
+	return &UnwindOp{
+		BaseOp:      NewBaseOp("unwind", 1),
+		extractEval: extractEval,
+		setEval:     setEval,
+	}
+}
+
+func (op *UnwindOp) OpType() OperatorType              { return OpTypeLinear }
+func (op *UnwindOp) IsTimeInvariant() bool             { return true }
+func (op *UnwindOp) HasZeroPreservationProperty() bool { return true }
+
+func (op *UnwindOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
+	if err := op.validateInputs(inputs); err != nil {
+		return nil, err
+	}
+
+	input := inputs[0]
+	result := NewDocumentZSet()
+
+	for key, multiplicity := range input.counts {
+		doc := input.docs[key]
+
+		// Extract the array to unwind
+		extractedDocs, err := op.extractEval.Evaluate(doc)
+		if err != nil {
+			return nil, fmt.Errorf("extract evaluation failed: %w", err)
+		}
+
+		for _, extractedDoc := range extractedDocs {
+			arrayValue, exists := extractedDoc["list"] // or whatever key you use
+			if !exists {
+				continue
+			}
+
+			arraySlice, ok := arrayValue.([]any)
+			if !ok {
+				// Not an array - skip or handle as needed
+				continue
+			}
+
+			// Create one document for each array element
+			for _, element := range arraySlice {
+				// Deep copy the original document
+				docCopy, err := deepCopy(doc)
+				if err != nil {
+					return nil, fmt.Errorf("failed to copy document: %w", err)
+				}
+
+				// Create input for setter: original doc + current element
+				setterInput := Document{
+					"document": docCopy,
+					"element":  element,
+				}
+
+				// Apply setter to update document with current element
+				updatedDocs, err := op.setEval.Evaluate(setterInput)
+				if err != nil {
+					return nil, fmt.Errorf("setter evaluation failed: %w", err)
+				}
+
+				// Add all updated documents with original multiplicity
+				for _, updatedDoc := range updatedDocs {
+					if err = result.AddDocumentMutate(updatedDoc, multiplicity); err != nil {
+						return nil, fmt.Errorf("failed to add unwound document: %w", err)
+					}
+				}
+			}
+		}
+	}
+
+	return result, nil
+}
+
 // Snapshot Gather Operation (stateless)
 type GatherOp struct {
 	BaseOp

@@ -1,148 +1,450 @@
 package dbsp
 
-// RewriteEngine applies DBSP algebraic transformation rules
-type RewriteEngine struct {
-	rules []DBSPRule
+import (
+	"fmt"
+)
+
+// LinearChainGraph represents your specialized graph structure directly
+// Always: [Inputs] -> [Optional N-ary Join] -> [Chain of Linear Ops] -> [Output]
+type LinearChainGraph struct {
+	inputs   []string              // Input node IDs
+	joinNode string                // Optional N-ary join node ID (empty if no join)
+	chain    []string              // Ordered chain of operation node IDs
+	output   string                // Output node ID
+	nodes    map[string]*GraphNode // All nodes by ID
+	nextID   int                   // For generating unique node IDs
 }
 
-func NewRewriteEngine() *RewriteEngine {
-	re := &RewriteEngine{
-		rules: make([]DBSPRule, 0),
+type GraphNode struct {
+	ID     string
+	Op     Operator
+	Inputs []*GraphNode
+	Output *GraphNode
+}
+
+func NewLinearChainGraph() *LinearChainGraph {
+	return &LinearChainGraph{
+		inputs: make([]string, 0),
+		chain:  make([]string, 0),
+		nodes:  make(map[string]*GraphNode),
+		nextID: 0,
+	}
+}
+
+// AddInput adds an input node
+func (g *LinearChainGraph) AddInput(op Operator) string {
+	id := fmt.Sprintf("input_%d", g.nextID)
+	g.nextID++
+
+	g.nodes[id] = &GraphNode{ID: id, Op: op}
+	g.inputs = append(g.inputs, id)
+	return id
+}
+
+// SetJoin sets the join node (if multiple inputs)
+func (g *LinearChainGraph) SetJoin(op Operator) string {
+	id := fmt.Sprintf("join_%d", g.nextID)
+	g.nextID++
+
+	g.nodes[id] = &GraphNode{ID: id, Op: op}
+	g.joinNode = id
+
+	// If this is the only operation, it's also the output
+	if len(g.chain) == 0 {
+		g.output = id
 	}
 
-	// Add core DBSP rewrite rules in order of application
-	re.AddRule(&LinearOperatorIncrementalizationRule{})
-	re.AddRule(&BilinearOperatorIncrementalizationRule{})
-	re.AddRule(&IntegrationDifferentiationCancellationRule{})
-	re.AddRule(&DistinctIdempotenceRule{})
-	re.AddRule(&DistinctCommutesWithLinearRule{})
-	re.AddRule(&ChainRuleDecompositionRule{})
+	return id
+}
+
+// AddToChain adds an operation to the linear chain
+func (g *LinearChainGraph) AddToChain(op Operator) string {
+	id := fmt.Sprintf("op_%d", g.nextID)
+	g.nextID++
+
+	g.nodes[id] = &GraphNode{ID: id, Op: op}
+	g.chain = append(g.chain, id)
+
+	// Update output to be the last node in chain
+	g.output = id
+	return id
+}
+
+// GetStartNode returns the node where the linear chain begins
+func (g *LinearChainGraph) GetStartNode() string {
+	if g.joinNode != "" {
+		return g.joinNode
+	}
+	if len(g.inputs) > 0 {
+		return g.inputs[0]
+	}
+	return ""
+}
+
+// Validate checks the graph structure
+func (g *LinearChainGraph) Validate() error {
+	if len(g.inputs) == 0 {
+		return fmt.Errorf("no input nodes")
+	}
+	if len(g.inputs) > 1 && g.joinNode == "" {
+		return fmt.Errorf("multiple inputs require a join node")
+	}
+	if g.output == "" {
+		// Try to infer output
+		if len(g.chain) > 0 {
+			g.output = g.chain[len(g.chain)-1]
+		} else if g.joinNode != "" {
+			g.output = g.joinNode
+		} else if len(g.inputs) == 1 {
+			g.output = g.inputs[0]
+		} else {
+			return fmt.Errorf("no output node and cannot infer one")
+		}
+	}
+	return nil
+}
+
+// String representation for debugging
+func (g *LinearChainGraph) String() string {
+	result := fmt.Sprintf("LinearChainGraph:\n")
+	result += fmt.Sprintf("  Inputs (%d): ", len(g.inputs))
+	for i, inputID := range g.inputs {
+		if i > 0 {
+			result += ", "
+		}
+		result += g.nodes[inputID].Op.Name()
+	}
+	result += "\n"
+
+	if g.joinNode != "" {
+		result += fmt.Sprintf("  Join: %s\n", g.nodes[g.joinNode].Op.Name())
+	}
+
+	result += "  Chain: "
+	for i, nodeID := range g.chain {
+		if i > 0 {
+			result += " -> "
+		}
+		result += g.nodes[nodeID].Op.Name()
+	}
+	result += "\n"
+
+	return result
+}
+
+// LinearChainRewriteEngine works directly on LinearChainGraph
+type LinearChainRewriteEngine struct {
+	rules []LinearChainRule
+}
+
+func NewLinearChainRewriteEngine() *LinearChainRewriteEngine {
+	re := &LinearChainRewriteEngine{
+		rules: make([]LinearChainRule, 0),
+	}
+
+	// Add rules in order of application priority
+	re.AddRule(&JoinIncrementalizationRule{})
+	re.AddRule(&LinearChainIncrementalizationRule{})
+	re.AddRule(&IntegrationDifferentiationEliminationRule{})
+	re.AddRule(&DistinctOptimizationRule{})
+	re.AddRule(&LinearOperatorFusionRule{})
 
 	return re
 }
 
-// DBSPRule represents a DSP transformation rule.
-type DBSPRule interface {
+type LinearChainRule interface {
 	Name() string
-	Matches(pattern []*GraphNode) bool
-	Apply(pattern []*GraphNode) ([]*GraphNode, error)
-	PatternSize() int // How many nodes this rule looks at
+	CanApply(graph *LinearChainGraph) bool
+	Apply(graph *LinearChainGraph) error
 }
 
-func (re *RewriteEngine) AddRule(rule DBSPRule) {
+func (re *LinearChainRewriteEngine) AddRule(rule LinearChainRule) {
 	re.rules = append(re.rules, rule)
 }
 
-// // Apply DBSP rules until fixpoint
-// func (re *RewriteEngine) Optimize(graph *ComputationGraph) (*ComputationGraph, error) {
-// 	changed := true
-// 	iterations := 0
-// 	maxIterations := 50 // Safety limit
+// Optimize applies all rules until fixpoint
+func (re *LinearChainRewriteEngine) Optimize(graph *LinearChainGraph) error {
+	if err := graph.Validate(); err != nil {
+		return fmt.Errorf("invalid graph: %w", err)
+	}
 
-// 	for changed && iterations < maxIterations {
-// 		changed = false
-// 		iterations++
+	changed := true
+	iterations := 0
+	maxIterations := 20
 
-// 		// Try each rule
-// 		for _, rule := range re.rules {
-// 			patterns := re.findPatterns(graph, rule)
+	for changed && iterations < maxIterations {
+		changed = false
+		iterations++
 
-// 			for _, pattern := range patterns {
-// 				if rule.Matches(pattern) {
-// 					newNodes, err := rule.Apply(pattern)
-// 					if err != nil {
-// 						return nil, fmt.Errorf("rule %s failed: %w", rule.Name(), err)
-// 					}
+		for _, rule := range re.rules {
+			if rule.CanApply(graph) {
+				fmt.Printf("Applying rule: %s\n", rule.Name())
 
-// 					err = re.replacePattern(graph, pattern, newNodes)
-// 					if err != nil {
-// 						return nil, fmt.Errorf("failed to replace pattern: %w", err)
-// 					}
+				if err := rule.Apply(graph); err != nil {
+					return fmt.Errorf("rule %s failed: %w", rule.Name(), err)
+				}
 
-// 					changed = true
-// 					fmt.Printf("Applied DBSP rule: %s\n", rule.Name())
-// 					break // Apply one rule at a time
-// 				}
-// 			}
+				changed = true
+				break // Apply one rule at a time
+			}
+		}
+	}
 
-// 			if changed {
-// 				break
-// 			}
-// 		}
-// 	}
+	if iterations >= maxIterations {
+		return fmt.Errorf("rewrite engine did not converge after %d iterations", maxIterations)
+	}
 
-// 	if iterations >= maxIterations {
-// 		return nil, fmt.Errorf("rewrite engine did not converge after %d iterations", maxIterations)
-// 	}
+	fmt.Printf("Linear chain optimization converged after %d iterations\n", iterations)
+	return nil
+}
 
-// 	fmt.Printf("DBSP optimization converged after %d iterations\n", iterations)
-// 	return graph, nil
-// }
+// Rule 1: Convert N-ary join to incremental version
+type JoinIncrementalizationRule struct{}
 
-// // Simplified pattern finder for linear pipeline structure
-// func (re *RewriteEngine) findPatterns(graph *ComputationGraph, rule DBSPRule) [][]*GraphNode {
-// 	patterns := make([][]*GraphNode, 0)
-// 	patternSize := rule.PatternSize()
+func (r *JoinIncrementalizationRule) Name() string {
+	return "JoinIncrementalization"
+}
 
-// 	// Get the linear sequence of nodes (inputs -> join? -> chain -> output)
-// 	sequence := re.getLinearSequence(graph)
+func (r *JoinIncrementalizationRule) CanApply(graph *LinearChainGraph) bool {
+	if graph.joinNode == "" {
+		return false
+	}
 
-// 	// Generate all subsequences of the required size
-// 	for i := 0; i <= len(sequence)-patternSize; i++ {
-// 		pattern := sequence[i : i+patternSize]
-// 		patterns = append(patterns, pattern)
-// 	}
+	joinOp := graph.nodes[graph.joinNode].Op
+	_, canIncrement := IncrementalizeOp(joinOp)
+	return canIncrement && joinOp.OpType() == OpTypeBilinear
+}
 
-// 	return patterns
-// }
+func (r *JoinIncrementalizationRule) Apply(graph *LinearChainGraph) error {
+	joinOp := graph.nodes[graph.joinNode].Op
+	incrementalOp, _ := IncrementalizeOp(joinOp)
 
-// // Extract linear sequence from our guaranteed structure
-// func (re *RewriteEngine) getLinearSequence(graph *ComputationGraph) []*GraphNode {
-// 	sequence := make([]*GraphNode, 0)
+	// Replace the join operator directly
+	graph.nodes[graph.joinNode].Op = incrementalOp
 
-// 	// Start from input(s)
-// 	for _, inputID := range graph.inputs {
-// 		sequence = append(sequence, graph.nodes[inputID])
-// 	}
+	return nil
+}
 
-// 	// If multiple inputs, find the join node
-// 	if len(graph.inputs) > 1 {
-// 		for _, node := range graph.nodes {
-// 			if len(node.Inputs) > 1 { // This is the join
-// 				sequence = append(sequence, node)
-// 				break
-// 			}
-// 		}
-// 	}
+// Rule 2: Incrementalize the entire linear chain
+type LinearChainIncrementalizationRule struct{}
 
-// 	// Follow the linear chain to output
-// 	var current *GraphNode
-// 	if len(graph.inputs) > 1 {
-// 		// Start from join
-// 		for _, node := range graph.nodes {
-// 			if len(node.Inputs) > 1 {
-// 				current = node
-// 				break
-// 			}
-// 		}
-// 	} else {
-// 		// Start from single input
-// 		current = graph.nodes[graph.inputs[0]]
-// 	}
+func (r *LinearChainIncrementalizationRule) Name() string {
+	return "LinearChainIncrementalization"
+}
 
-// 	// Walk the chain (skip input and join as they're already added)
-// 	for len(current.Outputs) > 0 {
-// 		current = current.Outputs[0]
-// 		sequence = append(sequence, current)
-// 	}
+func (r *LinearChainIncrementalizationRule) CanApply(graph *LinearChainGraph) bool {
+	// Check if we have any non-incremental operations that can be incrementalized
+	for _, nodeID := range graph.chain {
+		node := graph.nodes[nodeID]
+		if _, canInc := IncrementalizeOp(node.Op); canInc {
+			return true
+		}
+	}
+	return false
+}
 
-// 	return sequence
-// }
+func (r *LinearChainIncrementalizationRule) Apply(graph *LinearChainGraph) error {
+	// Process each operation in the chain
+	for _, nodeID := range graph.chain {
+		node := graph.nodes[nodeID]
 
-// // Simplified pattern replacement for linear structure
-// func (re *RewriteEngine) replacePattern(graph *ComputationGraph, oldPattern, newNodes []*GraphNode) error {
-// 	// For now, just log what we would do
-// 	// Real implementation would need to rewire the linear chain properly
-// 	fmt.Printf("Would replace pattern of %d nodes with %d nodes\n", len(oldPattern), len(newNodes))
-// 	return nil
-// }
+		if incOp, canInc := IncrementalizeOp(node.Op); canInc {
+			// Replace with incremental version
+			node.Op = incOp
+		}
+		// Linear operators remain unchanged (they are their own incremental version)
+	}
+
+	return nil
+}
+
+// Rule 3: Remove I->D pairs (they cancel out)
+type IntegrationDifferentiationEliminationRule struct{}
+
+func (r *IntegrationDifferentiationEliminationRule) Name() string {
+	return "IntegrationDifferentiationElimination"
+}
+
+func (r *IntegrationDifferentiationEliminationRule) CanApply(graph *LinearChainGraph) bool {
+	// Look for adjacent I->D pairs in the chain
+	for i := 0; i < len(graph.chain)-1; i++ {
+		op1 := graph.nodes[graph.chain[i]].Op
+		op2 := graph.nodes[graph.chain[i+1]].Op
+
+		_, isI := op1.(*IntegratorOp)
+		_, isD := op2.(*DifferentiatorOp)
+		if isI && isD {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *IntegrationDifferentiationEliminationRule) Apply(graph *LinearChainGraph) error {
+	newChain := make([]string, 0, len(graph.chain))
+
+	i := 0
+	for i < len(graph.chain) {
+		if i < len(graph.chain)-1 {
+			op1 := graph.nodes[graph.chain[i]].Op
+			op2 := graph.nodes[graph.chain[i+1]].Op
+
+			_, isI := op1.(*IntegratorOp)
+			_, isD := op2.(*DifferentiatorOp)
+
+			if isI && isD {
+				// Skip both I and D - they cancel out
+				// Remove the nodes from the graph
+				delete(graph.nodes, graph.chain[i])
+				delete(graph.nodes, graph.chain[i+1])
+				i += 2
+				continue
+			}
+		}
+
+		// Keep this operation
+		newChain = append(newChain, graph.chain[i])
+		i++
+	}
+
+	graph.chain = newChain
+
+	// Update output
+	if len(graph.chain) > 0 {
+		graph.output = graph.chain[len(graph.chain)-1]
+	} else if graph.joinNode != "" {
+		graph.output = graph.joinNode
+	} else if len(graph.inputs) > 0 {
+		graph.output = graph.inputs[0]
+	}
+
+	return nil
+}
+
+// Rule 4: Optimize distinct operations
+type DistinctOptimizationRule struct{}
+
+func (r *DistinctOptimizationRule) Name() string {
+	return "DistinctOptimization"
+}
+
+func (r *DistinctOptimizationRule) CanApply(graph *LinearChainGraph) bool {
+	// Look for distinct->distinct patterns
+	for i := 0; i < len(graph.chain)-1; i++ {
+		op1 := graph.nodes[graph.chain[i]].Op
+		op2 := graph.nodes[graph.chain[i+1]].Op
+
+		_, isDistinct1 := op1.(*DistinctOp)
+		_, isDistinct2 := op2.(*DistinctOp)
+
+		if isDistinct1 && isDistinct2 {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *DistinctOptimizationRule) Apply(graph *LinearChainGraph) error {
+	newChain := make([]string, 0, len(graph.chain))
+
+	i := 0
+	for i < len(graph.chain) {
+		if i < len(graph.chain)-1 {
+			op1 := graph.nodes[graph.chain[i]].Op
+			op2 := graph.nodes[graph.chain[i+1]].Op
+
+			_, isDistinct1 := op1.(*DistinctOp)
+			_, isDistinct2 := op2.(*DistinctOp)
+
+			if isDistinct1 && isDistinct2 {
+				// Keep only the second distinct (idempotent)
+				delete(graph.nodes, graph.chain[i])
+				newChain = append(newChain, graph.chain[i+1])
+				i += 2
+				continue
+			}
+		}
+
+		// Keep this operation
+		newChain = append(newChain, graph.chain[i])
+		i++
+	}
+
+	graph.chain = newChain
+
+	// Update output
+	if len(graph.chain) > 0 {
+		graph.output = graph.chain[len(graph.chain)-1]
+	}
+
+	return nil
+}
+
+// Rule 5: Fuse adjacent linear operations for efficiency
+type LinearOperatorFusionRule struct{}
+
+func (r *LinearOperatorFusionRule) Name() string {
+	return "LinearOperatorFusion"
+}
+
+func (r *LinearOperatorFusionRule) CanApply(graph *LinearChainGraph) bool {
+	// Look for adjacent fuseable operations
+	for i := 0; i < len(graph.chain)-1; i++ {
+		op1 := graph.nodes[graph.chain[i]].Op
+		op2 := graph.nodes[graph.chain[i+1]].Op
+
+		_, isSel := op1.(*SelectionOp)
+		_, isProj := op2.(*ProjectionOp)
+		if isSel && isProj {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *LinearOperatorFusionRule) Apply(graph *LinearChainGraph) error {
+	newChain := make([]string, 0, len(graph.chain))
+
+	i := 0
+	for i < len(graph.chain) {
+		if i < len(graph.chain)-1 {
+			op1 := graph.nodes[graph.chain[i]].Op
+			op2 := graph.nodes[graph.chain[i+1]].Op
+
+			sel, isSel := op1.(*SelectionOp)
+			proj, isProj := op2.(*ProjectionOp)
+
+			if isSel && isProj {
+				// Create fused operation
+				fusedOp, err := FuseFilterProject(sel, proj)
+				if err != nil {
+					return err
+				}
+
+				// Replace second node with fused operation
+				graph.nodes[graph.chain[i+1]].Op = fusedOp
+
+				// Remove first node
+				delete(graph.nodes, graph.chain[i])
+
+				// Keep only the fused node
+				newChain = append(newChain, graph.chain[i+1])
+				i += 2
+				continue
+			}
+		}
+
+		// Keep this operation unfused
+		newChain = append(newChain, graph.chain[i])
+		i++
+	}
+
+	graph.chain = newChain
+
+	// Update output
+	if len(graph.chain) > 0 {
+		graph.output = graph.chain[len(graph.chain)-1]
+	}
+
+	return nil
+}
