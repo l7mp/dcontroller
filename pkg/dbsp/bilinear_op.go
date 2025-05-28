@@ -17,6 +17,10 @@ func NewJoin(eval Evaluator, n int) *JoinOp {
 	}
 }
 
+func (op *JoinOp) OpType() OperatorType              { return OpTypeBilinear }
+func (op *JoinOp) IsTimeInvariant() bool             { return true }
+func (op *JoinOp) HasZeroPreservationProperty() bool { return true }
+
 func (op *JoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := op.validateInputs(inputs); err != nil {
 		return nil, err
@@ -42,6 +46,10 @@ func NewIncrementalJoin(eval Evaluator, n int) *IncrementalJoinOp {
 		prevStates: make([]*DocumentZSet, n),
 	}
 }
+
+func (op *IncrementalJoinOp) OpType() OperatorType              { return OpTypeBilinear }
+func (op *IncrementalJoinOp) IsTimeInvariant() bool             { return true }
+func (op *IncrementalJoinOp) HasZeroPreservationProperty() bool { return true }
 
 func (op *IncrementalJoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := op.validateInputs(inputs); err != nil {
@@ -97,7 +105,7 @@ func (op *IncrementalJoinOp) computeTerm(inputs []*DocumentZSet, mask int) (*Doc
 	}
 
 	// Generate all combinations of documents from all inputs
-	return cartesianJoin(op.eval, op.n, inputs, 0, make([]Document, op.n), make([]int, op.n))
+	return cartesianJoin(op.eval, op.n, termInputs, 0, make([]Document, op.n), make([]int, op.n))
 }
 
 func cartesianJoin(eval Evaluator, n int, inputs []*DocumentZSet, inputIndex int, currentDocs []Document, currentMults []int) (*DocumentZSet, error) {

@@ -286,19 +286,25 @@ var _ = Describe("DocumentZSet", func() {
 			result, err := zset1.Subtract(zsetMultiple)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Document should be removed (negative multiplicities are filtered)
-			Expect(result.IsZero()).To(BeTrue())
+			// Result should have doc1 with multiplicity 1 - 3 = -2
+			Expect(result.IsZero()).To(BeFalse()) // Not zero - contains doc with negative multiplicity
+
+			mult, err := result.GetMultiplicity(doc1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mult).To(Equal(-2)) // Negative multiplicity
 
 			contains, err := result.Contains(doc1)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(contains).To(BeFalse())
+			Expect(contains).To(BeFalse()) // Contains() checks for positive multiplicity
 		})
 
 		It("should subtract from empty ZSet", func() {
 			result, err := emptyZSet.Subtract(zset1)
 			Expect(err).NotTo(HaveOccurred())
-
-			Expect(result.IsZero()).To(BeTrue())
+			Expect(result.IsZero()).To(BeFalse())
+			mult, err := result.GetMultiplicity(doc1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mult).To(Equal(-1)) // Negative multiplicity
 		})
 
 		It("should handle subtraction with different document structures", func() {
@@ -374,7 +380,11 @@ var _ = Describe("DocumentZSet", func() {
 			// This should result in doc1 having multiplicity -1
 			result, err := zsetPos.Subtract(zsetNeg)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.IsZero()).To(BeTrue())
+			Expect(result.IsZero()).To(BeFalse())
+
+			mult1, err := result.GetMultiplicity(doc1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mult1).To(Equal(-1))
 
 			// Distinct of empty should be empty
 			distinct, err := result.Distinct()
@@ -474,6 +484,18 @@ var _ = Describe("DocumentZSet", func() {
 	})
 
 	Describe("Document Retrieval", func() {
+		It("should list documents", func() {
+			result, err := emptyZSet.Subtract(zset1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.IsZero()).To(BeFalse())
+
+			docs, err := result.List()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(docs).To(HaveLen(1))
+			Expect(docs[0].Multiplicity).To(Equal(-1)) // Removal
+			Expect(docs[0].Document).To(Equal(map[string]any{"name": "Alice", "age": int64(30)}))
+		})
+
 		It("should get all documents with multiplicities", func() {
 			zsetMultiple, err := emptyZSet.AddDocument(doc1, 2)
 			Expect(err).NotTo(HaveOccurred())

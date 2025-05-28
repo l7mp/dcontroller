@@ -282,6 +282,31 @@ func (dz *DocumentZSet) DeepCopy() (*DocumentZSet, error) {
 	return result, nil
 }
 
+// DocumentEntry represents a document with its multiplicity in a Z-set.
+type DocumentEntry struct {
+	Document     Document
+	Multiplicity int
+}
+
+// List returns all documents with their multiplicities (including negative ones).
+func (dz *DocumentZSet) List() ([]DocumentEntry, error) {
+	result := make([]DocumentEntry, 0, len(dz.counts))
+
+	for key, mult := range dz.counts {
+		doc, err := deepCopy(dz.docs[key])
+		if err != nil {
+			return nil, newZSetError("failed to copy document in List", err)
+		}
+
+		result = append(result, DocumentEntry{
+			Document:     doc.(Document),
+			Multiplicity: mult,
+		})
+	}
+
+	return result, nil
+}
+
 // GetDocuments returns all documents as a slice (with multiplicities)
 // Documents with multiplicity n appear n times in the result
 func (dz *DocumentZSet) GetDocuments() ([]Document, error) {
@@ -328,12 +353,25 @@ func (dz *DocumentZSet) IsZero() bool {
 	return len(dz.counts) == 0
 }
 
-// Size returns total number of documents (counting multiplicities)
+// Size returns the number of documents counting only positive multiplicities.
 func (dz *DocumentZSet) Size() int {
 	total := 0
 	for _, count := range dz.counts {
 		if count > 0 {
 			total += count
+		}
+	}
+	return total
+}
+
+// TotalSize returns the total number of documents, counting both positive and negative multiplicities.
+func (dz *DocumentZSet) TotalSize() int {
+	total := 0
+	for _, count := range dz.counts {
+		if count > 0 {
+			total += count
+		} else {
+			total += -count
 		}
 	}
 	return total
@@ -431,11 +469,7 @@ func (dz *DocumentZSet) String() string {
 		}
 
 		doc := dz.docs[key]
-		if count == 1 {
-			result += fmt.Sprintf("%v", doc)
-		} else {
-			result += fmt.Sprintf("%v×%d", doc, count)
-		}
+		result += fmt.Sprintf("%v×%d", doc, count)
 		first = false
 	}
 

@@ -119,6 +119,7 @@ func (op *GatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 
 	// Step 1: Group documents by key
 	groups := make(map[string][]*GroupedDocument)
+	originalKeys := make(map[string]any) // Map from JSON key to original value
 
 	for key, multiplicity := range input.counts {
 		doc := input.docs[key]
@@ -131,23 +132,24 @@ func (op *GatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 
 		// Process each keyValueDoc (usually just one)
 		for _, kvDoc := range keyValueDocs {
-			_, keyOk := kvDoc["key"]
-			_, valOk := kvDoc["value"]
+			originalKey, keyOk := kvDoc["key"]
+			originalValue, valOk := kvDoc["value"]
 			if !keyOk || !valOk {
 				return nil, errors.New("expected extract evaluation to return a key-value doc")
 			}
-			keyV, err := computeJSONAny(kvDoc["key"])
-			if err != nil {
-				return nil, err
-			}
-			valV, err := computeJSONAny(kvDoc["value"])
+
+			// Create JSON string for map key (grouping) - this ensures any type can be a map key
+			keyForMap, err := computeJSONAny(originalKey)
 			if err != nil {
 				return nil, err
 			}
 
-			groups[keyV] = append(groups[keyV], &GroupedDocument{
+			// Store the original key value for later use in results
+			originalKeys[keyForMap] = originalKey
+
+			groups[keyForMap] = append(groups[keyForMap], &GroupedDocument{
 				Original:     doc,
-				Value:        valV,
+				Value:        originalValue, // Store original value directly, not JSON-serialized
 				Multiplicity: multiplicity,
 			})
 		}
@@ -169,10 +171,10 @@ func (op *GatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 			totalMultiplicity += groupedDoc.Multiplicity
 		}
 
-		// Create keyValueDoc for setter
+		// Create keyValueDoc for setter - use ORIGINAL key value, not JSON string
 		setterInput := Document{
-			"key":   groupKey,
-			"value": allValues, // List of all values for this group
+			"key":   originalKeys[groupKey], // This preserves the original key without quotes
+			"value": allValues,              // List of all original values
 		}
 
 		// Use setter evaluator to create result documents
@@ -244,8 +246,14 @@ func (op *IncrementalGatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, 
 		}
 
 		for _, kvDoc := range keyValueDocs {
-			groupKey := fmt.Sprintf("%v", kvDoc["key"])
-			value := kvDoc["value"]
+			originalKey := kvDoc["key"] // Keep original key value
+			value := kvDoc["value"]     // Keep original value
+
+			// Create string key for map grouping - this allows any type to be used as map key
+			groupKey, err := computeJSONAny(originalKey)
+			if err != nil {
+				return nil, fmt.Errorf("failed to compute group key: %w", err)
+			}
 
 			// Get current values for this group
 			currentValues, groupExists := op.currentGroups[groupKey]
@@ -257,7 +265,7 @@ func (op *IncrementalGatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, 
 			var oldResultDocs []Document
 			if groupExists && len(currentValues) > 0 {
 				oldSetterInput := Document{
-					"key":   groupKey,
+					"key":   originalKey, // Use original key value, not JSON string
 					"value": currentValues,
 				}
 				oldResultDocs, err = op.setEval.Evaluate(oldSetterInput)
@@ -283,7 +291,7 @@ func (op *IncrementalGatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, 
 			var newResultDocs []Document
 			if len(newValues) > 0 {
 				newSetterInput := Document{
-					"key":   groupKey,
+					"key":   originalKey, // Use original key value, not JSON string
 					"value": newValues,
 				}
 				newResultDocs, err = op.setEval.Evaluate(newSetterInput)
