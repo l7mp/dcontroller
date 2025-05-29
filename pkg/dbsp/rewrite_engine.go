@@ -2,6 +2,7 @@ package dbsp
 
 import (
 	"fmt"
+	"strings"
 )
 
 // LinearChainGraph represents your specialized graph structure directly
@@ -70,6 +71,11 @@ func (g *LinearChainGraph) AddToChain(op Operator) string {
 	return id
 }
 
+// GetNode returns a node from its id.
+func (g *LinearChainGraph) GetNode(id string) *GraphNode {
+	return g.nodes[id]
+}
+
 // GetStartNode returns the node where the linear chain begins
 func (g *LinearChainGraph) GetStartNode() string {
 	if g.joinNode != "" {
@@ -105,31 +111,35 @@ func (g *LinearChainGraph) Validate() error {
 }
 
 // String representation for debugging
+// String representation for debugging (horizontal layout)
 func (g *LinearChainGraph) String() string {
-	result := fmt.Sprintf("LinearChainGraph:\n")
-	result += fmt.Sprintf("  Inputs (%d): ", len(g.inputs))
-	for i, inputID := range g.inputs {
-		if i > 0 {
-			result += ", "
-		}
-		result += g.nodes[inputID].Op.Name()
-	}
-	result += "\n"
+	var parts []string
 
+	// Build the flow description
+	if len(g.inputs) == 1 {
+		// Single input: Input -> [Join] -> Chain -> Output
+		inputName := g.nodes[g.inputs[0]].Op.Name()
+		parts = append(parts, inputName)
+	} else {
+		// Multiple inputs: (Input1, Input2, ...) -> Join -> Chain -> Output
+		inputNames := make([]string, len(g.inputs))
+		for i, inputID := range g.inputs {
+			inputNames[i] = g.nodes[inputID].Op.Name()
+		}
+		parts = append(parts, fmt.Sprintf("(%s)", strings.Join(inputNames, ", ")))
+	}
+
+	// Add join if present
 	if g.joinNode != "" {
-		result += fmt.Sprintf("  Join: %s\n", g.nodes[g.joinNode].Op.Name())
+		parts = append(parts, g.nodes[g.joinNode].Op.Name())
 	}
 
-	result += "  Chain: "
-	for i, nodeID := range g.chain {
-		if i > 0 {
-			result += " -> "
-		}
-		result += g.nodes[nodeID].Op.Name()
+	// Add chain operations
+	for _, nodeID := range g.chain {
+		parts = append(parts, g.nodes[nodeID].Op.Name())
 	}
-	result += "\n"
 
-	return result
+	return strings.Join(parts, " → ")
 }
 
 // LinearChainRewriteEngine works directly on LinearChainGraph
@@ -178,8 +188,6 @@ func (re *LinearChainRewriteEngine) Optimize(graph *LinearChainGraph) error {
 
 		for _, rule := range re.rules {
 			if rule.CanApply(graph) {
-				fmt.Printf("Applying rule: %s\n", rule.Name())
-
 				if err := rule.Apply(graph); err != nil {
 					return fmt.Errorf("rule %s failed: %w", rule.Name(), err)
 				}
@@ -194,7 +202,7 @@ func (re *LinearChainRewriteEngine) Optimize(graph *LinearChainGraph) error {
 		return fmt.Errorf("rewrite engine did not converge after %d iterations", maxIterations)
 	}
 
-	fmt.Printf("Linear chain optimization converged after %d iterations\n", iterations)
+	// fmt.Printf("Linear chain optimization converged after %d iterations\n", iterations)
 	return nil
 }
 
@@ -388,21 +396,159 @@ func (r *LinearOperatorFusionRule) Name() string {
 }
 
 func (r *LinearOperatorFusionRule) CanApply(graph *LinearChainGraph) bool {
-	// Look for adjacent fuseable operations
+	return r.hasSelectionThenProjections(graph) || // Priority 1: Selection followed by projections (σ → π^n)
+		r.hasConsecutiveProjections(graph) || // Priority 2: Consecutive projections (π^n)
+		r.hasProjectThenSelect(graph) // Priority 3: Project then select (π → σ)
+}
+func (r *LinearOperatorFusionRule) Apply(graph *LinearChainGraph) error {
+	// Apply in priority order
+	if r.hasSelectionThenProjections(graph) || r.hasConsecutiveProjections(graph) {
+		return r.fuseSelectionThenProjections(graph) // Now handles both!
+	}
+
+	if r.hasProjectThenSelect(graph) {
+		return r.fuseProjectThenSelect(graph)
+	}
+
+	return nil
+}
+
+// Pattern detection methods
+func (r *LinearOperatorFusionRule) hasSelectionThenProjections(graph *LinearChainGraph) bool {
+	for i := 0; i < len(graph.chain)-1; i++ {
+		if _, isSel := graph.nodes[graph.chain[i]].Op.(*SelectionOp); isSel {
+			// Check if followed by one or more projections
+			j := i + 1
+			projCount := 0
+			for j < len(graph.chain) {
+				if _, isProj := graph.nodes[graph.chain[j]].Op.(*ProjectionOp); isProj {
+					projCount++
+					j++
+				} else {
+					break
+				}
+			}
+			if projCount > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (r *LinearOperatorFusionRule) hasConsecutiveProjections(graph *LinearChainGraph) bool {
+	consecutiveCount := 0
+	for _, nodeID := range graph.chain {
+		if _, isProj := graph.nodes[nodeID].Op.(*ProjectionOp); isProj {
+			consecutiveCount++
+			if consecutiveCount >= 2 {
+				return true
+			}
+		} else {
+			consecutiveCount = 0
+		}
+	}
+	return false
+}
+
+func (r *LinearOperatorFusionRule) hasProjectThenSelect(graph *LinearChainGraph) bool {
 	for i := 0; i < len(graph.chain)-1; i++ {
 		op1 := graph.nodes[graph.chain[i]].Op
 		op2 := graph.nodes[graph.chain[i+1]].Op
 
-		_, isSel := op1.(*SelectionOp)
-		_, isProj := op2.(*ProjectionOp)
-		if isSel && isProj {
+		_, isProj := op1.(*ProjectionOp)
+		_, isSel := op2.(*SelectionOp)
+		if isProj && isSel {
 			return true
 		}
 	}
 	return false
 }
 
-func (r *LinearOperatorFusionRule) Apply(graph *LinearChainGraph) error {
+// Fusion implementation methods
+func (r *LinearOperatorFusionRule) fuseSelectionThenProjections(graph *LinearChainGraph) error {
+	newChain := make([]string, 0, len(graph.chain))
+
+	i := 0
+	for i < len(graph.chain) {
+		op := graph.nodes[graph.chain[i]].Op
+
+		// Check for selection OR projection at start of fuseable sequence
+		if selOp, isSel := op.(*SelectionOp); isSel {
+			// Handle σ → π^n case
+			j := i + 1
+			var projEvals []Evaluator
+
+			for j < len(graph.chain) {
+				if projOp, isProj := graph.nodes[graph.chain[j]].Op.(*ProjectionOp); isProj {
+					projEvals = append(projEvals, projOp.eval)
+					j++
+				} else {
+					break
+				}
+			}
+
+			if len(projEvals) > 0 {
+				// Create fused select-then-projections
+				fusedOp := NewSelectThenProjections(selOp.eval, projEvals)
+
+				// Replace selection with fused operation
+				graph.nodes[graph.chain[i]].Op = fusedOp
+				newChain = append(newChain, graph.chain[i])
+
+				// Remove the projections
+				for k := i + 1; k < j; k++ {
+					delete(graph.nodes, graph.chain[k])
+				}
+
+				i = j
+			} else {
+				// Selection with no following projections
+				newChain = append(newChain, graph.chain[i])
+				i++
+			}
+		} else if projOp, isProj := op.(*ProjectionOp); isProj {
+			// Handle π^n case (no preceding selection)
+			evals := []Evaluator{projOp.eval}
+			j := i + 1
+
+			for j < len(graph.chain) {
+				if nextProjOp, isNextProj := graph.nodes[graph.chain[j]].Op.(*ProjectionOp); isNextProj {
+					evals = append(evals, nextProjOp.eval)
+					j++
+				} else {
+					break
+				}
+			}
+
+			if len(evals) > 1 {
+				// Create N-ary projection (no selection)
+				fusedOp := NewSelectThenProjections(nil, evals)
+				graph.nodes[graph.chain[i]].Op = fusedOp
+				newChain = append(newChain, graph.chain[i])
+
+				// Remove other projections
+				for k := i + 1; k < j; k++ {
+					delete(graph.nodes, graph.chain[k])
+				}
+				i = j
+			} else {
+				newChain = append(newChain, graph.chain[i])
+				i++
+			}
+		} else {
+			// Neither selection nor projection
+			newChain = append(newChain, graph.chain[i])
+			i++
+		}
+	}
+
+	graph.chain = newChain
+	r.updateOutput(graph)
+	return nil
+}
+
+func (r *LinearOperatorFusionRule) fuseProjectThenSelect(graph *LinearChainGraph) error {
 	newChain := make([]string, 0, len(graph.chain))
 
 	i := 0
@@ -411,23 +557,14 @@ func (r *LinearOperatorFusionRule) Apply(graph *LinearChainGraph) error {
 			op1 := graph.nodes[graph.chain[i]].Op
 			op2 := graph.nodes[graph.chain[i+1]].Op
 
-			sel, isSel := op1.(*SelectionOp)
-			proj, isProj := op2.(*ProjectionOp)
+			proj, isProj := op1.(*ProjectionOp)
+			sel, isSel := op2.(*SelectionOp)
 
-			if isSel && isProj {
-				// Create fused operation
-				fusedOp, err := FuseFilterProject(sel, proj)
-				if err != nil {
-					return err
-				}
-
-				// Replace second node with fused operation
+			if isProj && isSel {
+				// π → σ: Create project-then-select fusion
+				fusedOp := NewProjectThenSelect(proj.eval, sel.eval)
 				graph.nodes[graph.chain[i+1]].Op = fusedOp
-
-				// Remove first node
 				delete(graph.nodes, graph.chain[i])
-
-				// Keep only the fused node
 				newChain = append(newChain, graph.chain[i+1])
 				i += 2
 				continue
@@ -440,11 +577,15 @@ func (r *LinearOperatorFusionRule) Apply(graph *LinearChainGraph) error {
 	}
 
 	graph.chain = newChain
+	r.updateOutput(graph)
+	return nil
+}
 
-	// Update output
+// Helper to update output after chain modifications
+func (r *LinearOperatorFusionRule) updateOutput(graph *LinearChainGraph) {
 	if len(graph.chain) > 0 {
 		graph.output = graph.chain[len(graph.chain)-1]
+	} else if graph.joinNode != "" {
+		graph.output = graph.joinNode
 	}
-
-	return nil
 }

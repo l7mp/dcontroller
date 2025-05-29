@@ -47,11 +47,11 @@ var _ = Describe("LinearChainExecutor", func() {
 
 			// Create delta input
 			deltaUsers := NewDocumentZSet()
-			deltaUsers, err = deltaUsers.AddDocument(alice, 1)
+			err = deltaUsers.AddDocumentMutate(alice, 1)
 			Expect(err).NotTo(HaveOccurred())
-			deltaUsers, err = deltaUsers.AddDocument(bob, 1)
+			err = deltaUsers.AddDocumentMutate(bob, 1)
 			Expect(err).NotTo(HaveOccurred())
-			deltaUsers, err = deltaUsers.AddDocument(charlie, 1)
+			err = deltaUsers.AddDocumentMutate(charlie, 1)
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
@@ -105,7 +105,7 @@ var _ = Describe("LinearChainExecutor", func() {
 
 			// Delta with deletion
 			deltaUsers := NewDocumentZSet()
-			deltaUsers, err = deltaUsers.AddDocument(alice, -1) // Remove Alice
+			err = deltaUsers.AddDocumentMutate(alice, -1) // Remove Alice
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
@@ -131,7 +131,7 @@ var _ = Describe("LinearChainExecutor", func() {
 
 			// Delta with high multiplicity
 			deltaUsers := NewDocumentZSet()
-			deltaUsers, err = deltaUsers.AddDocument(alice, 100)
+			err = deltaUsers.AddDocumentMutate(alice, 100)
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
@@ -171,9 +171,9 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaUsers := NewDocumentZSet()
-			deltaUsers, err = deltaUsers.AddDocument(alice, 1)
+			err = deltaUsers.AddDocumentMutate(alice, 1)
 			Expect(err).NotTo(HaveOccurred())
-			deltaUsers, err = deltaUsers.AddDocument(bob, 1)
+			err = deltaUsers.AddDocumentMutate(bob, 1)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Projects
@@ -183,9 +183,9 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaProjects := NewDocumentZSet()
-			deltaProjects, err = deltaProjects.AddDocument(proj1, 1)
+			err = deltaProjects.AddDocumentMutate(proj1, 1)
 			Expect(err).NotTo(HaveOccurred())
-			deltaProjects, err = deltaProjects.AddDocument(proj3, 1)
+			err = deltaProjects.AddDocumentMutate(proj3, 1)
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
@@ -237,14 +237,14 @@ var _ = Describe("LinearChainExecutor", func() {
 			alice, err := newDocumentFromPairs("id", int64(1), "name", "Alice")
 			Expect(err).NotTo(HaveOccurred())
 			deltaUsers := NewDocumentZSet()
-			deltaUsers, err = deltaUsers.AddDocument(alice, 3)
+			err = deltaUsers.AddDocumentMutate(alice, 3)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Project with multiplicity 2
 			proj1, err := newDocumentFromPairs("id", int64(1), "title", "WebApp")
 			Expect(err).NotTo(HaveOccurred())
 			deltaProjects := NewDocumentZSet()
-			deltaProjects, err = deltaProjects.AddDocument(proj1, 2)
+			err = deltaProjects.AddDocumentMutate(proj1, 2)
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
@@ -354,7 +354,7 @@ var _ = Describe("LinearChainExecutor", func() {
 
 			// Timestep 4: Remove Alice
 			delta4Users := NewDocumentZSet()
-			delta4Users, err = delta4Users.AddDocument(alice, -1) // Remove
+			err = delta4Users.AddDocumentMutate(alice, -1) // Remove
 			Expect(err).NotTo(HaveOccurred())
 			delta4Projects := NewDocumentZSet() // Empty
 
@@ -452,11 +452,11 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaSales := NewDocumentZSet()
-			deltaSales, err = deltaSales.AddDocument(sale1, 1)
+			err = deltaSales.AddDocumentMutate(sale1, 1)
 			Expect(err).NotTo(HaveOccurred())
-			deltaSales, err = deltaSales.AddDocument(sale2, 1)
+			err = deltaSales.AddDocumentMutate(sale2, 1)
 			Expect(err).NotTo(HaveOccurred())
-			deltaSales, err = deltaSales.AddDocument(sale3, 1)
+			err = deltaSales.AddDocumentMutate(sale3, 1)
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
@@ -524,9 +524,9 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaUsers := NewDocumentZSet()
-			deltaUsers, err = deltaUsers.AddDocument(alice, 1)
+			err = deltaUsers.AddDocumentMutate(alice, 1)
 			Expect(err).NotTo(HaveOccurred())
-			deltaUsers, err = deltaUsers.AddDocument(bob, 1)
+			err = deltaUsers.AddDocumentMutate(bob, 1)
 			Expect(err).NotTo(HaveOccurred())
 
 			sale1, err := newDocumentFromPairs("user_id", int64(1), "amount", int64(1500), "dept", "Engineering")
@@ -537,11 +537,11 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaSales := NewDocumentZSet()
-			deltaSales, err = deltaSales.AddDocument(sale1, 1)
+			err = deltaSales.AddDocumentMutate(sale1, 1)
 			Expect(err).NotTo(HaveOccurred())
-			deltaSales, err = deltaSales.AddDocument(sale2, 1)
+			err = deltaSales.AddDocumentMutate(sale2, 1)
 			Expect(err).NotTo(HaveOccurred())
-			deltaSales, err = deltaSales.AddDocument(sale3, 1)
+			err = deltaSales.AddDocumentMutate(sale3, 1)
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
@@ -726,29 +726,23 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(plan).To(ContainSubstring("users"))
 		})
 
-		It("should allow intermediate result inspection", func() {
+		It("should apply operator fusion", func() {
 			alice, err := newDocumentFromPairs("name", "Alice", "age", int64(25))
 			Expect(err).NotTo(HaveOccurred())
 			bob, err := newDocumentFromPairs("name", "Bob", "age", int64(30))
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaUsers := NewDocumentZSet()
-			deltaUsers, err = deltaUsers.AddDocument(alice, 1)
+			err = deltaUsers.AddDocumentMutate(alice, 1)
 			Expect(err).NotTo(HaveOccurred())
-			deltaUsers, err = deltaUsers.AddDocument(bob, 1)
+			err = deltaUsers.AddDocumentMutate(bob, 1)
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
 				graph.inputs[0]: deltaUsers,
 			}
 
-			// Get intermediate result after projection (before selection)
-			projectionNodeID := graph.chain[0] // First operation is projection
-			intermediateResult, err := executor.GetNodeResult(projectionNodeID, deltaInputs)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Should have both Alice and Bob after projection
-			Expect(intermediateResult.Size()).To(Equal(2))
+			Expect(len(graph.chain)).To(Equal(1)) // Fused operation
 
 			// Get final result
 			finalResult, err := executor.ProcessDelta(deltaInputs)
@@ -900,9 +894,9 @@ var _ = Describe("LinearChainExecutor", func() {
 
 			// Delta with mixed multiplicities
 			mixedDelta := NewDocumentZSet()
-			mixedDelta, err = mixedDelta.AddDocument(doc, 5) // Add 5
+			err = mixedDelta.AddDocumentMutate(doc, 5) // Add 5
 			Expect(err).NotTo(HaveOccurred())
-			mixedDelta, err = mixedDelta.AddDocument(doc, -2) // Remove 2
+			err = mixedDelta.AddDocumentMutate(doc, -2) // Remove 2
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{

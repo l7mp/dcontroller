@@ -1,9 +1,5 @@
 package dbsp
 
-import (
-	"fmt"
-)
-
 // Distinct node
 type DistinctOp struct {
 	BaseOp
@@ -174,54 +170,6 @@ func (n *ConstantOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 		return nil, err
 	}
 	return res, nil
-}
-
-// FusedOp combines multiple nodes for optimization
-type FusedOp struct {
-	BaseOp
-	nodes []Operator
-}
-
-func NewFusedOp(nodes []Operator, name string) (*FusedOp, error) {
-	if len(nodes) == 0 {
-		return nil, fmt.Errorf("cannot create empty fused node")
-	}
-
-	return &FusedOp{
-		BaseOp: NewBaseOp("fused:"+name, nodes[0].Arity()),
-		nodes:  nodes,
-	}, nil
-}
-
-func (n *FusedOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
-	if err := n.validateInputs(inputs); err != nil {
-		return nil, err
-	}
-
-	// Chain execution through all nodes, propagating errors
-	result := inputs[0]
-	for i, node := range n.nodes {
-		var err error
-		result, err = node.Process(result)
-		if err != nil {
-			return NewDocumentZSet(), fmt.Errorf("error in fused node %s at step %d (%s): %w",
-				n.Name(), i, node.Name(), err)
-		}
-	}
-
-	return result, nil
-}
-
-func (n *FusedOp) OpType() OperatorType              { return OpTypeLinear }
-func (n *FusedOp) IsTimeInvariant() bool             { return true }
-func (n *FusedOp) HasZeroPreservationProperty() bool { return true }
-
-// Helper function for safe fusion
-func FuseFilterProject(filter *SelectionOp, project *ProjectionOp) (Operator, error) {
-	return NewFusedOp(
-		[]Operator{filter, project},
-		fmt.Sprintf("%s→%s", filter.Name(), project.Name()),
-	)
 }
 
 // Addition node

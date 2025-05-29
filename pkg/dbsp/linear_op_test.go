@@ -419,7 +419,7 @@ func (e *ArrayExtractor) Evaluate(doc Document) ([]Document, error) {
 	}
 
 	// Return the array wrapped in the expected format
-	return []Document{{"array": value}}, nil
+	return []Document{{"list": value}}, nil
 }
 
 func (e *ArrayExtractor) String() string {

@@ -62,9 +62,12 @@ func (n *BaseOp) validateInputs(inputs []*DocumentZSet) error {
 // boolean to signal whether the conversion was successful.
 func IncrementalizeOp(in Operator) (Operator, bool) {
 	switch op := in.(type) {
-	case *ProjectionOp, *SelectionOp, *GatherOp, *UnwindOp:
-		// Linear ops are already incremental - no change needed
+	case *ProjectionOp, *SelectionOp, *UnwindOp:
+		// These linear ops are stateless so already incremental - no change needed
 		return op, false
+	case *GatherOp:
+		// Gather, although theoretically linear,  needs a specialized incremental version for efficiency
+		return NewIncrementalGather(op.extractEval, op.setEval), true
 	case *BinaryJoinOp:
 		// Join ops need incrementalization
 		return NewIncrementalBinaryJoin(op.eval), true

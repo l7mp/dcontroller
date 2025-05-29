@@ -96,7 +96,7 @@ type UnwindOp struct {
 	BaseOp
 	// Returns the array to unwind in the "list" elem of a doc.
 	extractEval Evaluator
-	// Sets the current array element (given in the "element" key of the input do) back into
+	// Sets the current array element (given in the "element" key of the input doc) back into
 	// the document (given in "document").
 	setEval Evaluator
 }

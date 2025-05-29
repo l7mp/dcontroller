@@ -328,7 +328,7 @@ func (eng *defaultEngine) EvaluateStage(s *Stage, delta cache.Delta) ([]cache.De
 		}
 
 		if len(args) != 2 {
-			return nil, errors.New("expected two arguments")
+			return nil, errors.New("expected 2 arguments")
 		}
 		idPath := args[0]
 		elemPath := args[1]

@@ -97,7 +97,8 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			gatherID := graph.AddToChain(NewGather(extractEval, setEval))
 
 			// Verify it's not incremental initially
-			gatherNode := graph.nodes[gatherID]
+			gatherNode := graph.GetNode(gatherID)
+			Expect(gatherNode).NotTo(BeNil())
 			_, isIncremental := gatherNode.Op.(*IncrementalGatherOp)
 			Expect(isIncremental).To(BeFalse())
 
@@ -109,25 +110,6 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			gatherNode = graph.nodes[gatherID]
 			_, isIncremental = gatherNode.Op.(*IncrementalGatherOp)
 			Expect(isIncremental).To(BeTrue())
-		})
-
-		It("should leave linear operations unchanged", func() {
-			graph.AddInput(NewInput("users"))
-
-			projID := graph.AddToChain(NewProjection(NewFieldProjection("name")))
-			selID := graph.AddToChain(NewSelection("active", NewFieldFilter("active", true)))
-
-			// Linear operators should remain unchanged (they are their own incremental version)
-			err := rewriter.Optimize(graph)
-			Expect(err).NotTo(HaveOccurred())
-
-			projNode := graph.nodes[projID]
-			_, isProjection := projNode.Op.(*ProjectionOp)
-			Expect(isProjection).To(BeTrue())
-
-			selNode := graph.nodes[selID]
-			_, isSelection := selNode.Op.(*SelectionOp)
-			Expect(isSelection).To(BeTrue())
 		})
 	})
 
@@ -257,14 +239,12 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			dist3ID := graph.AddToChain(NewDistinct())
 			dist4ID := graph.AddToChain(NewDistinct())
 
-			Expect(len(graph.chain)).To(Equal(4))
-
 			// Apply rewrite rules
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Should keep only dist2 and dist4 (second of each pair)
-			Expect(len(graph.chain)).To(Equal(2))
+			// Should keep only last distinct
+			Expect(len(graph.chain)).To(Equal(1))
 
 			_, dist1Exists := graph.nodes[dist1ID]
 			_, dist2Exists := graph.nodes[dist2ID]
@@ -272,7 +252,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			_, dist4Exists := graph.nodes[dist4ID]
 
 			Expect(dist1Exists).To(BeFalse())
-			Expect(dist2Exists).To(BeTrue())
+			Expect(dist2Exists).To(BeFalse())
 			Expect(dist3Exists).To(BeFalse())
 			Expect(dist4Exists).To(BeTrue())
 		})
@@ -282,8 +262,8 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 		It("should fuse selection followed by projection", func() {
 			graph.AddInput(NewInput("users"))
 
-			selID := graph.AddToChain(NewSelection("active", NewFieldFilter("active", true)))
-			projID := graph.AddToChain(NewProjection(NewFieldProjection("name", "email")))
+			_ = graph.AddToChain(NewSelection("active", NewFieldFilter("active", true)))
+			_ = graph.AddToChain(NewProjection(NewFieldProjection("name", "email")))
 
 			Expect(len(graph.chain)).To(Equal(2))
 
@@ -295,12 +275,12 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			Expect(len(graph.chain)).To(Equal(1))
 
 			// Original selection should be removed
-			_, selExists := graph.nodes[selID]
-			Expect(selExists).To(BeFalse())
-
-			// Projection node should contain fused operation
-			projNode := graph.nodes[projID]
-			_, isFused := projNode.Op.(*FusedOp)
+			node, nodeExists := graph.nodes[graph.chain[0]]
+			Expect(nodeExists).To(BeTrue())
+			_, isSelection := node.Op.(*SelectionOp)
+			Expect(isSelection).To(BeFalse())
+			// Node should now be a fused-op
+			_, isFused := node.Op.(*SelectThenProjectionsOp)
 			Expect(isFused).To(BeTrue())
 		})
 
@@ -340,9 +320,9 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 		It("should handle multiple fuseable pairs", func() {
 			graph.AddInput(NewInput("users"))
 
-			sel1ID := graph.AddToChain(NewSelection("active", NewFieldFilter("active", true)))
+			_ = graph.AddToChain(NewSelection("active", NewFieldFilter("active", true)))
 			_ = graph.AddToChain(NewProjection(NewFieldProjection("name", "email")))
-			sel2ID := graph.AddToChain(NewSelection("verified", NewFieldFilter("verified", true)))
+			_ = graph.AddToChain(NewSelection("verified", NewFieldFilter("verified", true)))
 			_ = graph.AddToChain(NewProjection(NewFieldProjection("name")))
 
 			Expect(len(graph.chain)).To(Equal(4))
@@ -354,11 +334,17 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			// Should fuse into 2 operations
 			Expect(len(graph.chain)).To(Equal(2))
 
-			// Original selections should be removed
-			_, sel1Exists := graph.nodes[sel1ID]
-			_, sel2Exists := graph.nodes[sel2ID]
-			Expect(sel1Exists).To(BeFalse())
-			Expect(sel2Exists).To(BeFalse())
+			// Selections should be substituted with fused-ops
+			for _, id := range graph.chain {
+				node, nodeExists := graph.nodes[id]
+				Expect(nodeExists).To(BeTrue())
+				_, isSelection := node.Op.(*SelectionOp)
+				Expect(isSelection).To(BeFalse())
+				_, isProjection := node.Op.(*ProjectionOp)
+				Expect(isProjection).To(BeFalse())
+				_, isFused := node.Op.(*SelectThenProjectionsOp)
+				Expect(isFused).To(BeTrue())
+			}
 		})
 	})
 
@@ -432,15 +418,13 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			// Should converge without hitting iteration limit
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(err).NotTo(MatchError(ContainSubstring("did not converge")))
 		})
 	})
 
 	Context("Rule Interaction and Ordering", func() {
 		It("should apply rules in correct order", func() {
-			// Test that rules are applied in the right sequence
+			// Check that rules are applied in the right sequence
 			// This is important because some rules create opportunities for others
-
 			graph.AddInput(NewInput("collection"))
 
 			// Add integration/differentiation that will be cancelled
@@ -465,8 +449,9 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 
 			// Remaining node should be fused
 			remainingID := graph.chain[0]
-			remainingNode := graph.nodes[remainingID]
-			_, isFused := remainingNode.Op.(*FusedOp)
+			remainingNode, remainingNodeExists := graph.nodes[remainingID]
+			Expect(remainingNodeExists).To(BeTrue())
+			_, isFused := remainingNode.Op.(*SelectThenProjectionsOp)
 			Expect(isFused).To(BeTrue())
 		})
 	})
