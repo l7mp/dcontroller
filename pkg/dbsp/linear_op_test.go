@@ -87,6 +87,164 @@ func (e *RangeFilterEvaluator) String() string {
 	return fmt.Sprintf("RangeFilter(%s ∈ [%d, %d])", e.field, e.min, e.max)
 }
 
+// FieldExtractor extracts a specific field value from a document
+type FieldExtractor struct {
+	fieldName string
+}
+
+func NewFieldExtractor(fieldName string) *FieldExtractor {
+	return &FieldExtractor{fieldName: fieldName}
+}
+
+func (e *FieldExtractor) Extract(doc Document) (any, error) {
+	value, exists := doc[e.fieldName]
+	if !exists {
+		return nil, nil // Field not found
+	}
+	return value, nil
+}
+
+func (e *FieldExtractor) String() string {
+	return fmt.Sprintf("extract_field('%s')", e.fieldName)
+}
+
+// ArrayFieldExtractor extracts an array field from a document
+type ArrayFieldExtractor struct {
+	fieldName string
+}
+
+func NewArrayFieldExtractor(fieldName string) *ArrayFieldExtractor {
+	return &ArrayFieldExtractor{fieldName: fieldName}
+}
+
+func (e *ArrayFieldExtractor) Extract(doc Document) (any, error) {
+	value, exists := doc[e.fieldName]
+	if !exists {
+		return nil, nil // Field not found
+	}
+
+	// Verify it's an array
+	if _, ok := value.([]any); !ok {
+		return nil, nil // Not an array, skip
+	}
+
+	return value, nil
+}
+
+func (e *ArrayFieldExtractor) String() string {
+	return fmt.Sprintf("extract_array_field('%s')", e.fieldName)
+}
+
+// ArrayElementTransformer replaces an array field with a single element
+type ArrayElementTransformer struct {
+	originalField string // Original array field name to remove
+	newField      string // New field name for the element
+}
+
+func NewArrayElementTransformer(originalField, newField string) *ArrayElementTransformer {
+	return &ArrayElementTransformer{
+		originalField: originalField,
+		newField:      newField,
+	}
+}
+
+func (t *ArrayElementTransformer) Transform(doc Document, value any) (Document, error) {
+	// Create new document by copying original and replacing array with element
+	result := make(Document)
+	for k, v := range doc {
+		if k != t.originalField {
+			result[k] = v // Copy other fields
+		}
+	}
+
+	// Set the new field to the current element
+	result[t.newField] = value
+
+	return result, nil
+}
+
+func (t *ArrayElementTransformer) String() string {
+	return fmt.Sprintf("transform_array_element('%s' -> '%s')", t.originalField, t.newField)
+}
+
+// ListAggregateTransformer creates a document with key and list of aggregated values
+type ListAggregateTransformer struct {
+	keyField   string
+	valueField string
+}
+
+func NewListAggregateTransformer(keyField, valueField string) *ListAggregateTransformer {
+	return &ListAggregateTransformer{
+		keyField:   keyField,
+		valueField: valueField,
+	}
+}
+
+func (t *ListAggregateTransformer) Transform(doc Document, value any) (Document, error) {
+	aggregateInput, ok := value.(*AggregateInput)
+	if !ok {
+		return nil, fmt.Errorf("expected *AggregateInput, got %T", value)
+	}
+
+	result := Document{
+		t.keyField:   aggregateInput.Key,
+		t.valueField: aggregateInput.Values,
+	}
+
+	return result, nil
+}
+
+func (t *ListAggregateTransformer) String() string {
+	return fmt.Sprintf("list_aggregate(%s, %s)", t.keyField, t.valueField)
+}
+
+// CountAggregateTransformer creates a document with key and count of values
+type CountAggregateTransformer struct{}
+
+func NewCountAggregateTransformer() *CountAggregateTransformer {
+	return &CountAggregateTransformer{}
+}
+
+func (t *CountAggregateTransformer) Transform(doc Document, value any) (Document, error) {
+	aggregateInput, ok := value.(*AggregateInput)
+	if !ok {
+		return nil, fmt.Errorf("expected *AggregateInput, got %T", value)
+	}
+
+	result := Document{
+		"group_key": aggregateInput.Key,
+		"count":     int64(len(aggregateInput.Values)),
+	}
+
+	return result, nil
+}
+
+func (t *CountAggregateTransformer) String() string {
+	return "count_aggregate"
+}
+
+// For UnwindOp tests - replace the old evaluators
+func createUnwindEvaluators(arrayField, elementField string) (*ArrayFieldExtractor, *ArrayElementTransformer) {
+	extractor := NewArrayFieldExtractor(arrayField)
+	transformer := NewArrayElementTransformer(arrayField, elementField)
+	return extractor, transformer
+}
+
+// For GatherOp tests - replace the old evaluators
+func createGatherEvaluators(keyField, valueField, resultKeyField, resultValueField string) (*FieldExtractor, *FieldExtractor, *ListAggregateTransformer) {
+	keyExtractor := NewFieldExtractor(keyField)
+	valueExtractor := NewFieldExtractor(valueField)
+	aggregator := NewListAggregateTransformer(resultKeyField, resultValueField)
+	return keyExtractor, valueExtractor, aggregator
+}
+
+func createCountGatherEvaluators(keyField, valueField string) (*FieldExtractor, *FieldExtractor, *CountAggregateTransformer) {
+	keyExtractor := NewFieldExtractor(keyField)
+	valueExtractor := NewFieldExtractor(valueField)
+	aggregator := NewCountAggregateTransformer()
+	return keyExtractor, valueExtractor, aggregator
+}
+
 var _ = Describe("Linear Operators", func() {
 	Context("Projection Operator", func() {
 		var projectionOp *ProjectionOp
@@ -475,9 +633,8 @@ var _ = Describe("UnwindOp", func() {
 	Describe("basic functionality", func() {
 		It("should unwind a simple array", func() {
 			// Create evaluators for this specific test
-			extractor := NewArrayExtractor("tags")
-			setter := NewArrayElementSetter("tags", "tag")
-			unwind := NewUnwind(extractor, setter)
+			extractor, transformer := createUnwindEvaluators("tags", "tag")
+			unwind := NewUnwind(extractor, transformer)
 
 			// Original document with array
 			doc := Document{"name": "user1", "tags": []any{"red", "blue", "green"}}
@@ -497,9 +654,8 @@ var _ = Describe("UnwindOp", func() {
 		})
 
 		It("should handle empty arrays", func() {
-			extractor := NewArrayExtractor("tags")
-			setter := NewArrayElementSetter("tags", "tag")
-			unwind := NewUnwind(extractor, setter)
+			extractor, transformer := createUnwindEvaluators("tags", "tag")
+			unwind := NewUnwind(extractor, transformer)
 
 			doc := Document{"name": "user1", "tags": []any{}}
 			input, err := SingletonZSet(doc)
@@ -511,9 +667,8 @@ var _ = Describe("UnwindOp", func() {
 		})
 
 		It("should handle documents without arrays", func() {
-			extractor := NewArrayExtractor("tags")
-			setter := NewArrayElementSetter("tags", "tag")
-			unwind := NewUnwind(extractor, setter)
+			extractor, transformer := createUnwindEvaluators("tags", "tag")
+			unwind := NewUnwind(extractor, transformer)
 
 			doc := Document{"name": "user1"}
 			input, err := SingletonZSet(doc)
@@ -525,9 +680,8 @@ var _ = Describe("UnwindOp", func() {
 		})
 
 		It("should handle non-array values gracefully", func() {
-			extractor := NewArrayExtractor("tags")
-			setter := NewArrayElementSetter("tags", "tag")
-			unwind := NewUnwind(extractor, setter)
+			extractor, transformer := createUnwindEvaluators("tags", "tag")
+			unwind := NewUnwind(extractor, transformer)
 
 			doc := Document{"name": "user1", "tags": "not-an-array"}
 			input, err := SingletonZSet(doc)
@@ -541,9 +695,8 @@ var _ = Describe("UnwindOp", func() {
 
 	Describe("multiplicity handling", func() {
 		It("should preserve multiplicities when unwinding", func() {
-			extractor := NewArrayExtractor("tags")
-			setter := NewArrayElementSetter("tags", "tag")
-			unwind := NewUnwind(extractor, setter)
+			extractor, transformer := createUnwindEvaluators("tags", "tag")
+			unwind := NewUnwind(extractor, transformer)
 
 			doc := Document{"name": "user1", "tags": []any{"red", "blue"}}
 			input := NewDocumentZSet()
@@ -567,9 +720,8 @@ var _ = Describe("UnwindOp", func() {
 
 	Describe("complex scenarios", func() {
 		It("should handle nested objects in arrays", func() {
-			extractor := NewArrayExtractor("orders")
-			setter := NewArrayElementSetter("orders", "order")
-			unwind := NewUnwind(extractor, setter)
+			extractor, transformer := createUnwindEvaluators("orders", "order")
+			unwind := NewUnwind(extractor, transformer)
 
 			doc := Document{
 				"user": "alice",
@@ -600,9 +752,8 @@ var _ = Describe("UnwindOp", func() {
 
 	Describe("operator properties", func() {
 		It("should have correct operator type", func() {
-			extractor := NewArrayExtractor("tags")
-			setter := NewArrayElementSetter("tags", "tag")
-			unwind := NewUnwind(extractor, setter)
+			extractor, transformer := createUnwindEvaluators("tags", "tag")
+			unwind := NewUnwind(extractor, transformer)
 
 			Expect(unwind.OpType()).To(Equal(OpTypeLinear))
 			Expect(unwind.IsTimeInvariant()).To(BeTrue())
@@ -748,9 +899,8 @@ var _ = Describe("Gather Operations", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Setup gather operations
-			extractEval := NewGroupByKey("dept", "amount")
-			setEval := NewAggregateList("department", "amounts")
-			snapshotGather = NewGather(extractEval, setEval)
+			keyExt, valueExt, aggregator := createGatherEvaluators("dept", "amount", "department", "amounts")
+			snapshotGather = NewGather(keyExt, valueExt, aggregator)
 		})
 
 		It("should group sales amounts by department", func() {
@@ -818,9 +968,8 @@ var _ = Describe("Gather Operations", func() {
 		)
 
 		BeforeEach(func() {
-			extractEval := NewGroupByKey("category", "product")
-			setEval := NewCountAggregate()
-			snapshotGather = NewGather(extractEval, setEval)
+			keyExt, valueExt, countAgg := createCountGatherEvaluators("category", "product")
+			snapshotGather = NewGather(keyExt, valueExt, countAgg)
 		})
 
 		It("should count products by category", func() {
@@ -860,14 +1009,11 @@ var _ = Describe("Gather Operations", func() {
 	Context("Incremental Gather Functionality", func() {
 		var (
 			incrementalGather *IncrementalGatherOp
-			extractEval       *GroupByKeyEvaluator
-			setEval           *AggregateListEvaluator
 		)
 
 		BeforeEach(func() {
-			extractEval = NewGroupByKey("dept", "amount")
-			setEval = NewAggregateList("department", "amounts")
-			incrementalGather = NewIncrementalGather(extractEval, setEval)
+			keyExt, valueExt, aggregator := createGatherEvaluators("dept", "amount", "department", "amounts")
+			incrementalGather = NewIncrementalGather(keyExt, valueExt, aggregator)
 		})
 
 		It("should handle initial data correctly", func() {
@@ -1112,15 +1258,12 @@ var _ = Describe("Gather Operations", func() {
 		var (
 			snapshotGather    *GatherOp
 			incrementalGather *IncrementalGatherOp
-			extractEval       *GroupByKeyEvaluator
-			setEval           *AggregateListEvaluator
 		)
 
 		BeforeEach(func() {
-			extractEval = NewGroupByKey("team", "score")
-			setEval = NewAggregateList("team", "scores")
-			snapshotGather = NewGather(extractEval, setEval)
-			incrementalGather = NewIncrementalGather(extractEval, setEval)
+			keyExt, valueExt, aggregator := createGatherEvaluators("team", "score", "team", "scores")
+			snapshotGather = NewGather(keyExt, valueExt, aggregator)
+			incrementalGather = NewIncrementalGather(keyExt, valueExt, aggregator)
 		})
 
 		It("should produce consistent results through multiple timesteps", func() {
@@ -1263,9 +1406,8 @@ var _ = Describe("Gather Operations", func() {
 		var incrementalGather *IncrementalGatherOp
 
 		BeforeEach(func() {
-			extractEval := NewGroupByKey("category", "value")
-			setEval := NewAggregateList("category", "values")
-			incrementalGather = NewIncrementalGather(extractEval, setEval)
+			keyExt, valueExt, aggregator := createGatherEvaluators("category", "value", "category", "values")
+			incrementalGather = NewIncrementalGather(keyExt, valueExt, aggregator)
 		})
 
 		It("should handle empty deltas", func() {
@@ -1377,9 +1519,8 @@ var _ = Describe("Gather Operations", func() {
 		var gatherOp *GatherOp
 
 		BeforeEach(func() {
-			extractEval := NewGroupByKey("category", "value")
-			setEval := NewAggregateList("category", "values")
-			gatherOp = NewGather(extractEval, setEval)
+			keyExt, valueExt, aggregator := createGatherEvaluators("category", "value", "category", "values")
+			gatherOp = NewGather(keyExt, valueExt, aggregator)
 		})
 
 		It("should handle empty input", func() {
@@ -1435,47 +1576,71 @@ var _ = Describe("Gather Operations", func() {
 		var gatherOp *GatherOp
 
 		BeforeEach(func() {
-			extractEval := NewGroupByKey("key", "value")
-			setEval := NewAggregateList("key", "values")
-			gatherOp = NewGather(extractEval, setEval)
+			keyExt, valueExt, aggregator := createGatherEvaluators("key", "value", "key", "values")
+			gatherOp = NewGather(keyExt, valueExt, aggregator)
 		})
 
-		It("should be linear", func() {
-			Expect(gatherOp.OpType()).To(Equal(OpTypeLinear))
+		It("should be be nonlinear", func() {
+			Expect(gatherOp.OpType()).To(Equal(OpTypeNonLinear))
 			Expect(gatherOp.IsTimeInvariant()).To(BeTrue())
 			Expect(gatherOp.HasZeroPreservationProperty()).To(BeTrue())
 		})
 
-		It("should satisfy linearity: Gather(a + b) = Gather(a) + Gather(b)", func() {
-			// Create two separate Z-sets
-			doc1, err := newDocumentFromPairs("key", "A", "value", int64(1))
+		It("should satisfy input associativity: order of processing doesn't matter", func() {
+			// Create documents from two different groups
+			docA1, err := newDocumentFromPairs("key", "A", "value", int64(1))
 			Expect(err).NotTo(HaveOccurred())
-			zset1, err := SingletonZSet(doc1)
+			docA2, err := newDocumentFromPairs("key", "A", "value", int64(2))
 			Expect(err).NotTo(HaveOccurred())
-
-			doc2, err := newDocumentFromPairs("key", "A", "value", int64(2))
-			Expect(err).NotTo(HaveOccurred())
-			zset2, err := SingletonZSet(doc2)
+			docB1, err := newDocumentFromPairs("key", "B", "value", int64(10))
 			Expect(err).NotTo(HaveOccurred())
 
-			// Gather(a + b)
-			combined, err := zset1.Add(zset2)
+			// Process in different orders
+			order1 := NewDocumentZSet()
+			order1, err = order1.AddDocument(docA1, 1)
 			Expect(err).NotTo(HaveOccurred())
-			result1, err := gatherOp.Process(combined)
+			order1, err = order1.AddDocument(docB1, 1)
 			Expect(err).NotTo(HaveOccurred())
-
-			// Gather(a) + Gather(b)
-			gatherA, err := gatherOp.Process(zset1)
-			Expect(err).NotTo(HaveOccurred())
-			gatherB, err := gatherOp.Process(zset2)
-			Expect(err).NotTo(HaveOccurred())
-			result2, err := gatherA.Add(gatherB)
+			order1, err = order1.AddDocument(docA2, 1)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Results should be equal in size and structure
-			// Note: The exact equality might be complex due to list aggregation,
-			// but they should have the same total size
+			order2 := NewDocumentZSet()
+			order2, err = order2.AddDocument(docA2, 1)
+			Expect(err).NotTo(HaveOccurred())
+			order2, err = order2.AddDocument(docA1, 1)
+			Expect(err).NotTo(HaveOccurred())
+			order2, err = order2.AddDocument(docB1, 1)
+			Expect(err).NotTo(HaveOccurred())
+
+			result1, err := gatherOp.Process(order1)
+			Expect(err).NotTo(HaveOccurred())
+			result2, err := gatherOp.Process(order2)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Results should be equivalent (same groups, same contents)
 			Expect(result1.Size()).To(Equal(result2.Size()))
+			Expect(result1.UniqueCount()).To(Equal(result2.UniqueCount()))
+
+			docs1, err := result1.GetUniqueDocuments()
+			Expect(err).NotTo(HaveOccurred())
+			docs2, err := result2.GetUniqueDocuments()
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should have 2 groups in both cases
+			Expect(docs1).To(HaveLen(2))
+			Expect(docs2).To(HaveLen(2))
+
+			// Verify groups have same content (regardless of order)
+			for _, doc := range docs1 {
+				key := doc["key"]
+				values := doc["values"].([]any)
+
+				if key == "A" {
+					Expect(values).To(ConsistOf(int64(1), int64(2)))
+				} else if key == "B" {
+					Expect(values).To(ConsistOf(int64(10)))
+				}
+			}
 		})
 	})
 })

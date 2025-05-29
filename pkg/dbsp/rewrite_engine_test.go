@@ -92,9 +92,8 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			graph.AddInput(NewInput("sales"))
 
 			// Add a gather operation (non-incremental)
-			extractEval := NewGroupByKey("dept", "amount")
-			setEval := NewAggregateList("department", "amounts")
-			gatherID := graph.AddToChain(NewGather(extractEval, setEval))
+			keyExt, valueExt, aggregator := createGatherEvaluators("dept", "amount", "department", "amounts")
+			gatherID := graph.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
 			// Verify it's not incremental initially
 			gatherNode := graph.GetNode(gatherID)

@@ -244,7 +244,7 @@ var _ = Describe("Binary Join Operators", func() {
 
 			// Track both approaches through the timeline
 			for t := 1; t < len(leftSnapshots); t++ {
-				fmt.Printf("\n=== Timestep %d ===\n", t)
+				// fmt.Printf("\n=== Timestep %d ===\n", t)
 
 				// Snapshot approach: join current snapshots
 				snapshotResult, err := snapshotJoin.Process(leftSnapshots[t], rightSnapshots[t])
@@ -254,8 +254,8 @@ var _ = Describe("Binary Join Operators", func() {
 				incrementalResult, err := incrementalJoin.Process(leftDeltas[t], rightDeltas[t])
 				Expect(err).NotTo(HaveOccurred())
 
-				fmt.Printf("Snapshot result size: %d, Incremental result size: %d\n",
-					snapshotResult.Size(), incrementalResult.Size())
+				// fmt.Printf("Snapshot result size: %d, Incremental result size: %d\n",
+				// 	snapshotResult.Size(), incrementalResult.Size())
 
 				// Add incremental delta to cumulative snapshot
 				cumulativeSnapshot, err = cumulativeSnapshot.Add(incrementalResult)
@@ -288,8 +288,8 @@ var _ = Describe("Binary Join Operators", func() {
 					}
 				}
 
-				fmt.Printf("✓ Timestep %d: Snapshot=%d docs, Incremental delta=%d docs, Cumulative=%d docs\n",
-					t, snapshotResult.Size(), incrementalResult.Size(), cumulativeSnapshot.Size())
+				// fmt.Printf("✓ Timestep %d: Snapshot=%d docs, Incremental delta=%d docs, Cumulative=%d docs\n",
+				// 	t, snapshotResult.Size(), incrementalResult.Size(), cumulativeSnapshot.Size())
 			}
 		})
 
@@ -297,25 +297,25 @@ var _ = Describe("Binary Join Operators", func() {
 			// T1: Should have Alice-WebApp join
 			incrementalResult, err := incrementalJoin.Process(leftDeltas[1], rightDeltas[1])
 			Expect(err).NotTo(HaveOccurred())
-			fmt.Printf("Incremental result in timestep 1: %s\n", incrementalResult.String())
+			// fmt.Printf("Incremental result in timestep 1: %s\n", incrementalResult.String())
 			Expect(incrementalResult.Size()).To(Equal(1))
 
 			// T2: Should add Bob-MobileApp join
 			incrementalResult, err = incrementalJoin.Process(leftDeltas[2], rightDeltas[2])
 			Expect(err).NotTo(HaveOccurred())
-			fmt.Printf("Incremental result in timestep 2: %s\n", incrementalResult.String())
+			// fmt.Printf("Incremental result in timestep 2: %s\n", incrementalResult.String())
 			Expect(incrementalResult.Size()).To(Equal(1)) // Only the new join
 
 			// T3: Should have no new joins (Charlie has no matching project)
 			incrementalResult, err = incrementalJoin.Process(leftDeltas[3], rightDeltas[3])
 			Expect(err).NotTo(HaveOccurred())
-			fmt.Printf("Incremental result in timestep 3: %s\n", incrementalResult.String())
+			// fmt.Printf("Incremental result in timestep 3: %s\n", incrementalResult.String())
 			Expect(incrementalResult.IsZero()).To(BeTrue())
 
 			// T4: Should remove Alice-WebApp join
 			incrementalResult, err = incrementalJoin.Process(leftDeltas[4], rightDeltas[4])
 			Expect(err).NotTo(HaveOccurred())
-			fmt.Printf("Incremental result in timestep 4: %s\n", incrementalResult.String())
+			// fmt.Printf("Incremental result in timestep 4: %s\n", incrementalResult.String())
 			Expect(incrementalResult.TotalSize()).To(Equal(1)) // need negative multiplicities
 
 			// The result should be a negative (removal) of the Alice-WebApp join
@@ -715,9 +715,9 @@ var _ = Describe("N-ary Join Operators", func() {
 			result, err := snapshotJoin.Process(zset1, zset2, zset3)
 			Expect(err).NotTo(HaveOccurred())
 
-			fmt.Printf("Snapshot 3-way join result:\n")
-			fmt.Printf("  Size: %d\n", result.Size())
-			fmt.Printf("  UniqueCount: %d\n", result.UniqueCount())
+			// fmt.Printf("Snapshot 3-way join result:\n")
+			// fmt.Printf("  Size: %d\n", result.Size())
+			// fmt.Printf("  UniqueCount: %d\n", result.UniqueCount())
 
 			// Should be exactly 1 join with multiplicity 1×1×1 = 1
 			Expect(result.Size()).To(Equal(1), "Expected exactly 1 joined document")
@@ -729,7 +729,7 @@ var _ = Describe("N-ary Join Operators", func() {
 
 			joinedDoc := docs[0]
 			Expect(joinedDoc["join_key"]).To(Equal(int64(1)))
-			fmt.Printf("  Joined doc: %+v\n", joinedDoc)
+			// fmt.Printf("  Joined doc: %+v\n", joinedDoc)
 		})
 
 		It("should handle 3-way join with no matches", func() {
@@ -748,16 +748,16 @@ var _ = Describe("N-ary Join Operators", func() {
 			result, err := snapshotJoin.Process(zset1, zset2, zset3)
 			Expect(err).NotTo(HaveOccurred())
 
-			fmt.Printf("No-match 3-way join result:\n")
-			fmt.Printf("  Size: %d\n", result.Size())
-			fmt.Printf("  IsZero: %v\n", result.IsZero())
+			// fmt.Printf("No-match 3-way join result:\n")
+			// fmt.Printf("  Size: %d\n", result.Size())
+			// fmt.Printf("  IsZero: %v\n", result.IsZero())
 
 			// Should be empty
 			Expect(result.IsZero()).To(BeTrue(), "Expected no joins when IDs don't match")
 		})
 
 		It("should test incremental 3-way step by step", func() {
-			fmt.Printf("\n=== INCREMENTAL 3-WAY JOIN DEBUG ===\n")
+			// fmt.Printf("\n=== INCREMENTAL 3-WAY JOIN DEBUG ===\n")
 
 			// Reset to clean state
 			incrementalJoin = NewIncrementalJoin(evaluator, 3)
@@ -774,18 +774,18 @@ var _ = Describe("N-ary Join Operators", func() {
 			delta3, err := SingletonZSet(doc3)
 			Expect(err).NotTo(HaveOccurred())
 
-			fmt.Printf("Input deltas:\n")
-			fmt.Printf("  Delta1 size: %d\n", delta1.Size())
-			fmt.Printf("  Delta2 size: %d\n", delta2.Size())
-			fmt.Printf("  Delta3 size: %d\n", delta3.Size())
+			// fmt.Printf("Input deltas:\n")
+			// fmt.Printf("  Delta1 size: %d\n", delta1.Size())
+			// fmt.Printf("  Delta2 size: %d\n", delta2.Size())
+			// fmt.Printf("  Delta3 size: %d\n", delta3.Size())
 
 			// Process with incremental join
 			result, err := incrementalJoin.Process(delta1, delta2, delta3)
 			Expect(err).NotTo(HaveOccurred())
 
-			fmt.Printf("Incremental result:\n")
-			fmt.Printf("  Size: %d\n", result.Size())
-			fmt.Printf("  UniqueCount: %d\n", result.UniqueCount())
+			// fmt.Printf("Incremental result:\n")
+			// fmt.Printf("  Size: %d\n", result.Size())
+			// fmt.Printf("  UniqueCount: %d\n", result.UniqueCount())
 
 			// THIS IS WHERE THE BUG SHOWS UP
 			// Expected: 1 (same as snapshot)
@@ -835,9 +835,9 @@ var _ = Describe("N-ary Join Operators", func() {
 			binaryResult, err := binaryJoin.Process(zset1, zset2)
 			Expect(err).NotTo(HaveOccurred())
 
-			fmt.Printf("Binary join (A ⋈ B):\n")
-			fmt.Printf("  Size: %d\n", binaryResult.Size())
-			fmt.Printf("  UniqueCount: %d\n", binaryResult.UniqueCount())
+			// fmt.Printf("Binary join (A ⋈ B):\n")
+			// fmt.Printf("  Size: %d\n", binaryResult.Size())
+			// fmt.Printf("  UniqueCount: %d\n", binaryResult.UniqueCount())
 
 			// This should definitely be 1
 			Expect(binaryResult.Size()).To(Equal(1))
@@ -862,16 +862,16 @@ var _ = Describe("N-ary Join Operators", func() {
 
 			inputs := []*DocumentZSet{input1, input2, input3}
 
-			fmt.Printf("\nCartesian Product Debug:\n")
-			fmt.Printf("Input 0: %d documents\n", input1.Size())
-			fmt.Printf("Input 1: %d documents\n", input2.Size())
-			fmt.Printf("Input 2: %d documents\n", input3.Size())
+			// fmt.Printf("\nCartesian Product Debug:\n")
+			// fmt.Printf("Input 0: %d documents\n", input1.Size())
+			// fmt.Printf("Input 1: %d documents\n", input2.Size())
+			// fmt.Printf("Input 2: %d documents\n", input3.Size())
 
 			// Let's manually call the cartesian join function
 			result, err := cartesianJoin(evaluator, 3, inputs, 0, make([]Document, 3), make([]int, 3))
 			Expect(err).NotTo(HaveOccurred())
 
-			fmt.Printf("Cartesian result: size=%d, unique=%d\n", result.Size(), result.UniqueCount())
+			// fmt.Printf("Cartesian result: size=%d, unique=%d\n", result.Size(), result.UniqueCount())
 
 			if result.Size() > 1 {
 				docs, err := result.GetDocuments()
@@ -896,27 +896,28 @@ var _ = Describe("N-ary Join Operators", func() {
 			delta, err := SingletonZSet(doc)
 			Expect(err).NotTo(HaveOccurred())
 
-			fmt.Printf("\nIncremental state inspection:\n")
-			fmt.Printf("Initial state - prevStates length: %d\n", len(incrementalJoin.prevStates))
+			// fmt.Printf("\nIncremental state inspection:\n")
+			// fmt.Printf("Initial state - prevStates length: %d\n", len(incrementalJoin.prevStates))
 
-			// Check initial state
-			for i, state := range incrementalJoin.prevStates {
-				if state == nil {
-					fmt.Printf("  prevStates[%d]: nil\n", i)
-				} else {
-					fmt.Printf("  prevStates[%d]: size=%d\n", i, state.Size())
-				}
-			}
+			// // Check initial state
+			// for i, state := range incrementalJoin.prevStates {
+			// 	if state == nil {
+			// 		fmt.Printf("  prevStates[%d]: nil\n", i)
+			// 	} else {
+			// 		fmt.Printf("  prevStates[%d]: size=%d\n", i, state.Size())
+			// 	}
+			// }
 
 			// Process first call
-			result, err := incrementalJoin.Process(delta, NewDocumentZSet(), NewDocumentZSet())
+			// result, err := incrementalJoin.Process(delta, NewDocumentZSet(), NewDocumentZSet())
+			_, err = incrementalJoin.Process(delta, NewDocumentZSet(), NewDocumentZSet())
 			Expect(err).NotTo(HaveOccurred())
 
-			fmt.Printf("After first call:\n")
-			fmt.Printf("  Result size: %d\n", result.Size())
-			for i, state := range incrementalJoin.prevStates {
-				fmt.Printf("  prevStates[%d]: size=%d\n", i, state.Size())
-			}
+			// fmt.Printf("After first call:\n")
+			// fmt.Printf("  Result size: %d\n", result.Size())
+			// for i, state := range incrementalJoin.prevStates {
+			// 	fmt.Printf("  prevStates[%d]: size=%d\n", i, state.Size())
+			// }
 		})
 	})
 
@@ -963,8 +964,8 @@ var _ = Describe("N-ary Join Operators", func() {
 			incrementalResult, err := incrementalJoin.Process(userDelta1, projDelta1, deptDelta1)
 			Expect(err).NotTo(HaveOccurred())
 
-			fmt.Printf("Snapshot result in timestep 1: %s\n", snapshotResult.String())
-			fmt.Printf("Incremental result in timestep 1: %s\n", incrementalResult.String())
+			// fmt.Printf("Snapshot result in timestep 1: %s\n", snapshotResult.String())
+			// fmt.Printf("Incremental result in timestep 1: %s\n", incrementalResult.String())
 
 			// Add incremental delta to cumulative snapshot
 			cumulativeSnapshot, err = cumulativeSnapshot.Add(incrementalResult)

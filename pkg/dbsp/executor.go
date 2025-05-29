@@ -55,10 +55,10 @@ func (e *LinearChainExecutor) ProcessDelta(deltaInputs map[string]*DocumentZSet)
 			return nil, fmt.Errorf("join operation %s failed: %w", joinNode.Op.Name(), err)
 		}
 
-		fmt.Printf("Join %s: %d -> %d documents\n",
-			joinNode.Op.Name(),
-			e.sumInputSizes(joinInputs),
-			currentResult.Size())
+		// fmt.Printf("Join %s: %d -> %d documents\n",
+		// 	joinNode.Op.Name(),
+		// 	e.sumInputSizes(joinInputs),
+		// 	currentResult.Size())
 	} else {
 		// Single input, no join needed
 		currentResult = deltaInputs[e.graph.inputs[0]]
@@ -68,14 +68,14 @@ func (e *LinearChainExecutor) ProcessDelta(deltaInputs map[string]*DocumentZSet)
 	for i, nodeID := range e.graph.chain {
 		node := e.graph.nodes[nodeID]
 
-		previousSize := currentResult.Size()
+		// previousSize := currentResult.Size()
 		currentResult, err = node.Op.Process(currentResult)
 		if err != nil {
 			return nil, fmt.Errorf("operation %s (step %d) failed: %w", node.Op.Name(), i, err)
 		}
 
-		fmt.Printf("Step %d - %s: %d -> %d documents\n",
-			i, node.Op.Name(), previousSize, currentResult.Size())
+		// fmt.Printf("Step %d - %s: %d -> %d documents\n",
+		// 	i, node.Op.Name(), previousSize, currentResult.Size())
 	}
 
 	return currentResult, nil
@@ -277,7 +277,7 @@ func NewIncrementalExecutionContext(executor *LinearChainExecutor) *IncrementalE
 
 // ProcessDelta processes one delta and updates cumulative state
 func (ctx *IncrementalExecutionContext) ProcessDelta(deltaInputs map[string]*DocumentZSet) (*DocumentZSet, error) {
-	fmt.Printf("\n=== Incremental Context: Timestep %d ===\n", ctx.timestep)
+	// fmt.Printf("\n=== Incremental Context: Timestep %d ===\n", ctx.timestep)
 
 	// Update cumulative inputs
 	for inputID, delta := range deltaInputs {
@@ -304,8 +304,8 @@ func (ctx *IncrementalExecutionContext) ProcessDelta(deltaInputs map[string]*Doc
 		return nil, fmt.Errorf("failed to update cumulative output: %w", err)
 	}
 
-	fmt.Printf("Timestep %d: processed delta (%d docs) -> cumulative (%d docs)\n",
-		ctx.timestep, deltaOutput.Size(), ctx.cumulativeOutput.Size())
+	// fmt.Printf("Timestep %d: processed delta (%d docs) -> cumulative (%d docs)\n",
+	// 	ctx.timestep, deltaOutput.Size(), ctx.cumulativeOutput.Size())
 
 	ctx.timestep++
 	return deltaOutput, nil

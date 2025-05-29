@@ -4,9 +4,21 @@ import (
 	"fmt"
 )
 
-// Evaluator is a query that knows how to evaluate itself on a given document.
+// Document transformation (current use).
 type Evaluator interface {
 	Evaluate(Document) ([]Document, error)
+	fmt.Stringer
+}
+
+// Extract values from documents.
+type Extractor interface {
+	Extract(Document) (any, error)
+	fmt.Stringer
+}
+
+// Transform documents by setting/replacing fields.
+type Transformer interface {
+	Transform(doc Document, value any) (Document, error)
 	fmt.Stringer
 }
 
@@ -67,7 +79,7 @@ func IncrementalizeOp(in Operator) (Operator, bool) {
 		return op, false
 	case *GatherOp:
 		// Gather, although theoretically linear,  needs a specialized incremental version for efficiency
-		return NewIncrementalGather(op.extractEval, op.setEval), true
+		return NewIncrementalGather(op.keyExtractor, op.valueExtractor, op.aggregator), true
 	case *BinaryJoinOp:
 		// Join ops need incrementalization
 		return NewIncrementalBinaryJoin(op.eval), true

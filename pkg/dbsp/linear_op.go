@@ -1,7 +1,6 @@
 package dbsp
 
 import (
-	"errors"
 	"fmt"
 )
 
@@ -94,24 +93,19 @@ func (n *SelectionOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 // UnwindOp flattens arrays within documents.
 type UnwindOp struct {
 	BaseOp
-	// Returns the array to unwind in the "list" elem of a doc.
-	extractEval Evaluator
-	// Sets the current array element (given in the "element" key of the input doc) back into
-	// the document (given in "document").
-	setEval Evaluator
+	// Extracts the array to unwind from the document
+	arrayExtractor Extractor
+	// Transforms the document by replacing array field with single element
+	transformer Transformer
 }
 
-func NewUnwind(extractEval, setEval Evaluator) *UnwindOp {
+func NewUnwind(arrayExtractor Extractor, transformer Transformer) *UnwindOp {
 	return &UnwindOp{
-		BaseOp:      NewBaseOp("unwind", 1),
-		extractEval: extractEval,
-		setEval:     setEval,
+		BaseOp:         NewBaseOp("unwind", 1),
+		arrayExtractor: arrayExtractor,
+		transformer:    transformer,
 	}
 }
-
-func (op *UnwindOp) OpType() OperatorType              { return OpTypeLinear }
-func (op *UnwindOp) IsTimeInvariant() bool             { return true }
-func (op *UnwindOp) HasZeroPreservationProperty() bool { return true }
 
 func (op *UnwindOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := op.validateInputs(inputs); err != nil {
@@ -125,49 +119,32 @@ func (op *UnwindOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 		doc := input.docs[key]
 
 		// Extract the array to unwind
-		extractedDocs, err := op.extractEval.Evaluate(doc)
+		arrayValue, err := op.arrayExtractor.Extract(doc)
 		if err != nil {
-			return nil, fmt.Errorf("extract evaluation failed: %w", err)
+			return nil, fmt.Errorf("array extraction failed: %w", err)
 		}
 
-		for _, extractedDoc := range extractedDocs {
-			arrayValue, exists := extractedDoc["list"] // or whatever key you use
-			if !exists {
-				continue
+		if arrayValue == nil {
+			continue // No array field found, skip document
+		}
+
+		arraySlice, ok := arrayValue.([]any)
+		if !ok {
+			// Not an array - skip gracefully
+			continue
+		}
+
+		// Create one document for each array element
+		for _, element := range arraySlice {
+			// Transform document with current element
+			transformedDoc, err := op.transformer.Transform(doc, element)
+			if err != nil {
+				return nil, fmt.Errorf("document transformation failed: %w", err)
 			}
 
-			arraySlice, ok := arrayValue.([]any)
-			if !ok {
-				// Not an array - skip or handle as needed
-				continue
-			}
-
-			// Create one document for each array element
-			for _, element := range arraySlice {
-				// Deep copy the original document
-				docCopy, err := deepCopy(doc)
-				if err != nil {
-					return nil, fmt.Errorf("failed to copy document: %w", err)
-				}
-
-				// Create input for setter: original doc + current element
-				setterInput := Document{
-					"document": docCopy,
-					"element":  element,
-				}
-
-				// Apply setter to update document with current element
-				updatedDocs, err := op.setEval.Evaluate(setterInput)
-				if err != nil {
-					return nil, fmt.Errorf("setter evaluation failed: %w", err)
-				}
-
-				// Add all updated documents with original multiplicity
-				for _, updatedDoc := range updatedDocs {
-					if err = result.AddDocumentMutate(updatedDoc, multiplicity); err != nil {
-						return nil, fmt.Errorf("failed to add unwound document: %w", err)
-					}
-				}
+			// Add transformed document with original multiplicity
+			if err = result.AddDocumentMutate(transformedDoc, multiplicity); err != nil {
+				return nil, fmt.Errorf("failed to add unwound document: %w", err)
 			}
 		}
 	}
@@ -175,24 +152,26 @@ func (op *UnwindOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	return result, nil
 }
 
+func (op *UnwindOp) OpType() OperatorType              { return OpTypeLinear }
+func (op *UnwindOp) IsTimeInvariant() bool             { return true }
+func (op *UnwindOp) HasZeroPreservationProperty() bool { return true }
+
 // Snapshot Gather Operation (stateless)
 type GatherOp struct {
 	BaseOp
-	extractEval Evaluator // Returns keyValueDoc with "key" and "value" fields
-	setEval     Evaluator // Sets aggregated values list in a document that is passed in as the key
+	keyExtractor   Extractor   // Extracts grouping key from document
+	valueExtractor Extractor   // Extracts value to aggregate from document
+	aggregator     Transformer // Creates result document from key and aggregated values
 }
 
-func NewGather(extractEval, setEval Evaluator) *GatherOp {
+func NewGather(keyExtractor, valueExtractor Extractor, aggregator Transformer) *GatherOp {
 	return &GatherOp{
-		BaseOp:      NewBaseOp("gather", 1),
-		extractEval: extractEval,
-		setEval:     setEval,
+		BaseOp:         NewBaseOp("gather", 1),
+		keyExtractor:   keyExtractor,
+		valueExtractor: valueExtractor,
+		aggregator:     aggregator,
 	}
 }
-
-func (op *GatherOp) OpType() OperatorType              { return OpTypeLinear }
-func (op *GatherOp) IsTimeInvariant() bool             { return true }
-func (op *GatherOp) HasZeroPreservationProperty() bool { return true }
 
 func (op *GatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := op.validateInputs(inputs); err != nil {
@@ -202,112 +181,107 @@ func (op *GatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	input := inputs[0]
 
 	// Step 1: Group documents by key
-	groups := make(map[string][]*GroupedDocument)
-	originalKeys := make(map[string]any) // Map from JSON key to original value
+	groups := make(map[string]*GroupData)
 
 	for key, multiplicity := range input.counts {
 		doc := input.docs[key]
 
-		// Extract key and value using extractEval
-		keyValueDocs, err := op.extractEval.Evaluate(doc)
+		// Extract key and value
+		groupKey, err := op.keyExtractor.Extract(doc)
 		if err != nil {
-			return nil, fmt.Errorf("extract evaluation failed: %w", err)
+			return nil, fmt.Errorf("key extraction failed: %w", err)
+		}
+		if groupKey == nil {
+			continue // Skip documents without key
 		}
 
-		// Process each keyValueDoc (usually just one)
-		for _, kvDoc := range keyValueDocs {
-			originalKey, keyOk := kvDoc["key"]
-			originalValue, valOk := kvDoc["value"]
-			if !keyOk || !valOk {
-				return nil, errors.New("expected extract evaluation to return a key-value doc")
+		value, err := op.valueExtractor.Extract(doc)
+		if err != nil {
+			return nil, fmt.Errorf("value extraction failed: %w", err)
+		}
+		if value == nil {
+			continue // Skip documents without value
+		}
+
+		// Create JSON string for map key (allows any type as key)
+		keyForMap, err := computeJSONAny(groupKey)
+		if err != nil {
+			return nil, err
+		}
+
+		// Initialize or update group
+		if groups[keyForMap] == nil {
+			groups[keyForMap] = &GroupData{
+				Key:    groupKey,
+				Values: make([]any, 0),
 			}
+		}
 
-			// Create JSON string for map key (grouping) - this ensures any type can be a map key
-			keyForMap, err := computeJSONAny(originalKey)
-			if err != nil {
-				return nil, err
-			}
-
-			// Store the original key value for later use in results
-			originalKeys[keyForMap] = originalKey
-
-			groups[keyForMap] = append(groups[keyForMap], &GroupedDocument{
-				Original:     doc,
-				Value:        originalValue, // Store original value directly, not JSON-serialized
-				Multiplicity: multiplicity,
-			})
+		// Add values (weighted by multiplicity)
+		for i := 0; i < multiplicity; i++ {
+			groups[keyForMap].Values = append(groups[keyForMap].Values, value)
 		}
 	}
 
 	// Step 2: Aggregate each group
 	result := NewDocumentZSet()
 
-	for groupKey, groupDocs := range groups {
-		// Collect all values from this group
-		var allValues []any
-		totalMultiplicity := 0
-
-		for _, groupedDoc := range groupDocs {
-			// Add values (weighted by multiplicity)
-			for i := 0; i < groupedDoc.Multiplicity; i++ {
-				allValues = append(allValues, groupedDoc.Value)
-			}
-			totalMultiplicity += groupedDoc.Multiplicity
-		}
-
-		// Create keyValueDoc for setter - use ORIGINAL key value, not JSON string
-		setterInput := Document{
-			"key":   originalKeys[groupKey], // This preserves the original key without quotes
-			"value": allValues,              // List of all original values
-		}
-
-		// Use setter evaluator to create result documents
-		resultDocs, err := op.setEval.Evaluate(setterInput)
+	for _, groupData := range groups {
+		// Use aggregator to create result document
+		resultDoc, err := op.aggregator.Transform(Document{}, &AggregateInput{
+			Key:    groupData.Key,
+			Values: groupData.Values,
+		})
 		if err != nil {
-			return nil, fmt.Errorf("setter evaluation failed: %w", err)
+			return nil, fmt.Errorf("aggregation failed: %w", err)
 		}
 
-		// Add result documents with total multiplicity
-		for _, resultDoc := range resultDocs {
-			if err = result.AddDocumentMutate(resultDoc, totalMultiplicity); err != nil {
-				return nil, fmt.Errorf("failed to add result document: %w", err)
-			}
+		// Add result document (multiplicity is already incorporated in values)
+		if err = result.AddDocumentMutate(resultDoc, 1); err != nil {
+			return nil, fmt.Errorf("failed to add result document: %w", err)
 		}
 	}
 
 	return result, nil
 }
 
-// Helper struct for grouping
-type GroupedDocument struct {
-	Original     Document
-	Value        any // The extracted value for this document
-	Multiplicity int
+// Helper structs
+type GroupData struct {
+	Key    any
+	Values []any
 }
+
+type AggregateInput struct {
+	Key    any
+	Values []any
+}
+
+func (op *GatherOp) OpType() OperatorType              { return OpTypeNonLinear }
+func (op *GatherOp) IsTimeInvariant() bool             { return true }
+func (op *GatherOp) HasZeroPreservationProperty() bool { return true }
 
 // Incremental Gather Operation (stateful)
 // Implements optimized gather^Δ with O(|delta|) complexity
+// Incremental Gather Operation (stateful)
 type IncrementalGatherOp struct {
 	BaseOp
-	extractEval Evaluator
-	setEval     Evaluator
+	keyExtractor   Extractor
+	valueExtractor Extractor
+	aggregator     Transformer
 
 	// Optimized state: track current groups efficiently
-	currentGroups map[string][]any // groupKey -> list of values in this group
+	currentGroups map[string]*GroupData // groupKey -> current group data
 }
 
-func NewIncrementalGather(extractEval, setEval Evaluator) *IncrementalGatherOp {
+func NewIncrementalGather(keyExtractor, valueExtractor Extractor, aggregator Transformer) *IncrementalGatherOp {
 	return &IncrementalGatherOp{
-		BaseOp:        NewBaseOp("gather^Δ", 1),
-		extractEval:   extractEval,
-		setEval:       setEval,
-		currentGroups: make(map[string][]any),
+		BaseOp:         NewBaseOp("gather^Δ", 1),
+		keyExtractor:   keyExtractor,
+		valueExtractor: valueExtractor,
+		aggregator:     aggregator,
+		currentGroups:  make(map[string]*GroupData),
 	}
 }
-
-func (op *IncrementalGatherOp) OpType() OperatorType              { return OpTypeLinear }
-func (op *IncrementalGatherOp) IsTimeInvariant() bool             { return true }
-func (op *IncrementalGatherOp) HasZeroPreservationProperty() bool { return true }
 
 func (op *IncrementalGatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := op.validateInputs(inputs); err != nil {
@@ -315,103 +289,114 @@ func (op *IncrementalGatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, 
 	}
 
 	input := inputs[0]
-
-	// OPTIMIZED: Only process the delta documents, not the entire snapshot
 	result := NewDocumentZSet()
 
-	// Step 1: Process each document in the delta
+	// Process each document in the delta
 	for key, multiplicity := range input.counts {
 		doc := input.docs[key]
 
-		// Extract key and value using extractEval
-		keyValueDocs, err := op.extractEval.Evaluate(doc)
+		// Extract key and value
+		groupKey, err := op.keyExtractor.Extract(doc)
 		if err != nil {
-			return nil, fmt.Errorf("extract evaluation failed: %w", err)
+			return nil, fmt.Errorf("key extraction failed: %w", err)
+		}
+		if groupKey == nil {
+			continue
 		}
 
-		for _, kvDoc := range keyValueDocs {
-			originalKey := kvDoc["key"] // Keep original key value
-			value := kvDoc["value"]     // Keep original value
+		value, err := op.valueExtractor.Extract(doc)
+		if err != nil {
+			return nil, fmt.Errorf("value extraction failed: %w", err)
+		}
+		if value == nil {
+			continue
+		}
 
-			// Create string key for map grouping - this allows any type to be used as map key
-			groupKey, err := computeJSONAny(originalKey)
+		// Create string key for map grouping
+		groupKeyStr, err := computeJSONAny(groupKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compute group key: %w", err)
+		}
+
+		// Get current group data
+		currentGroup := op.currentGroups[groupKeyStr]
+		var oldValues []any
+		if currentGroup != nil {
+			oldValues = make([]any, len(currentGroup.Values))
+			copy(oldValues, currentGroup.Values)
+		}
+
+		// Calculate old result for this group (for delta calculation)
+		var oldResultDoc Document
+		if len(oldValues) > 0 {
+			oldResultDoc, err = op.aggregator.Transform(Document{}, &AggregateInput{
+				Key:    groupKey,
+				Values: oldValues,
+			})
 			if err != nil {
-				return nil, fmt.Errorf("failed to compute group key: %w", err)
+				return nil, fmt.Errorf("old aggregation failed: %w", err)
 			}
+		}
 
-			// Get current values for this group
-			currentValues, groupExists := op.currentGroups[groupKey]
-			if !groupExists {
-				currentValues = make([]any, 0)
-			}
+		// Update the group's values
+		newValues := make([]any, len(oldValues))
+		copy(newValues, oldValues)
 
-			// Calculate old result for this group (for delta calculation)
-			var oldResultDocs []Document
-			if groupExists && len(currentValues) > 0 {
-				oldSetterInput := Document{
-					"key":   originalKey, // Use original key value, not JSON string
-					"value": currentValues,
-				}
-				oldResultDocs, err = op.setEval.Evaluate(oldSetterInput)
-				if err != nil {
-					return nil, fmt.Errorf("old setter evaluation failed: %w", err)
-				}
-			}
-
-			// Update the group's values
-			newValues := make([]any, len(currentValues))
-			copy(newValues, currentValues)
-
-			for i := 0; i < abs(multiplicity); i++ {
-				if multiplicity > 0 {
-					newValues = append(newValues, value)
-				} else {
-					// Removal: find and remove matching value
-					newValues = removeFirstMatch(newValues, value)
-				}
-			}
-
-			// Calculate new result for this group
-			var newResultDocs []Document
-			if len(newValues) > 0 {
-				newSetterInput := Document{
-					"key":   originalKey, // Use original key value, not JSON string
-					"value": newValues,
-				}
-				newResultDocs, err = op.setEval.Evaluate(newSetterInput)
-				if err != nil {
-					return nil, fmt.Errorf("new setter evaluation failed: %w", err)
-				}
-			}
-
-			// Generate delta output: remove old, add new
-			for _, oldDoc := range oldResultDocs {
-				if err = result.AddDocumentMutate(oldDoc, -1); err != nil {
-					return nil, err
-				}
-			}
-
-			for _, newDoc := range newResultDocs {
-				if err = result.AddDocumentMutate(newDoc, 1); err != nil {
-					return nil, err
-				}
-			}
-
-			// Update internal state
-			if len(newValues) > 0 {
-				op.currentGroups[groupKey] = newValues
+		for i := 0; i < abs(multiplicity); i++ {
+			if multiplicity > 0 {
+				newValues = append(newValues, value)
 			} else {
-				delete(op.currentGroups, groupKey)
+				// Removal: find and remove matching value
+				newValues = removeFirstMatch(newValues, value)
 			}
+		}
+
+		// Calculate new result for this group
+		var newResultDoc Document
+		if len(newValues) > 0 {
+			newResultDoc, err = op.aggregator.Transform(Document{}, &AggregateInput{
+				Key:    groupKey,
+				Values: newValues,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("new aggregation failed: %w", err)
+			}
+		}
+
+		// Generate delta output: remove old, add new
+		if len(oldValues) > 0 {
+			if err = result.AddDocumentMutate(oldResultDoc, -1); err != nil {
+				return nil, err
+			}
+		}
+
+		if len(newValues) > 0 {
+			if err = result.AddDocumentMutate(newResultDoc, 1); err != nil {
+				return nil, err
+			}
+		}
+
+		// Update internal state
+		if len(newValues) > 0 {
+			op.currentGroups[groupKeyStr] = &GroupData{
+				Key:    groupKey,
+				Values: newValues,
+			}
+		} else {
+			delete(op.currentGroups, groupKeyStr)
 		}
 	}
 
 	return result, nil
 }
 
+func (op *IncrementalGatherOp) OpType() OperatorType              { return OpTypeNonLinear }
+func (op *IncrementalGatherOp) IsTimeInvariant() bool             { return true }
+func (op *IncrementalGatherOp) HasZeroPreservationProperty() bool { return true }
+
 // Reset method for testing
 func (op *IncrementalGatherOp) Reset() {
-	op.currentGroups = make(map[string][]any)
+	op.currentGroups = map[string]*GroupData{}
 }
 
 // Helper functions

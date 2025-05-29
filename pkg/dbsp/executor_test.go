@@ -430,9 +430,8 @@ var _ = Describe("LinearChainExecutor", func() {
 		BeforeEach(func() {
 			// Build: Input -> Gather -> Output
 			graph.AddInput(NewInput("sales"))
-			extractEval := NewGroupByKey("dept", "amount")
-			setEval := NewAggregateList("department", "amounts")
-			graph.AddToChain(NewGather(extractEval, setEval))
+			keyExt, valueExt, aggregator := createGatherEvaluators("dept", "amount", "department", "amounts")
+			graph.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
 			// Optimize and create executor
 			err := rewriter.Optimize(graph)
@@ -506,9 +505,9 @@ var _ = Describe("LinearChainExecutor", func() {
 			graph.AddToChain(NewProjection(NewFieldProjection("left_name", "right_amount", "right_dept")))
 			graph.AddToChain(NewSelection("big_sales", NewRangeFilter("right_amount", 1000, 10000)))
 
-			extractEval := NewGroupByKey("right_dept", "right_amount")
-			setEval := NewAggregateList("department", "amounts")
-			graph.AddToChain(NewGather(extractEval, setEval))
+			keyExt, valueExt, aggregator := createGatherEvaluators("right_dept", "right_amount",
+				"department", "amounts")
+			graph.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
 			// Optimize and create executor
 			err := rewriter.Optimize(graph)
@@ -628,9 +627,8 @@ var _ = Describe("LinearChainExecutor", func() {
 
 		BeforeEach(func() {
 			graph.AddInput(NewInput("data"))
-			extractEval := NewGroupByKey("category", "value")
-			setEval := NewAggregateList("category", "values")
-			graph.AddToChain(NewGather(extractEval, setEval))
+			keyExt, valueExt, aggregator := createGatherEvaluators("category", "value", "category", "values")
+			graph.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
@@ -793,9 +791,8 @@ var _ = Describe("LinearChainExecutor", func() {
 		It("should demonstrate incremental efficiency", func() {
 			// Set up incremental gather to show state efficiency
 			graph.AddInput(NewInput("events"))
-			extractEval := NewGroupByKey("category", "value")
-			setEval := NewAggregateList("category", "values")
-			graph.AddToChain(NewGather(extractEval, setEval))
+			keyExt, valueExt, aggregator := createGatherEvaluators("category", "value", "category", "values")
+			graph.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
@@ -958,9 +955,8 @@ var _ = Describe("LinearChainExecutor", func() {
 			graph.AddToChain(NewProjection(NewFieldProjection("name")))
 
 			// Add gather (will be incrementalized)
-			extractEval := NewGroupByKey("name", "name")
-			setEval := NewAggregateList("name", "names")
-			graph.AddToChain(NewGather(extractEval, setEval))
+			keyExt, valueExt, aggregator := createGatherEvaluators("name", "name", "name", "names")
+			graph.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
 			originalChainLength := len(graph.chain)
 			Expect(originalChainLength).To(Equal(7))
