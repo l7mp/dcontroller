@@ -1,6 +1,7 @@
 package dbsp
 
 import (
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -390,6 +391,30 @@ var _ = Describe("DocumentZSet", func() {
 			distinct, err := result.Distinct()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(distinct.IsZero()).To(BeTrue())
+		})
+
+		It("should presetve negative multiplicities in Unique", func() {
+			zsetMixed, err := emptyZSet.AddDocument(doc1, 3)
+			Expect(err).NotTo(HaveOccurred())
+			zsetMixed, err = zsetMixed.AddDocument(doc2, -7)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := zsetMixed.Unique()
+			Expect(err).NotTo(HaveOccurred())
+
+			fmt.Println(result.String())
+
+			Expect(result.Size()).To(Equal(1))
+			Expect(result.UniqueCount()).To(Equal(1))
+			Expect(result.TotalSize()).To(Equal(2))
+
+			mult1, err := result.GetMultiplicity(doc1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mult1).To(Equal(1))
+
+			mult2, err := result.GetMultiplicity(doc2)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mult2).To(Equal(-1))
 		})
 	})
 

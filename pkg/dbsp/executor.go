@@ -4,6 +4,8 @@ import (
 	"fmt"
 )
 
+type DeltaZSet = map[string]*DocumentZSet
+
 // LinearChainExecutor executes incremental queries on the specialized linear chain graph
 type LinearChainExecutor struct {
 	graph *LinearChainGraph
@@ -25,7 +27,7 @@ func NewLinearChainExecutor(graph *LinearChainGraph) (*LinearChainExecutor, erro
 
 // ProcessDelta processes one delta input and produces delta output
 // This is the core incremental execution method
-func (e *LinearChainExecutor) ProcessDelta(deltaInputs map[string]*DocumentZSet) (*DocumentZSet, error) {
+func (e *LinearChainExecutor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet, error) {
 	// Step 1: Validate inputs
 	if len(deltaInputs) != len(e.graph.inputs) {
 		return nil, fmt.Errorf("expected %d inputs, got %d", len(e.graph.inputs), len(deltaInputs))

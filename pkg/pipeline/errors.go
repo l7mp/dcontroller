@@ -4,6 +4,12 @@ import (
 	"fmt"
 )
 
+type ErrPipeline = error
+
+func NewPipelineError(err error) ErrPipeline {
+	return fmt.Errorf("failed to evaluate pipeline: %w", err)
+}
+
 type ErrAggregation = error
 
 func NewAggregationError(err error) ErrAggregation {
