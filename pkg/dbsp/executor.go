@@ -2,16 +2,21 @@ package dbsp
 
 import (
 	"fmt"
+	"strings"
+
+	"github.com/go-logr/logr"
 )
 
 type DeltaZSet = map[string]*DocumentZSet
 
-// LinearChainExecutor executes incremental queries on the specialized linear chain graph
-type LinearChainExecutor struct {
-	graph *LinearChainGraph
+// Executor executes incremental queries on the specialized linear chain graph
+type Executor struct {
+	graph    *ChainGraph
+	inputIdx map[string]string
+	log      logr.Logger
 }
 
-func NewLinearChainExecutor(graph *LinearChainGraph) (*LinearChainExecutor, error) {
+func NewExecutor(graph *ChainGraph, log logr.Logger) (*Executor, error) {
 	if err := graph.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid graph: %w", err)
 	}
@@ -20,23 +25,31 @@ func NewLinearChainExecutor(graph *LinearChainGraph) (*LinearChainExecutor, erro
 		return nil, fmt.Errorf("graph is not optimized for incremental execution")
 	}
 
-	return &LinearChainExecutor{
+	return &Executor{
 		graph: graph,
+		log:   log,
 	}, nil
 }
 
 // ProcessDelta processes one delta input and produces delta output
 // This is the core incremental execution method
-func (e *LinearChainExecutor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet, error) {
+func (e *Executor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet, error) {
 	// Step 1: Validate inputs
 	if len(deltaInputs) != len(e.graph.inputs) {
 		return nil, fmt.Errorf("expected %d inputs, got %d", len(e.graph.inputs), len(deltaInputs))
 	}
 
+	inputs := []string{}
 	for _, inputID := range e.graph.inputs {
-		if _, exists := deltaInputs[inputID]; !exists {
-			return nil, fmt.Errorf("missing input for node %s", inputID)
+		inputName, ok := e.graph.inputIdx[inputID]
+		if !ok {
+			return nil, fmt.Errorf("internal error: no input for ID %s", inputID)
 		}
+		zset, exists := deltaInputs[inputName]
+		if !exists {
+			return nil, fmt.Errorf("missing input for node %s", inputName)
+		}
+		inputs = append(inputs, fmt.Sprintf("%s->%s", inputName, zset.String()))
 	}
 
 	// Step 2: Execute join (if exists) on delta inputs
@@ -44,17 +57,18 @@ func (e *LinearChainExecutor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet
 	var err error
 
 	if e.graph.joinNode != "" {
+		e.log.V(4).Info("processing join", "delta", strings.Join(inputs, ","))
+
 		// Execute incremental N-ary join
 		joinNode := e.graph.nodes[e.graph.joinNode]
 		joinInputs := make([]*DocumentZSet, len(e.graph.inputs))
-
 		for i, inputID := range e.graph.inputs {
-			joinInputs[i] = deltaInputs[inputID]
+			joinInputs[i] = deltaInputs[e.graph.inputIdx[inputID]]
 		}
 
 		currentResult, err = joinNode.Op.Process(joinInputs...)
 		if err != nil {
-			return nil, fmt.Errorf("join operation %s failed: %w", joinNode.Op.Name(), err)
+			return nil, fmt.Errorf("join operation %s failed: %w", joinNode.Op.id(), err)
 		}
 
 		// fmt.Printf("Join %s: %d -> %d documents\n",
@@ -63,8 +77,10 @@ func (e *LinearChainExecutor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet
 		// 	currentResult.Size())
 	} else {
 		// Single input, no join needed
-		currentResult = deltaInputs[e.graph.inputs[0]]
+		currentResult = deltaInputs[e.graph.inputIdx[e.graph.inputs[0]]]
 	}
+
+	e.log.V(4).Info("processing aggregations", "delta", strings.Join(inputs, ","))
 
 	// Step 3: Execute linear chain (all operations are incremental-friendly)
 	for i, nodeID := range e.graph.chain {
@@ -73,7 +89,7 @@ func (e *LinearChainExecutor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet
 		// previousSize := currentResult.Size()
 		currentResult, err = node.Op.Process(currentResult)
 		if err != nil {
-			return nil, fmt.Errorf("operation %s (step %d) failed: %w", node.Op.Name(), i, err)
+			return nil, fmt.Errorf("operation %s (step %d) failed: %w", node.Op.id(), i, err)
 		}
 
 		// fmt.Printf("Step %d - %s: %d -> %d documents\n",
@@ -84,7 +100,7 @@ func (e *LinearChainExecutor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet
 }
 
 // isIncrementalGraph checks if the graph has been optimized for incremental execution
-func isIncrementalGraph(graph *LinearChainGraph) bool {
+func isIncrementalGraph(graph *ChainGraph) bool {
 	// Check if join is incremental (if it exists)
 	if graph.joinNode != "" {
 		joinOp := graph.nodes[graph.joinNode].Op
@@ -114,7 +130,7 @@ func isIncrementalGraph(graph *LinearChainGraph) bool {
 }
 
 // Reset all stateful nodes (for incremental computation)
-func (e *LinearChainExecutor) Reset() {
+func (e *Executor) Reset() {
 	// Reset join node if it's stateful
 	if e.graph.joinNode != "" {
 		e.resetOperator(e.graph.nodes[e.graph.joinNode].Op)
@@ -126,7 +142,7 @@ func (e *LinearChainExecutor) Reset() {
 	}
 }
 
-func (e *LinearChainExecutor) resetOperator(op Operator) {
+func (e *Executor) resetOperator(op Operator) {
 	switch o := op.(type) {
 	case *IntegratorOp:
 		o.Reset()
@@ -143,7 +159,7 @@ func (e *LinearChainExecutor) resetOperator(op Operator) {
 }
 
 // GetExecutionPlan returns a human-readable execution plan
-func (e *LinearChainExecutor) GetExecutionPlan() string {
+func (e *Executor) GetExecutionPlan() string {
 	plan := "Execution Plan:\n"
 
 	// Show inputs
@@ -152,7 +168,7 @@ func (e *LinearChainExecutor) GetExecutionPlan() string {
 		if i > 0 {
 			plan += ", "
 		}
-		plan += e.graph.nodes[inputID].Op.Name()
+		plan += e.graph.nodes[inputID].Op.id()
 	}
 	plan += "\n"
 
@@ -160,20 +176,20 @@ func (e *LinearChainExecutor) GetExecutionPlan() string {
 	step := 2
 	if e.graph.joinNode != "" {
 		joinOp := e.graph.nodes[e.graph.joinNode].Op
-		plan += fmt.Sprintf("%d. Join: %s (%s)\n", step, joinOp.Name(), e.getOpTypeString(joinOp))
+		plan += fmt.Sprintf("%d. Join: %s (%s)\n", step, joinOp.id(), e.getOpTypeString(joinOp))
 		step++
 	}
 
 	// Show chain
 	for i, nodeID := range e.graph.chain {
 		op := e.graph.nodes[nodeID].Op
-		plan += fmt.Sprintf("%d. %s (%s)\n", step+i, op.Name(), e.getOpTypeString(op))
+		plan += fmt.Sprintf("%d. %s (%s)\n", step+i, op.id(), e.getOpTypeString(op))
 	}
 
 	return plan
 }
 
-func (e *LinearChainExecutor) getOpTypeString(op Operator) string {
+func (e *Executor) getOpTypeString(op Operator) string {
 	switch op.OpType() {
 	case OpTypeLinear:
 		return "Linear"
@@ -189,7 +205,7 @@ func (e *LinearChainExecutor) getOpTypeString(op Operator) string {
 }
 
 // Helper function to sum input sizes for logging
-func (e *LinearChainExecutor) sumInputSizes(inputs []*DocumentZSet) int {
+func (e *Executor) sumInputSizes(inputs []*DocumentZSet) int {
 	total := 0
 	for _, input := range inputs {
 		total += input.Size()
@@ -198,7 +214,7 @@ func (e *LinearChainExecutor) sumInputSizes(inputs []*DocumentZSet) int {
 }
 
 // GetNodeResult returns intermediate results for debugging (optional caching)
-func (e *LinearChainExecutor) GetNodeResult(nodeID string, deltaInputs map[string]*DocumentZSet) (*DocumentZSet, error) {
+func (e *Executor) GetNodeResult(nodeID string, deltaInputs map[string]*DocumentZSet) (*DocumentZSet, error) {
 	node, exists := e.graph.nodes[nodeID]
 	if !exists {
 		return nil, fmt.Errorf("node %s not found", nodeID)
@@ -262,13 +278,13 @@ func (e *LinearChainExecutor) GetNodeResult(nodeID string, deltaInputs map[strin
 
 // IncrementalExecutionContext helps track incremental execution state
 type IncrementalExecutionContext struct {
-	executor         *LinearChainExecutor
+	executor         *Executor
 	cumulativeInputs map[string]*DocumentZSet // Running total of all inputs
 	cumulativeOutput *DocumentZSet            // Running total of output
 	timestep         int
 }
 
-func NewIncrementalExecutionContext(executor *LinearChainExecutor) *IncrementalExecutionContext {
+func NewIncrementalExecutionContext(executor *Executor) *IncrementalExecutionContext {
 	return &IncrementalExecutionContext{
 		executor:         executor,
 		cumulativeInputs: make(map[string]*DocumentZSet),

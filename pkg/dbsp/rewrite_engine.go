@@ -2,145 +2,7 @@ package dbsp
 
 import (
 	"fmt"
-	"strings"
 )
-
-// LinearChainGraph represents your specialized graph structure directly
-// Always: [Inputs] -> [Optional N-ary Join] -> [Chain of Linear Ops] -> [Output]
-type LinearChainGraph struct {
-	inputs   []string              // Input node IDs
-	joinNode string                // Optional N-ary join node ID (empty if no join)
-	chain    []string              // Ordered chain of operation node IDs
-	output   string                // Output node ID
-	nodes    map[string]*GraphNode // All nodes by ID
-	nextID   int                   // For generating unique node IDs
-}
-
-type GraphNode struct {
-	ID     string
-	Op     Operator
-	Inputs []*GraphNode
-	Output *GraphNode
-}
-
-func NewLinearChainGraph() *LinearChainGraph {
-	return &LinearChainGraph{
-		inputs: make([]string, 0),
-		chain:  make([]string, 0),
-		nodes:  make(map[string]*GraphNode),
-		nextID: 0,
-	}
-}
-
-// AddInput adds an input node
-func (g *LinearChainGraph) AddInput(op Operator) string {
-	id := fmt.Sprintf("input_%d", g.nextID)
-	g.nextID++
-
-	g.nodes[id] = &GraphNode{ID: id, Op: op}
-	g.inputs = append(g.inputs, id)
-	return id
-}
-
-// SetJoin sets the join node (if multiple inputs)
-func (g *LinearChainGraph) SetJoin(op Operator) string {
-	id := fmt.Sprintf("join_%d", g.nextID)
-	g.nextID++
-
-	g.nodes[id] = &GraphNode{ID: id, Op: op}
-	g.joinNode = id
-
-	// If this is the only operation, it's also the output
-	if len(g.chain) == 0 {
-		g.output = id
-	}
-
-	return id
-}
-
-// AddToChain adds an operation to the linear chain
-func (g *LinearChainGraph) AddToChain(op Operator) string {
-	id := fmt.Sprintf("op_%d", g.nextID)
-	g.nextID++
-
-	g.nodes[id] = &GraphNode{ID: id, Op: op}
-	g.chain = append(g.chain, id)
-
-	// Update output to be the last node in chain
-	g.output = id
-	return id
-}
-
-// GetNode returns a node from its id.
-func (g *LinearChainGraph) GetNode(id string) *GraphNode {
-	return g.nodes[id]
-}
-
-// GetStartNode returns the node where the linear chain begins
-func (g *LinearChainGraph) GetStartNode() string {
-	if g.joinNode != "" {
-		return g.joinNode
-	}
-	if len(g.inputs) > 0 {
-		return g.inputs[0]
-	}
-	return ""
-}
-
-// Validate checks the graph structure
-func (g *LinearChainGraph) Validate() error {
-	if len(g.inputs) == 0 {
-		return fmt.Errorf("no input nodes")
-	}
-	if len(g.inputs) > 1 && g.joinNode == "" {
-		return fmt.Errorf("multiple inputs require a join node")
-	}
-	if g.output == "" {
-		// Try to infer output
-		if len(g.chain) > 0 {
-			g.output = g.chain[len(g.chain)-1]
-		} else if g.joinNode != "" {
-			g.output = g.joinNode
-		} else if len(g.inputs) == 1 {
-			g.output = g.inputs[0]
-		} else {
-			return fmt.Errorf("no output node and cannot infer one")
-		}
-	}
-	return nil
-}
-
-// String representation for debugging
-// String representation for debugging (horizontal layout)
-func (g *LinearChainGraph) String() string {
-	var parts []string
-
-	// Build the flow description
-	if len(g.inputs) == 1 {
-		// Single input: Input -> [Join] -> Chain -> Output
-		inputName := g.nodes[g.inputs[0]].Op.Name()
-		parts = append(parts, inputName)
-	} else {
-		// Multiple inputs: (Input1, Input2, ...) -> Join -> Chain -> Output
-		inputNames := make([]string, len(g.inputs))
-		for i, inputID := range g.inputs {
-			inputNames[i] = g.nodes[inputID].Op.Name()
-		}
-		parts = append(parts, fmt.Sprintf("(%s)", strings.Join(inputNames, ", ")))
-	}
-
-	// Add join if present
-	if g.joinNode != "" {
-		parts = append(parts, g.nodes[g.joinNode].Op.Name())
-	}
-
-	// Add chain operations
-	for _, nodeID := range g.chain {
-		parts = append(parts, g.nodes[nodeID].Op.Name())
-	}
-
-	return strings.Join(parts, " → ")
-}
 
 // LinearChainRewriteEngine works directly on LinearChainGraph
 type LinearChainRewriteEngine struct {
@@ -164,8 +26,8 @@ func NewLinearChainRewriteEngine() *LinearChainRewriteEngine {
 
 type LinearChainRule interface {
 	Name() string
-	CanApply(graph *LinearChainGraph) bool
-	Apply(graph *LinearChainGraph) error
+	CanApply(graph *ChainGraph) bool
+	Apply(graph *ChainGraph) error
 }
 
 func (re *LinearChainRewriteEngine) AddRule(rule LinearChainRule) {
@@ -173,7 +35,7 @@ func (re *LinearChainRewriteEngine) AddRule(rule LinearChainRule) {
 }
 
 // Optimize applies all rules until fixpoint
-func (re *LinearChainRewriteEngine) Optimize(graph *LinearChainGraph) error {
+func (re *LinearChainRewriteEngine) Optimize(graph *ChainGraph) error {
 	if err := graph.Validate(); err != nil {
 		return fmt.Errorf("invalid graph: %w", err)
 	}
@@ -213,7 +75,7 @@ func (r *JoinIncrementalizationRule) Name() string {
 	return "JoinIncrementalization"
 }
 
-func (r *JoinIncrementalizationRule) CanApply(graph *LinearChainGraph) bool {
+func (r *JoinIncrementalizationRule) CanApply(graph *ChainGraph) bool {
 	if graph.joinNode == "" {
 		return false
 	}
@@ -223,7 +85,7 @@ func (r *JoinIncrementalizationRule) CanApply(graph *LinearChainGraph) bool {
 	return canIncrement && joinOp.OpType() == OpTypeBilinear
 }
 
-func (r *JoinIncrementalizationRule) Apply(graph *LinearChainGraph) error {
+func (r *JoinIncrementalizationRule) Apply(graph *ChainGraph) error {
 	joinOp := graph.nodes[graph.joinNode].Op
 	incrementalOp, _ := IncrementalizeOp(joinOp)
 
@@ -240,7 +102,7 @@ func (r *LinearChainIncrementalizationRule) Name() string {
 	return "LinearChainIncrementalization"
 }
 
-func (r *LinearChainIncrementalizationRule) CanApply(graph *LinearChainGraph) bool {
+func (r *LinearChainIncrementalizationRule) CanApply(graph *ChainGraph) bool {
 	// Check if we have any non-incremental operations that can be incrementalized
 	for _, nodeID := range graph.chain {
 		node := graph.nodes[nodeID]
@@ -251,7 +113,7 @@ func (r *LinearChainIncrementalizationRule) CanApply(graph *LinearChainGraph) bo
 	return false
 }
 
-func (r *LinearChainIncrementalizationRule) Apply(graph *LinearChainGraph) error {
+func (r *LinearChainIncrementalizationRule) Apply(graph *ChainGraph) error {
 	// Process each operation in the chain
 	for _, nodeID := range graph.chain {
 		node := graph.nodes[nodeID]
@@ -273,7 +135,7 @@ func (r *IntegrationDifferentiationEliminationRule) Name() string {
 	return "IntegrationDifferentiationElimination"
 }
 
-func (r *IntegrationDifferentiationEliminationRule) CanApply(graph *LinearChainGraph) bool {
+func (r *IntegrationDifferentiationEliminationRule) CanApply(graph *ChainGraph) bool {
 	// Look for adjacent I->D pairs in the chain
 	for i := 0; i < len(graph.chain)-1; i++ {
 		op1 := graph.nodes[graph.chain[i]].Op
@@ -288,7 +150,7 @@ func (r *IntegrationDifferentiationEliminationRule) CanApply(graph *LinearChainG
 	return false
 }
 
-func (r *IntegrationDifferentiationEliminationRule) Apply(graph *LinearChainGraph) error {
+func (r *IntegrationDifferentiationEliminationRule) Apply(graph *ChainGraph) error {
 	newChain := make([]string, 0, len(graph.chain))
 
 	i := 0
@@ -336,7 +198,7 @@ func (r *DistinctOptimizationRule) Name() string {
 	return "DistinctOptimization"
 }
 
-func (r *DistinctOptimizationRule) CanApply(graph *LinearChainGraph) bool {
+func (r *DistinctOptimizationRule) CanApply(graph *ChainGraph) bool {
 	// Look for distinct->distinct patterns
 	for i := 0; i < len(graph.chain)-1; i++ {
 		op1 := graph.nodes[graph.chain[i]].Op
@@ -352,7 +214,7 @@ func (r *DistinctOptimizationRule) CanApply(graph *LinearChainGraph) bool {
 	return false
 }
 
-func (r *DistinctOptimizationRule) Apply(graph *LinearChainGraph) error {
+func (r *DistinctOptimizationRule) Apply(graph *ChainGraph) error {
 	newChain := make([]string, 0, len(graph.chain))
 
 	i := 0
@@ -395,12 +257,12 @@ func (r *LinearOperatorFusionRule) Name() string {
 	return "LinearOperatorFusion"
 }
 
-func (r *LinearOperatorFusionRule) CanApply(graph *LinearChainGraph) bool {
+func (r *LinearOperatorFusionRule) CanApply(graph *ChainGraph) bool {
 	return r.hasSelectionThenProjections(graph) || // Priority 1: Selection followed by projections (σ → π^n)
 		r.hasConsecutiveProjections(graph) || // Priority 2: Consecutive projections (π^n)
 		r.hasProjectThenSelect(graph) // Priority 3: Project then select (π → σ)
 }
-func (r *LinearOperatorFusionRule) Apply(graph *LinearChainGraph) error {
+func (r *LinearOperatorFusionRule) Apply(graph *ChainGraph) error {
 	// Apply in priority order
 	if r.hasSelectionThenProjections(graph) || r.hasConsecutiveProjections(graph) {
 		return r.fuseSelectionThenProjections(graph) // Now handles both!
@@ -414,7 +276,7 @@ func (r *LinearOperatorFusionRule) Apply(graph *LinearChainGraph) error {
 }
 
 // Pattern detection methods
-func (r *LinearOperatorFusionRule) hasSelectionThenProjections(graph *LinearChainGraph) bool {
+func (r *LinearOperatorFusionRule) hasSelectionThenProjections(graph *ChainGraph) bool {
 	for i := 0; i < len(graph.chain)-1; i++ {
 		if _, isSel := graph.nodes[graph.chain[i]].Op.(*SelectionOp); isSel {
 			// Check if followed by one or more projections
@@ -436,7 +298,7 @@ func (r *LinearOperatorFusionRule) hasSelectionThenProjections(graph *LinearChai
 	return false
 }
 
-func (r *LinearOperatorFusionRule) hasConsecutiveProjections(graph *LinearChainGraph) bool {
+func (r *LinearOperatorFusionRule) hasConsecutiveProjections(graph *ChainGraph) bool {
 	consecutiveCount := 0
 	for _, nodeID := range graph.chain {
 		if _, isProj := graph.nodes[nodeID].Op.(*ProjectionOp); isProj {
@@ -451,7 +313,7 @@ func (r *LinearOperatorFusionRule) hasConsecutiveProjections(graph *LinearChainG
 	return false
 }
 
-func (r *LinearOperatorFusionRule) hasProjectThenSelect(graph *LinearChainGraph) bool {
+func (r *LinearOperatorFusionRule) hasProjectThenSelect(graph *ChainGraph) bool {
 	for i := 0; i < len(graph.chain)-1; i++ {
 		op1 := graph.nodes[graph.chain[i]].Op
 		op2 := graph.nodes[graph.chain[i+1]].Op
@@ -466,7 +328,7 @@ func (r *LinearOperatorFusionRule) hasProjectThenSelect(graph *LinearChainGraph)
 }
 
 // Fusion implementation methods
-func (r *LinearOperatorFusionRule) fuseSelectionThenProjections(graph *LinearChainGraph) error {
+func (r *LinearOperatorFusionRule) fuseSelectionThenProjections(graph *ChainGraph) error {
 	newChain := make([]string, 0, len(graph.chain))
 
 	i := 0
@@ -548,7 +410,7 @@ func (r *LinearOperatorFusionRule) fuseSelectionThenProjections(graph *LinearCha
 	return nil
 }
 
-func (r *LinearOperatorFusionRule) fuseProjectThenSelect(graph *LinearChainGraph) error {
+func (r *LinearOperatorFusionRule) fuseProjectThenSelect(graph *ChainGraph) error {
 	newChain := make([]string, 0, len(graph.chain))
 
 	i := 0
@@ -582,7 +444,7 @@ func (r *LinearOperatorFusionRule) fuseProjectThenSelect(graph *LinearChainGraph
 }
 
 // Helper to update output after chain modifications
-func (r *LinearOperatorFusionRule) updateOutput(graph *LinearChainGraph) {
+func (r *LinearOperatorFusionRule) updateOutput(graph *ChainGraph) {
 	if len(graph.chain) > 0 {
 		graph.output = graph.chain[len(graph.chain)-1]
 	} else if graph.joinNode != "" {

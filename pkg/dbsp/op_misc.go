@@ -120,12 +120,14 @@ func (n *DifferentiatorOp) Reset() {
 type InputOp struct {
 	BaseOp
 	data *DocumentZSet
+	name string
 }
 
 func NewInput(name string) *InputOp {
 	return &InputOp{
 		BaseOp: NewBaseOp("input:"+name, 0),
 		data:   NewDocumentZSet(),
+		name:   name,
 	}
 }
 
@@ -144,9 +146,8 @@ func (n *InputOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	return res, nil
 }
 
-func (n *InputOp) SetData(data *DocumentZSet) {
-	n.data = data
-}
+func (n *InputOp) SetData(data *DocumentZSet) { n.data = data }
+func (n *InputOp) Name() string               { return n.name }
 
 // Constant node
 type ConstantOp struct {

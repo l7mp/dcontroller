@@ -37,7 +37,7 @@ type Operator interface {
 	// Process input ZSets and produce output ZSet
 	Process(inputs ...*DocumentZSet) (*DocumentZSet, error)
 	// Get node name for debugging/rewriting
-	Name() string
+	id() string
 	// Get input arity (number of inputs expected)
 	Arity() int
 
@@ -59,8 +59,8 @@ func NewBaseOp(name string, arity int) BaseOp {
 	return BaseOp{arity: arity, name: name}
 }
 
-func (n *BaseOp) Name() string { return n.name }
-func (n *BaseOp) Arity() int   { return n.arity }
+func (n *BaseOp) id() string { return n.name } // internal
+func (n *BaseOp) Arity() int { return n.arity }
 
 // Validate inputs in Process methods
 func (n *BaseOp) validateInputs(inputs []*DocumentZSet) error {

@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	toolscache "k8s.io/client-go/tools/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/cache"
@@ -27,11 +28,14 @@ type Evaluator interface {
 
 // Pipeline is query that knows how to evaluate itself.
 type Pipeline struct {
-	executor *dbsp.LinearChainExecutor
-	graph    *dbsp.LinearChainGraph
-	rewriter *dbsp.LinearChainRewriteEngine
-	target   string
-	log      logr.Logger
+	executor    *dbsp.Executor
+	graph       *dbsp.ChainGraph
+	rewriter    *dbsp.LinearChainRewriteEngine
+	sources     []schema.GroupVersionKind
+	sourceCache map[schema.GroupVersionKind]*cache.Store
+	target      string
+	targetCache *cache.Store
+	log         logr.Logger
 }
 
 // NewPipeline creates a new pipeline from the set of base objects and a seralized pipeline that writes into a given target.
@@ -42,10 +46,13 @@ func NewPipeline(target string, sources []schema.GroupVersionKind, config opv1a1
 	}
 
 	p := &Pipeline{
-		graph:    dbsp.NewLinearChainGraph(),
-		rewriter: dbsp.NewLinearChainRewriteEngine(),
-		target:   target,
-		log:      log,
+		graph:       dbsp.NewChainGraph(),
+		rewriter:    dbsp.NewLinearChainRewriteEngine(),
+		sources:     sources,
+		sourceCache: make(map[schema.GroupVersionKind]*cache.Store),
+		target:      target,
+		targetCache: cache.NewStore(),
+		log:         log,
 	}
 
 	// Add inputs
@@ -70,7 +77,7 @@ func NewPipeline(target string, sources []schema.GroupVersionKind, config opv1a1
 			switch e.Op {
 			case "@select":
 				// @select is one-to-one or one-to-zero
-				op = p.makeSelect(&e)
+				op = p.NewSelectOp(&e)
 
 			// case "@project":
 			// 	// @project is one-to-one
@@ -98,7 +105,7 @@ func NewPipeline(target string, sources []schema.GroupVersionKind, config opv1a1
 	}
 
 	// Create executor
-	executor, err := dbsp.NewLinearChainExecutor(p.graph)
+	executor, err := dbsp.NewExecutor(p.graph, p.log)
 	if err != nil {
 		return nil, NewPipelineError(fmt.Errorf("failed to create chain executor: %w", err))
 	}
@@ -118,12 +125,19 @@ func (p *Pipeline) Evaluate(delta cache.Delta) ([]cache.Delta, error) {
 	p.log.V(2).Info("processing event", "event-type", delta.Type, "object", ObjectKey(delta.Object))
 
 	// Init
-	dzset, err := ConvertDeltaToZSet(delta)
+	zset, err := p.ConvertDeltaToZSet(delta)
 	if err != nil {
-		return nil, NewPipelineError(fmt.Errorf("failed to init delta: %w", err))
+		return nil, NewPipelineError(fmt.Errorf("failed to convert delta to DBSP zset: %w", err))
 	}
 
-	fmt.Println(dzset)
+	// Prepare the input zset (one entry for each input): add an empty zset to each input and
+	// init the input for the changed object
+	dzset := make(map[string]*dbsp.DocumentZSet, len(p.sources))
+	for _, src := range p.sources {
+		dzset[src.String()] = dbsp.NewDocumentZSet()
+	}
+	key := delta.Object.GroupVersionKind().String()
+	dzset[key] = zset
 
 	// Run the DBSP executor
 	res, err := p.executor.ProcessDelta(dzset)
@@ -131,50 +145,87 @@ func (p *Pipeline) Evaluate(delta cache.Delta) ([]cache.Delta, error) {
 		return nil, NewPipelineError(err)
 	}
 
-	ds, err := ConvertZSetToDelta(res, p.target)
+	rawDeltas, err := p.ConvertZSetToDelta(res, p.target)
 	if err != nil {
-		return nil, NewPipelineError(fmt.Errorf("failed to init delta: %w", err))
+		return nil, NewPipelineError(fmt.Errorf("failed to convert DBSP zset to delta: %w", err))
+	}
+
+	deltas, err := p.Reconcile(rawDeltas)
+	if err != nil {
+		return nil, NewPipelineError(fmt.Errorf("failed to update target cache from delta: %w", err))
 	}
 
 	p.log.V(1).Info("eval ready", "event-type", delta.Type, "object", ObjectKey(delta.Object),
-		"result", util.Stringify(ds))
+		"result", util.Stringify(rawDeltas))
 
-	return ds, nil
+	return deltas, nil
 }
 
-// func collapseDeltas(de []dbsp.DocumentEntry) []dbsp.DocumentEntry {
-// 	uniq := map[string]cache.Delta{}
-// 	for _, entry := range de {
-// 		doc := entry.Document
-// 		mult := entry.Multiplicity
-// 		key := ObjectKey(delta.Object).String()
-// 		if d, ok := uniq[key]; ok && d.Type == cache.Deleted && (delta.Type == cache.Added ||
-// 			delta.Type == cache.Updated || delta.Type == cache.Upserted) {
-// 			// del events come first
-// 			uniq[key] = cache.Delta{Type: cache.Updated, Object: delta.Object}
-// 		} else {
-// 			uniq[key] = delta
-// 		}
-// 	}
+// Reconcile processes a delta set containing only unrdered(!) add/delete ops into a proper
+// ordered(!) upsert/delete delta list.
+//
+// DBSP outputs onordered zsets so there is no way to know for documents that map to the same
+// primary key whether an add or a delete comes first, and the two orders yield different
+// results. To remove this ambiguity, we maintain a target cache that contains the latest known
+// state of the target view and we take the (doc->+/-1) pairs in any order from the zset result
+// set. The rules are as follows:
+//
+// - for additions (doc->+1), we extract the primary key from doc and immediately upsert doc into
+// the cache with that key and add the upsert delta to our result set, possibly overwriting any
+// previous delta for the same key
+//
+// - for deletions (doc->-1), we again extract the primary key from doc and first we fetch the
+// current entry doc' from the cache and check if doc==doc'. If there is no entry in the cache for
+// the key or the latest state equals the doc to be deleted, we add the delete to the cache and the
+// result delta, otherwise we drop the delete event and move on.
+func (p *Pipeline) Reconcile(ds []cache.Delta) ([]cache.Delta, error) {
+	deltaCache := map[string]cache.Delta{}
 
-// 	// first the deletes, then the updates and finally the adds
-// 	ret := []cache.Delta{}
-// 	for _, t := range []cache.DeltaType{cache.Deleted, cache.Updated, cache.Added, cache.Upserted, cache.Replaced, cache.Sync} {
-// 		for _, v := range uniq {
-// 			if v.Type == t {
-// 				ret = append(ret, v)
-// 			}
-// 		}
-// 	}
+	for _, d := range ds {
+		key := client.ObjectKeyFromObject(d.Object).String()
 
-// 	ret := []cache.Delta{}
-// 	for _, d := range res {
-// 		retd, err := Normalize(eng, d)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		ret = append(ret, retd)
-// 	}
+		switch d.Type {
+		case cache.Added:
+			// Addition: Always upsert, may overwrite previous delta
+			if err := p.targetCache.Add(d.Object); err != nil {
+				return nil, err
+			}
 
-// 	return ret
-// }
+			d.Type = cache.Upserted
+			deltaCache[key] = d
+
+		case cache.Deleted:
+			// Deletion: Delete, but only if there is no entry in the target cache for
+			// that object or the previous entry was for the exact same document
+			obj, exists, err := p.targetCache.Get(d.Object)
+			if err != nil {
+				return nil, err
+			}
+
+			same := false
+			if exists {
+				eq, err := dbsp.DeepEqual(obj.UnstructuredContent(), d.Object.UnstructuredContent())
+				if err != nil {
+					return nil, err
+				}
+				same = eq
+			}
+
+			if !exists || same {
+				d.Type = cache.Deleted
+				deltaCache[key] = d
+			}
+
+		default:
+			return nil, fmt.Errorf("unknown delta in zset: %s", d.Type)
+		}
+	}
+
+	// convert delta cache back to delta
+	res := []cache.Delta{}
+	for _, d := range deltaCache {
+		res = append(res, d)
+	}
+
+	return res, nil
+}

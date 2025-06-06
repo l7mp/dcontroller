@@ -173,7 +173,7 @@ func (n *FusedOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 		result, err = node.Process(result)
 		if err != nil {
 			return NewDocumentZSet(), fmt.Errorf("error in fused node %s at step %d (%s): %w",
-				n.Name(), i, node.Name(), err)
+				n.id(), i, node.id(), err)
 		}
 	}
 
@@ -188,6 +188,6 @@ func (n *FusedOp) HasZeroPreservationProperty() bool { return true }
 func FuseFilterProject(filter *SelectionOp, project *ProjectionOp) (Operator, error) {
 	return NewFusedOp(
 		[]Operator{filter, project},
-		fmt.Sprintf("%s→%s", filter.Name(), project.Name()),
+		fmt.Sprintf("%s→%s", filter.id(), project.id()),
 	)
 }

@@ -5,17 +5,31 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"go.uber.org/zap/zapcore"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+)
+
+var (
+	loglevel = -10
+	logger   = zap.New(zap.UseFlagOptions(&zap.Options{
+		Development:     true,
+		DestWriter:      GinkgoWriter,
+		StacktraceLevel: zapcore.Level(3),
+		TimeEncoder:     zapcore.RFC3339NanoTimeEncoder,
+		Level:           zapcore.Level(loglevel),
+	}))
 )
 
 var _ = Describe("LinearChainExecutor", func() {
 	var (
-		executor *LinearChainExecutor
-		graph    *LinearChainGraph
+		executor *Executor
+		graph    *ChainGraph
 		rewriter *LinearChainRewriteEngine
 	)
 
 	BeforeEach(func() {
-		graph = NewLinearChainGraph()
+		graph = NewChainGraph()
 		rewriter = NewLinearChainRewriteEngine()
 	})
 
@@ -30,7 +44,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -55,7 +69,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: deltaUsers,
+				graph.inputIdx[graph.inputs[0]]: deltaUsers,
 			}
 
 			// Execute
@@ -90,7 +104,7 @@ var _ = Describe("LinearChainExecutor", func() {
 		It("should handle empty deltas", func() {
 			emptyDelta := NewDocumentZSet()
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: emptyDelta,
+				graph.inputIdx[graph.inputs[0]]: emptyDelta,
 			}
 
 			result, err := executor.ProcessDelta(deltaInputs)
@@ -109,7 +123,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: deltaUsers,
+				graph.inputIdx[graph.inputs[0]]: deltaUsers,
 			}
 
 			result, err := executor.ProcessDelta(deltaInputs)
@@ -135,7 +149,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: deltaUsers,
+				graph.inputIdx[graph.inputs[0]]: deltaUsers,
 			}
 
 			result, err := executor.ProcessDelta(deltaInputs)
@@ -159,7 +173,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -189,8 +203,8 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: deltaUsers,    // users
-				graph.inputs[1]: deltaProjects, // projects
+				graph.inputIdx[graph.inputs[0]]: deltaUsers,    // users
+				graph.inputIdx[graph.inputs[1]]: deltaProjects, // projects
 			}
 
 			result, err := executor.ProcessDelta(deltaInputs)
@@ -221,8 +235,8 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: deltaUsers,
-				graph.inputs[1]: deltaProjects,
+				graph.inputIdx[graph.inputs[0]]: deltaUsers,
+				graph.inputIdx[graph.inputs[1]]: deltaProjects,
 			}
 
 			result, err := executor.ProcessDelta(deltaInputs)
@@ -248,8 +262,8 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: deltaUsers,
-				graph.inputs[1]: deltaProjects,
+				graph.inputIdx[graph.inputs[0]]: deltaUsers,
+				graph.inputIdx[graph.inputs[1]]: deltaProjects,
 			}
 
 			result, err := executor.ProcessDelta(deltaInputs)
@@ -274,7 +288,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			incrementalContext = NewIncrementalExecutionContext(executor)
@@ -293,8 +307,8 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			delta1Inputs := map[string]*DocumentZSet{
-				graph.inputs[0]: delta1Users,
-				graph.inputs[1]: delta1Projects,
+				graph.inputIdx[graph.inputs[0]]: delta1Users,
+				graph.inputIdx[graph.inputs[1]]: delta1Projects,
 			}
 
 			result1, err := incrementalContext.ProcessDelta(delta1Inputs)
@@ -315,8 +329,8 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			delta2Inputs := map[string]*DocumentZSet{
-				graph.inputs[0]: delta2Users,
-				graph.inputs[1]: delta2Projects,
+				graph.inputIdx[graph.inputs[0]]: delta2Users,
+				graph.inputIdx[graph.inputs[1]]: delta2Projects,
 			}
 
 			result2, err := incrementalContext.ProcessDelta(delta2Inputs)
@@ -338,8 +352,8 @@ var _ = Describe("LinearChainExecutor", func() {
 			delta3Projects := NewDocumentZSet() // Empty
 
 			delta3Inputs := map[string]*DocumentZSet{
-				graph.inputs[0]: delta3Users,
-				graph.inputs[1]: delta3Projects,
+				graph.inputIdx[graph.inputs[0]]: delta3Users,
+				graph.inputIdx[graph.inputs[1]]: delta3Projects,
 			}
 
 			result3, err := incrementalContext.ProcessDelta(delta3Inputs)
@@ -359,8 +373,8 @@ var _ = Describe("LinearChainExecutor", func() {
 			delta4Projects := NewDocumentZSet() // Empty
 
 			delta4Inputs := map[string]*DocumentZSet{
-				graph.inputs[0]: delta4Users,
-				graph.inputs[1]: delta4Projects,
+				graph.inputIdx[graph.inputs[0]]: delta4Users,
+				graph.inputIdx[graph.inputs[1]]: delta4Projects,
 			}
 
 			result4, err := incrementalContext.ProcessDelta(delta4Inputs)
@@ -399,8 +413,8 @@ var _ = Describe("LinearChainExecutor", func() {
 
 			// Step 1: Add both
 			result1, err := incrementalContext.ProcessDelta(map[string]*DocumentZSet{
-				graph.inputs[0]: deltaUsers,
-				graph.inputs[1]: deltaProjects,
+				graph.inputIdx[graph.inputs[0]]: deltaUsers,
+				graph.inputIdx[graph.inputs[1]]: deltaProjects,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result1.Size()).To(Equal(1))
@@ -412,8 +426,8 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			result2, err := incrementalContext.ProcessDelta(map[string]*DocumentZSet{
-				graph.inputs[0]: NewDocumentZSet(), // No new users
-				graph.inputs[1]: deltaProjects2,
+				graph.inputIdx[graph.inputs[0]]: NewDocumentZSet(), // No new users
+				graph.inputIdx[graph.inputs[1]]: deltaProjects2,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -437,7 +451,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -459,7 +473,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: deltaSales,
+				graph.inputIdx[graph.inputs[0]]: deltaSales,
 			}
 
 			result, err := executor.ProcessDelta(deltaInputs)
@@ -513,7 +527,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Test data
@@ -530,7 +544,8 @@ var _ = Describe("LinearChainExecutor", func() {
 
 			sale1, err := newDocumentFromPairs("user_id", int64(1), "amount", int64(1500), "dept", "Engineering")
 			Expect(err).NotTo(HaveOccurred())
-			sale2, err := newDocumentFromPairs("user_id", int64(1), "amount", int64(500), "dept", "Engineering") // Too small
+			// Too small
+			sale2, err := newDocumentFromPairs("user_id", int64(1), "amount", int64(500), "dept", "Engineering")
 			Expect(err).NotTo(HaveOccurred())
 			sale3, err := newDocumentFromPairs("user_id", int64(2), "amount", int64(2000), "dept", "Marketing")
 			Expect(err).NotTo(HaveOccurred())
@@ -544,8 +559,8 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: deltaUsers,
-				graph.inputs[1]: deltaSales,
+				graph.inputIdx[graph.inputs[0]]: deltaUsers,
+				graph.inputIdx[graph.inputs[1]]: deltaSales,
 			}
 
 			result, err := executor.ProcessDelta(deltaInputs)
@@ -584,7 +599,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -610,13 +625,13 @@ var _ = Describe("LinearChainExecutor", func() {
 
 		It("should reject non-incremental graphs", func() {
 			// Create non-optimized graph
-			badGraph := NewLinearChainGraph()
+			badGraph := NewChainGraph()
 			badGraph.AddInput(NewInput("users"))
 			badGraph.AddInput(NewInput("projects"))
 			badGraph.SetJoin(NewBinaryJoin(NewFlexibleJoin("id"))) // Non-incremental join
 
 			// Should reject at executor creation
-			_, err := NewLinearChainExecutor(badGraph)
+			_, err := NewExecutor(badGraph, logger)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("not optimized for incremental execution"))
 		})
@@ -633,7 +648,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			incrementalContext = NewIncrementalExecutionContext(executor)
@@ -647,7 +662,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = incrementalContext.ProcessDelta(map[string]*DocumentZSet{
-				graph.inputs[0]: delta,
+				graph.inputIdx[graph.inputs[0]]: delta,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -674,7 +689,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			delta1, err := SingletonZSet(doc1)
 			Expect(err).NotTo(HaveOccurred())
 			_, err = incrementalContext.ProcessDelta(map[string]*DocumentZSet{
-				graph.inputs[0]: delta1,
+				graph.inputIdx[graph.inputs[0]]: delta1,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -685,7 +700,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			delta2, err := SingletonZSet(doc2)
 			Expect(err).NotTo(HaveOccurred())
 			_, err = incrementalContext.ProcessDelta(map[string]*DocumentZSet{
-				graph.inputs[0]: delta2,
+				graph.inputIdx[graph.inputs[0]]: delta2,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -713,7 +728,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -737,7 +752,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: deltaUsers,
+				graph.inputIdx[graph.inputs[0]]: deltaUsers,
 			}
 
 			Expect(len(graph.chain)).To(Equal(1)) // Fused operation
@@ -764,7 +779,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create large delta
@@ -777,7 +792,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			}
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: largeDelta,
+				graph.inputIdx[graph.inputs[0]]: largeDelta,
 			}
 
 			// Should complete without error
@@ -797,7 +812,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			context := NewIncrementalExecutionContext(executor)
@@ -810,7 +825,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				deltaInputs := map[string]*DocumentZSet{
-					graph.inputs[0]: delta,
+					graph.inputIdx[graph.inputs[0]]: delta,
 				}
 
 				_, err = context.ProcessDelta(deltaInputs)
@@ -838,7 +853,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Complex nested document
@@ -858,7 +873,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: delta,
+				graph.inputIdx[graph.inputs[0]]: delta,
 			}
 
 			result, err := executor.ProcessDelta(deltaInputs)
@@ -883,7 +898,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			doc, err := newDocumentFromPairs("value", int64(42))
@@ -897,7 +912,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: mixedDelta,
+				graph.inputIdx[graph.inputs[0]]: mixedDelta,
 			}
 
 			result, err := executor.ProcessDelta(deltaInputs)
@@ -917,7 +932,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			doc, err := newDocumentFromPairs("existing_field", "some_value")
@@ -926,7 +941,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: delta,
+				graph.inputIdx[graph.inputs[0]]: delta,
 			}
 
 			result, err := executor.ProcessDelta(deltaInputs)
@@ -969,7 +984,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(len(graph.chain)).To(BeNumerically("<", originalChainLength))
 
 			// Should create valid executor
-			executor, err = NewLinearChainExecutor(graph)
+			executor, err = NewExecutor(graph, logger)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should execute correctly
@@ -979,7 +994,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			deltaInputs := map[string]*DocumentZSet{
-				graph.inputs[0]: delta,
+				graph.inputIdx[graph.inputs[0]]: delta,
 			}
 
 			result, err := executor.ProcessDelta(deltaInputs)

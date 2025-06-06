@@ -1,7 +1,6 @@
 package dbsp
 
 import (
-	"fmt"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -401,8 +400,6 @@ var _ = Describe("DocumentZSet", func() {
 
 			result, err := zsetMixed.Unique()
 			Expect(err).NotTo(HaveOccurred())
-
-			fmt.Println(result.String())
 
 			Expect(result.Size()).To(Equal(1))
 			Expect(result.UniqueCount()).To(Equal(1))

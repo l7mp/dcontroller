@@ -8,12 +8,12 @@ import (
 var _ = Describe("LinearChainRewriteEngine", func() {
 	var (
 		rewriter *LinearChainRewriteEngine
-		graph    *LinearChainGraph
+		graph    *ChainGraph
 	)
 
 	BeforeEach(func() {
 		rewriter = NewLinearChainRewriteEngine()
-		graph = NewLinearChainGraph()
+		graph = NewChainGraph()
 	})
 
 	Context("Join Incrementalization Rule", func() {
@@ -96,7 +96,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			gatherID := graph.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
 			// Verify it's not incremental initially
-			gatherNode := graph.GetNode(gatherID)
+			gatherNode := graph.getNode(gatherID)
 			Expect(gatherNode).NotTo(BeNil())
 			_, isIncremental := gatherNode.Op.(*IncrementalGatherOp)
 			Expect(isIncremental).To(BeFalse())
@@ -458,7 +458,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 	Context("Error Handling", func() {
 		It("should handle invalid graphs gracefully", func() {
 			// Create invalid graph (no inputs)
-			invalidGraph := NewLinearChainGraph()
+			invalidGraph := NewChainGraph()
 
 			err := rewriter.Optimize(invalidGraph)
 			Expect(err).To(HaveOccurred())

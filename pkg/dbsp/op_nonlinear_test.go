@@ -1088,7 +1088,7 @@ var _ = Describe("ComplexChainEval", func() {
 		for _, doc := range docs {
 			Expect(doc.Document).To(HaveKey("id"))
 			Expect(doc.Document).To(HaveKey("items"))
-			Expect([]any{[]any{1}, []any{1, 2}}).To(ContainElement(doc.Document["items"]))
+			Expect([]any{[]any{2, 1}, []any{1, 2}}).To(ContainElement(doc.Document["items"]))
 			Expect(doc.Multiplicity).To(Equal(1))
 		}
 

@@ -26,9 +26,9 @@ type BenchmarkData struct {
 	largeDelta       *DocumentZSet
 	mediumDelta      *DocumentZSet
 	smallDelta       *DocumentZSet
-	snapshotGraph    *LinearChainGraph
-	incrementalGraph *LinearChainGraph
-	optimizedGraph   *LinearChainGraph
+	snapshotGraph    *ChainGraph
+	incrementalGraph *ChainGraph
+	optimizedGraph   *ChainGraph
 }
 
 // setupBenchmarkData creates test data and graphs for benchmarking
@@ -99,8 +99,8 @@ func createTestData(size int) *DocumentZSet {
 }
 
 // createSnapshotGraph creates a graph using only snapshot operators
-func createSnapshotGraph() *LinearChainGraph {
-	graph := NewLinearChainGraph()
+func createSnapshotGraph() *ChainGraph {
+	graph := NewChainGraph()
 
 	// Input: employee data
 	graph.AddInput(NewInput("employees"))
@@ -130,8 +130,8 @@ func createSnapshotGraph() *LinearChainGraph {
 }
 
 // createIncrementalGraph creates the same logical graph but with incremental operators
-func createIncrementalGraph() *LinearChainGraph {
-	graph := NewLinearChainGraph()
+func createIncrementalGraph() *ChainGraph {
+	graph := NewChainGraph()
 
 	// Input: employee data
 	graph.AddInput(NewInput("employees"))
@@ -161,8 +161,8 @@ func createIncrementalGraph() *LinearChainGraph {
 }
 
 // createOptimizedGraph creates an incremental graph and applies all optimizations
-func createOptimizedGraph() *LinearChainGraph {
-	graph := NewLinearChainGraph()
+func createOptimizedGraph() *ChainGraph {
+	graph := NewChainGraph()
 
 	// Input: employee data
 	graph.AddInput(NewInput("employees"))
@@ -214,7 +214,7 @@ func init() {
 
 // Benchmark snapshot processing with small delta
 func BenchmarkSnapshotSmall(b *testing.B) {
-	executor, err := NewLinearChainExecutor(benchData.snapshotGraph)
+	executor, err := NewExecutor(benchData.snapshotGraph, logger)
 	if err != nil {
 		b.Fatalf("Failed to create executor: %v", err)
 	}
@@ -237,7 +237,7 @@ func BenchmarkSnapshotSmall(b *testing.B) {
 
 // Benchmark incremental processing with small delta
 func BenchmarkIncrementalSmall(b *testing.B) {
-	executor, err := NewLinearChainExecutor(benchData.incrementalGraph)
+	executor, err := NewExecutor(benchData.incrementalGraph, logger)
 	if err != nil {
 		b.Fatalf("Failed to create executor: %v", err)
 	}
@@ -266,7 +266,7 @@ func BenchmarkIncrementalSmall(b *testing.B) {
 
 // Benchmark optimized processing with small delta
 func BenchmarkOptimizedSmall(b *testing.B) {
-	executor, err := NewLinearChainExecutor(benchData.optimizedGraph)
+	executor, err := NewExecutor(benchData.optimizedGraph, logger)
 	if err != nil {
 		b.Fatalf("Failed to create executor: %v", err)
 	}
@@ -293,7 +293,7 @@ func BenchmarkOptimizedSmall(b *testing.B) {
 
 // Medium-sized benchmarks
 func BenchmarkSnapshotMedium(b *testing.B) {
-	executor, err := NewLinearChainExecutor(benchData.snapshotGraph)
+	executor, err := NewExecutor(benchData.snapshotGraph, logger)
 	if err != nil {
 		b.Fatalf("Failed to create executor: %v", err)
 	}
@@ -318,7 +318,7 @@ func BenchmarkSnapshotMedium(b *testing.B) {
 func BenchmarkRealisticIncremental(b *testing.B) {
 	b.Run("MultipleSmallDeltas", func(b *testing.B) {
 		// This simulates the real incremental use case: many small updates
-		executor, err := NewLinearChainExecutor(benchData.incrementalGraph)
+		executor, err := NewExecutor(benchData.incrementalGraph, logger)
 		if err != nil {
 			b.Fatalf("Failed to create executor: %v", err)
 		}
@@ -349,7 +349,7 @@ func BenchmarkRealisticIncremental(b *testing.B) {
 
 	b.Run("SingleLargeDelta", func(b *testing.B) {
 		// Compare with snapshot approach: one large delta
-		executor, err := NewLinearChainExecutor(benchData.snapshotGraph)
+		executor, err := NewExecutor(benchData.snapshotGraph, logger)
 		if err != nil {
 			b.Fatalf("Failed to create executor: %v", err)
 		}
@@ -372,7 +372,7 @@ func BenchmarkRealisticIncremental(b *testing.B) {
 }
 
 func BenchmarkOptimizedMedium(b *testing.B) {
-	executor, err := NewLinearChainExecutor(benchData.optimizedGraph)
+	executor, err := NewExecutor(benchData.optimizedGraph, logger)
 	if err != nil {
 		b.Fatalf("Failed to create executor: %v", err)
 	}
@@ -397,7 +397,7 @@ func BenchmarkOptimizedMedium(b *testing.B) {
 
 // Large-sized benchmarks
 func BenchmarkSnapshotLarge(b *testing.B) {
-	executor, err := NewLinearChainExecutor(benchData.snapshotGraph)
+	executor, err := NewExecutor(benchData.snapshotGraph, logger)
 	if err != nil {
 		b.Fatalf("Failed to create executor: %v", err)
 	}
@@ -419,7 +419,7 @@ func BenchmarkSnapshotLarge(b *testing.B) {
 }
 
 func BenchmarkIncrementalLarge(b *testing.B) {
-	executor, err := NewLinearChainExecutor(benchData.incrementalGraph)
+	executor, err := NewExecutor(benchData.incrementalGraph, logger)
 	if err != nil {
 		b.Fatalf("Failed to create executor: %v", err)
 	}
@@ -443,7 +443,7 @@ func BenchmarkIncrementalLarge(b *testing.B) {
 }
 
 func BenchmarkOptimizedLarge(b *testing.B) {
-	executor, err := NewLinearChainExecutor(benchData.optimizedGraph)
+	executor, err := NewExecutor(benchData.optimizedGraph, logger)
 	if err != nil {
 		b.Fatalf("Failed to create executor: %v", err)
 	}
@@ -475,7 +475,7 @@ func BenchmarkJoinScenarios(b *testing.B) {
 	// Test different join implementations
 	b.Run("SnapshotJoin", func(b *testing.B) {
 		graph := createJoinGraph(false, false) // snapshot join
-		executor, err := NewLinearChainExecutor(graph)
+		executor, err := NewExecutor(graph, logger)
 		if err != nil {
 			b.Fatalf("Failed to create executor: %v", err)
 		}
@@ -499,7 +499,7 @@ func BenchmarkJoinScenarios(b *testing.B) {
 
 	b.Run("IncrementalJoin", func(b *testing.B) {
 		graph := createJoinGraph(true, false) // incremental join
-		executor, err := NewLinearChainExecutor(graph)
+		executor, err := NewExecutor(graph, logger)
 		if err != nil {
 			b.Fatalf("Failed to create executor: %v", err)
 		}
@@ -525,7 +525,7 @@ func BenchmarkJoinScenarios(b *testing.B) {
 
 	b.Run("OptimizedJoin", func(b *testing.B) {
 		graph := createJoinGraph(true, true) // incremental + optimized
-		executor, err := NewLinearChainExecutor(graph)
+		executor, err := NewExecutor(graph, logger)
 		if err != nil {
 			b.Fatalf("Failed to create executor: %v", err)
 		}
@@ -595,8 +595,8 @@ func createProjectData(size int) *DocumentZSet {
 	return delta
 }
 
-func createJoinGraph(incremental, optimize bool) *LinearChainGraph {
-	graph := NewLinearChainGraph()
+func createJoinGraph(incremental, optimize bool) *ChainGraph {
+	graph := NewChainGraph()
 
 	graph.AddInput(NewInput("users"))
 	graph.AddInput(NewInput("projects"))
@@ -684,8 +684,8 @@ func BenchmarkComparison(b *testing.B) {
 	}
 }
 
-func benchmarkApproach(b *testing.B, graph *LinearChainGraph, data *DocumentZSet, name string) time.Duration {
-	executor, err := NewLinearChainExecutor(graph)
+func benchmarkApproach(b *testing.B, graph *ChainGraph, data *DocumentZSet, name string) time.Duration {
+	executor, err := NewExecutor(graph, logger)
 	if err != nil {
 		b.Fatalf("Failed to create %s executor: %v", name, err)
 	}

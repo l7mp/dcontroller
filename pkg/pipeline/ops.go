@@ -39,7 +39,7 @@ func (eval *SelectEvaluator) Evaluate(doc dbsp.Document) ([]dbsp.Document, error
 	return ret, nil
 }
 
-func (p *Pipeline) makeSelect(e *expression.Expression) dbsp.Operator {
+func (p *Pipeline) NewSelectOp(e *expression.Expression) dbsp.Operator {
 	eval := &SelectEvaluator{e: e, log: p.log}
 	return dbsp.NewSelection(eval.String(), eval)
 }
