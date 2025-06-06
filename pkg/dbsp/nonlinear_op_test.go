@@ -219,6 +219,94 @@ var _ = Describe("Gather Operations", func() {
 				}
 			}
 		})
+
+		It("should handle deletions correctly", func() {
+			input := NewDocumentZSet()
+
+			// Add documents with positive multiplicities
+			doc1 := Document{"dept": "A", "amount": int64(10)}
+			doc2 := Document{"dept": "A", "amount": int64(20)}
+			doc3 := Document{"dept": "B", "amount": int64(30)}
+
+			Expect(input.AddDocumentMutate(doc1, 2)).To(Succeed()) // amount 10 appears twice
+			Expect(input.AddDocumentMutate(doc2, 1)).To(Succeed()) // amount 20 appears once
+			Expect(input.AddDocumentMutate(doc3, 1)).To(Succeed()) // amount 30 appears once
+
+			// Add negative multiplicities (deletions)
+			Expect(input.AddDocumentMutate(doc1, -1)).To(Succeed()) // remove one occurrence of amount 10
+			Expect(input.AddDocumentMutate(doc2, -1)).To(Succeed()) // remove the occurrence of amount 20
+
+			result, err := snapshotGather.Process(input)
+			Expect(err).NotTo(HaveOccurred())
+
+			entries, err := result.List()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(entries).To(HaveLen(2)) // Groups A and B
+
+			// Convert to map for easier verification
+			resultMap := make(map[string]Document)
+			for _, entry := range entries {
+				Expect(entry.Document).To(HaveKey("department"))
+				group := entry.Document["department"].(string)
+				resultMap[group] = entry.Document
+			}
+
+			// Verify group A: should have one value remaining (2-1=1)
+			Expect(resultMap).To(HaveKey("A"))
+			Expect(resultMap["A"]).To(HaveKey("amounts"))
+			Expect(resultMap["A"]["amounts"]).To(HaveLen(1)) // Only one value remaining
+			Expect(resultMap["A"]["amounts"].([]any)[0]).To(Equal(int64(10)))
+
+			// Verify group B: unchanged
+			Expect(resultMap).To(HaveKey("B"))
+			Expect(resultMap["B"]).To(HaveKey("amounts"))
+			Expect(resultMap["B"]["amounts"]).To(HaveLen(1))                  // Only one value remaining
+			Expect(resultMap["B"]["amounts"].([]any)[0]).To(Equal(int64(30))) // One value
+		})
+
+		It("should remove empty groups from result", func() {
+			input := NewDocumentZSet()
+
+			doc1 := Document{"dept": "A", "amount": int64(10)}
+			doc2 := Document{"dept": "A", "amount": int64(20)}
+
+			// Add then completely remove
+			Expect(input.AddDocumentMutate(doc1, 1)).To(Succeed())
+			Expect(input.AddDocumentMutate(doc2, 1)).To(Succeed())
+			Expect(input.AddDocumentMutate(doc1, -1)).To(Succeed()) // Remove amount 10
+			Expect(input.AddDocumentMutate(doc2, -1)).To(Succeed()) // Remove amount 20
+
+			result, err := snapshotGather.Process(input)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Group A should not appear in result (no values left)
+			entries, err := result.List()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(entries).To(BeEmpty()) // No groups should remain
+		})
+
+		It("should gracefully handle removal of values that don't exist", func() {
+			input := NewDocumentZSet()
+
+			doc1 := Document{"dept": "A", "amount": int64(10)}
+			doc2 := Document{"dept": "A", "amount": int64(99)} // Different value
+
+			// Add one value, try to remove a different one
+			Expect(input.AddDocumentMutate(doc1, 1)).To(Succeed())
+			Expect(input.AddDocumentMutate(doc2, -1)).To(Succeed()) // Try to remove non-existent value
+
+			result, err := snapshotGather.Process(input)
+			Expect(err).NotTo(HaveOccurred())
+
+			entries, err := result.List()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(entries).To(HaveLen(1)) // Group A should still exist
+
+			doc := entries[0].Document
+			Expect(doc["department"]).To(Equal("A"))
+			Expect(doc["amounts"]).To(HaveLen(1))                  // Original value still there
+			Expect(doc["amounts"].([]any)[0]).To(Equal(int64(10))) // Original value still there
+		})
 	})
 
 	Context("Count Aggregation", func() {
@@ -901,5 +989,203 @@ var _ = Describe("Gather Operations", func() {
 				}
 			}
 		})
+	})
+})
+
+type ReplaceFieldTransformer struct {
+	field string
+}
+
+func (t *ReplaceFieldTransformer) Transform(doc Document, value any) (Document, error) {
+	result := make(Document)
+	for k, v := range doc {
+		if k != "items" { // Remove the original array field
+			result[k] = v
+		}
+	}
+	result[t.field] = value // Add the single item
+	return result, nil
+}
+
+func (t *ReplaceFieldTransformer) String() string {
+	return fmt.Sprintf("replace_%s", t.field)
+}
+
+type ArrayAggregateTransformer struct {
+	keyField   string
+	valueField string
+}
+
+func (t *ArrayAggregateTransformer) Transform(doc Document, value any) (Document, error) {
+	aggregateInput := value.(*AggregateInput)
+
+	result := Document{
+		t.keyField:   aggregateInput.Key,
+		t.valueField: aggregateInput.Values, // This is the aggregated array
+	}
+
+	return result, nil
+}
+
+func (t *ArrayAggregateTransformer) String() string {
+	return fmt.Sprintf("array_agg_%s_%s", t.keyField, t.valueField)
+}
+
+var _ = Describe("ComplexChainEval", func() {
+	// Does gather produce one delete or multiple deletes?
+	// Hypothesis: gather should produce both:
+	// - {id: "X", items: [1]} -> -1  (from processing item: 1 with mult -1)
+	// - {id: "X", items: [2]} -> -1  (from processing item: 2 with mult -1)
+	//
+	// We might also get:
+	// - {id: "X", items: [1,2]} -> -1 (aggregated result)
+
+	It("should process an unwind followed by a gather - snapshot implementation", func() {
+		// Setup: Original document with array [1,2]
+		originalDoc := Document{
+			"id":    "X",
+			"items": []any{1, 2},
+		}
+
+		// Create input delta: add the original document
+		inputDelta := NewDocumentZSet()
+		err := inputDelta.AddDocumentMutate(originalDoc, 1)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 1: Unwind operation
+		unwindOp := NewUnwind(
+			&FieldExtractor{fieldName: "items"},     // Extract items array
+			&ReplaceFieldTransformer{field: "item"}, // Replace with single item
+		)
+
+		unwoundResult, err := unwindOp.Process(inputDelta)
+		Expect(err).NotTo(HaveOccurred())
+
+		// unwind blows up the list into 2 docs
+		Expect(unwoundResult.TotalSize()).To(Equal(2))
+		docs, err := unwoundResult.List()
+		Expect(err).NotTo(HaveOccurred())
+		for _, doc := range docs {
+			Expect(doc.Document).To(HaveKey("id"))
+			Expect(doc.Document).To(HaveKey("item"))
+			Expect([]any{1, 2}).To(ContainElement(doc.Document["item"]))
+			Expect(doc.Multiplicity).To(Equal(1))
+		}
+
+		// Step 2: Gather operation
+		gatherOp := NewGather(
+			&FieldExtractor{fieldName: "id"},                                // Group by id
+			&FieldExtractor{fieldName: "item"},                              // Extract item values
+			&ArrayAggregateTransformer{keyField: "id", valueField: "items"}, // Rebuild array
+		)
+
+		gatheredResult, err := gatherOp.Process(unwoundResult)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(gatheredResult.TotalSize()).To(Equal(1))
+		docs, err = gatheredResult.List()
+		Expect(err).NotTo(HaveOccurred())
+		for _, doc := range docs {
+			Expect(doc.Document).To(HaveKey("id"))
+			Expect(doc.Document).To(HaveKey("items"))
+			Expect([]any{[]any{1}, []any{1, 2}}).To(ContainElement(doc.Document["items"]))
+			Expect(doc.Multiplicity).To(Equal(1))
+		}
+
+		// Create another input delta: delete the original document
+		err = inputDelta.AddDocumentMutate(originalDoc, -1)
+		Expect(err).NotTo(HaveOccurred())
+
+		unwoundResult, err = unwindOp.Process(inputDelta)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(unwoundResult.TotalSize()).To(Equal(0))
+
+		// Step 2: Gather operation
+		gatheredResult, err = gatherOp.Process(unwoundResult)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(gatheredResult.TotalSize()).To(Equal(0))
+	})
+
+	It("should process an unwind followed by a gather - incremental implementation", func() {
+		// Setup: Original document with array [1,2]
+		originalDoc := Document{
+			"id":    "X",
+			"items": []any{1, 2},
+		}
+
+		// Create input delta: add the original document
+		inputDelta := NewDocumentZSet()
+		err := inputDelta.AddDocumentMutate(originalDoc, 1)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Step 1: Unwind operation
+		unwindOp := NewUnwind(
+			&FieldExtractor{fieldName: "items"},     // Extract items array
+			&ReplaceFieldTransformer{field: "item"}, // Replace with single item
+		)
+
+		unwoundResult, err := unwindOp.Process(inputDelta)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(unwoundResult.TotalSize()).To(Equal(2))
+		docs, err := unwoundResult.List()
+		Expect(err).NotTo(HaveOccurred())
+		for _, doc := range docs {
+			Expect(doc.Document).To(HaveKey("id"))
+			Expect(doc.Document).To(HaveKey("item"))
+			Expect([]any{1, 2}).To(ContainElement(doc.Document["item"]))
+			Expect(doc.Multiplicity).To(Equal(1))
+		}
+
+		// Step 2: Gather operation
+		gatherOp := NewIncrementalGather(
+			&FieldExtractor{fieldName: "id"},                                // Group by id
+			&FieldExtractor{fieldName: "item"},                              // Extract item values
+			&ArrayAggregateTransformer{keyField: "id", valueField: "items"}, // Rebuild array
+		)
+
+		gatheredResult, err := gatherOp.Process(unwoundResult)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(gatheredResult.TotalSize()).To(Equal(1))
+		docs, err = gatheredResult.List()
+		Expect(err).NotTo(HaveOccurred())
+		doc := docs[0]
+		Expect(doc.Document).To(HaveKey("id"))
+		Expect(doc.Document).To(HaveKey("items"))
+		Expect([]any{[]any{2, 1}, []any{1, 2}}).To(ContainElement(doc.Document["items"]))
+		Expect(doc.Multiplicity).To(Equal(1))
+
+		// Reset the input delta and delete the original document
+		inputDelta = NewDocumentZSet()
+		err = inputDelta.AddDocumentMutate(originalDoc, -1)
+		Expect(err).NotTo(HaveOccurred())
+
+		unwoundResult, err = unwindOp.Process(inputDelta)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(unwoundResult.TotalSize()).To(Equal(2))
+		docs, err = unwoundResult.List()
+		Expect(err).NotTo(HaveOccurred())
+		for _, doc := range docs {
+			Expect(doc.Document).To(HaveKey("id"))
+			Expect(doc.Document).To(HaveKey("item"))
+			Expect([]any{1, 2}).To(ContainElement(doc.Document["item"]))
+			Expect(doc.Multiplicity).To(Equal(-1))
+		}
+
+		// Step 2: Gather operation
+		gatheredResult, err = gatherOp.Process(unwoundResult)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(gatheredResult.TotalSize()).To(Equal(1))
+		docs, err = gatheredResult.List()
+		Expect(err).NotTo(HaveOccurred())
+		doc = docs[0]
+		Expect(doc.Document).To(HaveKey("id"))
+		Expect(doc.Document).To(HaveKey("items"))
+		Expect([]any{[]any{2, 1}, []any{1, 2}}).To(ContainElement(doc.Document["items"]))
+		Expect(doc.Multiplicity).To(Equal(-1))
 	})
 })

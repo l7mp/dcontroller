@@ -67,9 +67,17 @@ func (op *GatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 			}
 		}
 
-		// Add values (weighted by multiplicity)
-		for i := 0; i < multiplicity; i++ {
-			groups[keyForMap].Values = append(groups[keyForMap].Values, value)
+		// Add/remove values based on multiplicity sign
+		if multiplicity > 0 {
+			// Additions
+			for i := 0; i < multiplicity; i++ {
+				groups[keyForMap].Values = append(groups[keyForMap].Values, value)
+			}
+		} else if multiplicity < 0 {
+			// Deletions - remove matching values
+			for i := 0; i < -multiplicity; i++ {
+				groups[keyForMap].Values = removeFirstMatch(groups[keyForMap].Values, value)
+			}
 		}
 	}
 
