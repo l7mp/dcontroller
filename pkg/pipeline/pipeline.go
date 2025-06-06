@@ -7,7 +7,6 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	toolscache "k8s.io/client-go/tools/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/cache"
@@ -77,11 +76,11 @@ func NewPipeline(target string, sources []schema.GroupVersionKind, config opv1a1
 			switch e.Op {
 			case "@select":
 				// @select is one-to-one or one-to-zero
-				op = p.NewSelectOp(&e)
+				op = p.NewSelectionOp(&e)
 
-			// case "@project":
-			// 	// @project is one-to-one
-			// 	op = p.makeProject(e)
+			case "@project":
+				// @project is one-to-one
+				op = p.NewProjectionOp(&e)
 
 			// case "@unwind", "@demux":
 			// 	// @demux is one to many
@@ -139,6 +138,9 @@ func (p *Pipeline) Evaluate(delta cache.Delta) ([]cache.Delta, error) {
 	key := delta.Object.GroupVersionKind().String()
 	dzset[key] = zset
 
+	// p.log.V(4).Info("prepared input zset", "object", ObjectKey(delta.Object),
+	// 	"input", util.Stringify(dzset))
+
 	// Run the DBSP executor
 	res, err := p.executor.ProcessDelta(dzset)
 	if err != nil {
@@ -159,73 +161,4 @@ func (p *Pipeline) Evaluate(delta cache.Delta) ([]cache.Delta, error) {
 		"result", util.Stringify(rawDeltas))
 
 	return deltas, nil
-}
-
-// Reconcile processes a delta set containing only unrdered(!) add/delete ops into a proper
-// ordered(!) upsert/delete delta list.
-//
-// DBSP outputs onordered zsets so there is no way to know for documents that map to the same
-// primary key whether an add or a delete comes first, and the two orders yield different
-// results. To remove this ambiguity, we maintain a target cache that contains the latest known
-// state of the target view and we take the (doc->+/-1) pairs in any order from the zset result
-// set. The rules are as follows:
-//
-// - for additions (doc->+1), we extract the primary key from doc and immediately upsert doc into
-// the cache with that key and add the upsert delta to our result set, possibly overwriting any
-// previous delta for the same key
-//
-// - for deletions (doc->-1), we again extract the primary key from doc and first we fetch the
-// current entry doc' from the cache and check if doc==doc'. If there is no entry in the cache for
-// the key or the latest state equals the doc to be deleted, we add the delete to the cache and the
-// result delta, otherwise we drop the delete event and move on.
-func (p *Pipeline) Reconcile(ds []cache.Delta) ([]cache.Delta, error) {
-	deltaCache := map[string]cache.Delta{}
-
-	for _, d := range ds {
-		key := client.ObjectKeyFromObject(d.Object).String()
-
-		switch d.Type {
-		case cache.Added:
-			// Addition: Always upsert, may overwrite previous delta
-			if err := p.targetCache.Add(d.Object); err != nil {
-				return nil, err
-			}
-
-			d.Type = cache.Upserted
-			deltaCache[key] = d
-
-		case cache.Deleted:
-			// Deletion: Delete, but only if there is no entry in the target cache for
-			// that object or the previous entry was for the exact same document
-			obj, exists, err := p.targetCache.Get(d.Object)
-			if err != nil {
-				return nil, err
-			}
-
-			same := false
-			if exists {
-				eq, err := dbsp.DeepEqual(obj.UnstructuredContent(), d.Object.UnstructuredContent())
-				if err != nil {
-					return nil, err
-				}
-				same = eq
-			}
-
-			if !exists || same {
-				d.Type = cache.Deleted
-				deltaCache[key] = d
-			}
-
-		default:
-			return nil, fmt.Errorf("unknown delta in zset: %s", d.Type)
-		}
-	}
-
-	// convert delta cache back to delta
-	res := []cache.Delta{}
-	for _, d := range deltaCache {
-		res = append(res, d)
-	}
-
-	return res, nil
 }

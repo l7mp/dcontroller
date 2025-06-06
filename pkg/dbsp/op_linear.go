@@ -56,7 +56,7 @@ type SelectionOp struct {
 	eval Evaluator
 }
 
-func NewSelection(name string, eval Evaluator) *SelectionOp {
+func NewSelection(eval Evaluator) *SelectionOp {
 	return &SelectionOp{
 		BaseOp: NewBaseOp("σ", 1),
 		eval:   eval,

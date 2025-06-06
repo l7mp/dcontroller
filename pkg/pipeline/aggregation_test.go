@@ -1,35 +1,39 @@
 package pipeline
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/yaml"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/cache"
-	"github.com/l7mp/dcontroller/pkg/dbsp"
+	"github.com/l7mp/dcontroller/pkg/expression"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
+
+var gvk = schema.GroupVersionKind{Group: "view.dcontroller.io", Version: "v1alpha1", Kind: "view"}
 
 var _ = Describe("Aggregations", func() {
 	var objs []object.Object
 
 	BeforeEach(func() {
 		objs = []object.Object{object.NewViewObject("view"), object.NewViewObject("view")}
-		object.SetContent(objs[0], dbsp.Document{
-			"spec": dbsp.Document{
+		object.SetContent(objs[0], map[string]any{
+			"spec": map[string]any{
 				"a": int64(1),
-				"b": dbsp.Document{"c": int64(2)},
+				"b": map[string]any{"c": int64(2)},
 			},
 			"c": "c",
 		})
 		object.SetName(objs[0], "default", "name")
-		object.SetContent(objs[1], dbsp.Document{
-			"spec": dbsp.Document{
+		object.SetContent(objs[1], map[string]any{
+			"spec": map[string]any{
 				"a": int64(2),
-				"b": dbsp.Document{"c": int64(3)},
+				"b": map[string]any{"c": int64(3)},
 			},
 			"d": "d",
 		})
@@ -38,8 +42,9 @@ var _ = Describe("Aggregations", func() {
 
 	Describe("Evaluating select aggregations", func() {
 		It("should evaluate true select expression", func() {
-			data := `{"@aggregate":[{"@select":{"@eq":["$.metadata.name","name"]}}]}`
-			p := newTestAggregation(data)
+			jsonData := `{"@aggregate":[{"@select":{"@eq":["$.metadata.name","name"]}}]}`
+			p, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
 			res, err := p.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
 			Expect(err).NotTo(HaveOccurred())
@@ -52,469 +57,486 @@ var _ = Describe("Aggregations", func() {
 			Expect(res).To(BeEmpty())
 		})
 
-		// It("should evaluate a false select expression", func() {
-		// 	jsonData := `{"@aggregate":[{"@select":{"@eq":["$.spec.b.c",1]}}]}`
-		// 	ag := newAggregation(eng, []byte(jsonData))
+		It("should evaluate a false select expression", func() {
+			jsonData := `{"@aggregate":[{"@select":{"@eq":["$.spec.b.c",1]}}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-		// 	res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
-		// 	Expect(err).NotTo(HaveOccurred())
-		// 	Expect(res).To(BeEmpty())
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(BeEmpty())
 
-		// 	res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[1]})
-		// 	Expect(err).NotTo(HaveOccurred())
-		// 	Expect(res).To(BeEmpty())
-		// })
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[1]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(BeEmpty())
+		})
 
-		// It("should evaluate an inverted false select expression", func() {
-		// 	jsonData := `{"@aggregate":[{"@select":{"@not":{"@eq":["$.spec.b.c",1]}}}]}`
-		// 	ag := newAggregation(eng, []byte(jsonData))
+		It("should evaluate an inverted false select expression", func() {
+			jsonData := `{"@aggregate":[{"@select":{"@not":{"@eq":["$.spec.b.c",1]}}}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-		// 	res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
-		// 	Expect(err).NotTo(HaveOccurred())
-		// 	Expect(res).To(HaveLen(1))
-		// 	Expect(res[0].IsUnchanged()).To(BeFalse())
-		// 	Expect(res[0]).To(Equal(cache.Delta{Type: cache.Upserted, Object: objs[0]}))
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Upserted, Object: objs[0]}))
 
-		// 	res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[1]})
-		// 	Expect(err).NotTo(HaveOccurred())
-		// 	Expect(res).To(HaveLen(1))
-		// 	Expect(res[0].IsUnchanged()).To(BeFalse())
-		// 	Expect(res[0]).To(Equal(cache.Delta{Type: cache.Upserted, Object: objs[1]}))
-		// })
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[1]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Upserted, Object: objs[1]}))
+		})
 
-		// It("should not err for a select expression referring to a nonexistent field", func() {
-		// 	jsonData := `{"@aggregate":[{"@select":{"@eq":["$.spec.x",true]}}]}`
-		// 	ag := newAggregation(eng, []byte(jsonData))
+		It("should not err for a select expression referring to a nonexistent field", func() {
+			jsonData := `{"@aggregate":[{"@select":{"@eq":["$.spec.x",true]}}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-		// 	res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
-		// 	Expect(err).NotTo(HaveOccurred())
-		// 	Expect(res).To(BeEmpty())
-		// })
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(BeEmpty())
+		})
 	})
 
-	// 	Describe("Evaluating projection aggregations", func() {
-	// 		It("should evaluate a simple projection expression", func() {
-	// 			jsonData := `{"@aggregate":[{"@project":{"metadata":{"name":"$.metadata.name"}}}]}`
-	// 			ag := newAggregation(eng, []byte(jsonData))
+	Describe("Evaluating projection aggregations", func() {
+		It("should evaluate a simple projection expression", func() {
+			jsonData := `{"@aggregate":[{"@project":{"metadata":{"name":"$.metadata.name"}}}]}`
+			var a opv1a1.Aggregation
+			err := yaml.Unmarshal([]byte(jsonData), &a)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(a.Expressions).To(HaveLen(1))
+			Expect(a.Expressions[0]).To(Equal(expression.Expression{
+				Op: "@project",
+				Arg: &expression.Expression{
+					Op: "@dict",
+					Literal: map[string]expression.Expression{
+						"metadata": {
+							Op: "@dict",
+							Literal: map[string]expression.Expression{
+								"name": {
+									Op:      "@string",
+									Literal: "$.metadata.name",
+								},
+							},
+						},
+					},
+				},
+			}))
 
-	// 			Expect(ag.Expressions).To(HaveLen(1))
-	// 			Expect(ag.Expressions[0]).To(Equal(expression.Expression{
-	// 				Op: "@project",
-	// 				Arg: &expression.Expression{
-	// 					Op: "@dict",
-	// 					Literal: map[string]expression.Expression{
-	// 						"metadata": {
-	// 							Op: "@dict",
-	// 							Literal: map[string]expression.Expression{
-	// 								"name": {
-	// 									Op:      "@string",
-	// 									Literal: "$.metadata.name",
-	// 								},
-	// 							},
-	// 						},
-	// 					},
-	// 				},
-	// 			}))
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Upserted))
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": map[string]any{
+						"name": "name",
+					},
+				},
+			}))
+		})
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(1))
-	// 			Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 			Expect(res[0].Object).To(Equal(&dbsp.Documentured.Dbsp.Documentured{
-	// 				Object: dbsp.Document{
-	// 					"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 					"kind":       "view",
-	// 					"metadata": dbsp.Document{
-	// 						"name": "name",
-	// 					},
-	// 				},
-	// 			}))
-	// 		})
+		It("should evaluate a projection expression with multiple fields", func() {
+			jsonData := `{"@aggregate":[{"@project":{"metadata":{"name":"$.metadata.name","namespace":"$.metadata.namespace"}}}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 		It("should evaluate a projection expression with multiple fields", func() {
-	// 			jsonData := `{"@aggregate":[{"@project":{"metadata":{"name":"$.metadata.name","namespace":"$.metadata.namespace"}}}]}`
-	// 			ag := newAggregation(eng, []byte(jsonData))
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Upserted))
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(1))
-	// 			Expect(res[0].Type).To(Equal(cache.Upserted))
+			obj := res[0].Object
+			raw, ok := obj.Object["metadata"]
+			Expect(ok).To(BeTrue())
+			meta, ok := raw.(map[string]any)
+			Expect(ok).To(BeTrue())
+			Expect(meta["namespace"]).To(Equal("default"))
+			Expect(meta["name"]).To(Equal("name"))
+		})
 
-	// 			obj := res[0].Object
-	// 			raw, ok := obj.Object["metadata"]
-	// 			Expect(ok).To(BeTrue())
-	// 			meta, ok := raw.(dbsp.Document)
-	// 			Expect(ok).To(BeTrue())
-	// 			Expect(meta["namespace"]).To(Equal("default"))
-	// 			Expect(meta["name"]).To(Equal("name"))
-	// 		})
+		It("should evaluate a projection expression that copies a subtree", func() {
+			jsonData := `{"@aggregate":[{"@project":{"metadata":"$.metadata"}}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 		It("should evaluate a projection expression that copies a subtree", func() {
-	// 			jsonData := `{"@aggregate":[{"@project":{"metadata":"$.metadata"}}]}`
-	// 			ag := newAggregation(eng, []byte(jsonData))
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
-	// 			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			obj := res[0].Object
+			raw, ok := obj.Object["metadata"]
+			Expect(ok).To(BeTrue())
+			meta, ok := raw.(map[string]any)
+			Expect(ok).To(BeTrue())
+			Expect(meta["namespace"]).To(Equal("default"))
+			Expect(meta["name"]).To(Equal("name"))
+		})
 
-	// 			Expect(res).To(HaveLen(1))
-	// 			obj := res[0].Object
-	// 			raw, ok := obj.Object["metadata"]
-	// 			Expect(ok).To(BeTrue())
-	// 			meta, ok := raw.(dbsp.Document)
-	// 			Expect(ok).To(BeTrue())
-	// 			Expect(meta["namespace"]).To(Equal("default"))
-	// 			Expect(meta["name"]).To(Equal("name"))
-	// 		})
+		It("should evaluate a projection expression that alters the name", func() {
+			jsonData := `
+'@aggregate':
+  - '@project':
+      metadata:
+        name:
+          '@concat':
+            - $.metadata.name
+            - ':'
+            - $.c
+        namespace: $.metadata.namespace`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 		It("should evaluate a projection expression that alters the name", func() {
-	// 			jsonData := `
-	// '@aggregate':
-	//   - '@project':
-	//       metadata:
-	//         name:
-	//           '@concat':
-	//             - $.metadata.name
-	//             - ':'
-	//             - $.c
-	//         namespace: $.metadata.namespace`
-	// 			ag := newAggregation(eng, []byte(jsonData))
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Upserted))
+			obj := res[0].Object
+			Expect(obj.GetNamespace()).To(Equal("default"))
+			Expect(obj.GetName()).To(Equal("name:c"))
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(1))
-	// 			Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 			obj := res[0].Object
-	// 			Expect(obj.GetNamespace()).To(Equal("default"))
-	// 			Expect(obj.GetName()).To(Equal("name:c"))
+			newObj := object.DeepCopy(objs[0])
+			Expect(unstructured.SetNestedField(newObj.UnstructuredContent(), "d", "c")).
+				NotTo(HaveOccurred())
+			val, ok, err := unstructured.NestedFieldNoCopy(newObj.UnstructuredContent(), "c")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(val).To(Equal("d"))
 
-	// 			newObj := object.DeepCopy(objs[0])
-	// 			Expect(dbsp.Documentured.SetNestedField(newObj.Dbsp.DocumenturedContent(), "d", "c")).
-	// 				NotTo(HaveOccurred())
-	// 			val, ok, err := dbsp.Documentured.NestedFieldNoCopy(newObj.Dbsp.DocumenturedContent(), "c")
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(ok).To(BeTrue())
-	// 			Expect(val).To(Equal("d"))
+			// this should remove name:c and add name:d
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: newObj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(2))
+			Expect(res[0].Type).To(Equal(cache.Deleted))
+			obj = res[0].Object
+			Expect(obj.GetNamespace()).To(Equal("default"))
+			Expect(obj.GetName()).To(Equal("name:c"))
+			Expect(res[1].Type).To(Equal(cache.Upserted))
+			obj = res[1].Object
+			Expect(obj.GetNamespace()).To(Equal("default"))
+			Expect(obj.GetName()).To(Equal("name:d"))
 
-	// 			// this should remove name:c and add name:d
-	// 			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: newObj})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(2))
-	// 			Expect(res[0].Type).To(Equal(cache.Deleted))
-	// 			obj = res[0].Object
-	// 			Expect(obj.GetNamespace()).To(Equal("default"))
-	// 			Expect(obj.GetName()).To(Equal("name:c"))
-	// 			Expect(res[1].Type).To(Equal(cache.Upserted))
-	// 			obj = res[1].Object
-	// 			Expect(obj.GetNamespace()).To(Equal("default"))
-	// 			Expect(obj.GetName()).To(Equal("name:d"))
+		})
 
-	// 		})
+		It("should evaluate a projection expression that contains a list of setters", func() {
+			jsonData := `
+'@aggregate':
+  - '@project':
+      - metadata:
+          name: name
+          namespace: default
+      - spec: 123`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 		It("should evaluate a projection expression that contains a list of setters", func() {
-	// 			jsonData := `
-	// '@aggregate':
-	//   - '@project':
-	//       - metadata:
-	//           name: name
-	//           namespace: default
-	//       - spec: 123`
-	// 			ag := newAggregation(eng, []byte(jsonData))
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Upserted))
+			obj := res[0].Object
+			Expect(obj.GetNamespace()).To(Equal("default"))
+			Expect(obj.GetName()).To(Equal("name"))
+			Expect(obj).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": map[string]any{
+						"namespace": "default",
+						"name":      "name",
+					},
+					"spec": int64(123),
+				},
+			}))
+		})
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(1))
-	// 			Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 			obj := res[0].Object
-	// 			Expect(obj.GetNamespace()).To(Equal("default"))
-	// 			Expect(obj.GetName()).To(Equal("name"))
-	// 			Expect(obj).To(Equal(&dbsp.Documentured.Dbsp.Documentured{
-	// 				Object: dbsp.Document{
-	// 					"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 					"kind":       "view",
-	// 					"metadata": dbsp.Document{
-	// 						"namespace": "default",
-	// 						"name":      "name",
-	// 					},
-	// 					"spec": int64(123),
-	// 				},
-	// 			}))
-	// 		})
+		It("should evaluate a projection expression that contains a list of JSONpath setters", func() {
+			jsonData := `
+'@aggregate':
+  - '@project':
+      - $.metadata.name: $.metadata.name
+      - $.metadata.namespace: "default"
+      - $.spec.a: 123
+      - $.spec.b: $.spec.b`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 		It("should evaluate a projection expression that contains a list of JSONpath setters", func() {
-	// 			jsonData := `
-	// '@aggregate':
-	//   - '@project':
-	//       - $.metadata.name: $.metadata.name
-	//       - $.metadata.namespace: "default"
-	//       - $.spec.a: 123
-	//       - $.spec.b: $.spec.b`
-	// 			ag := newAggregation(eng, []byte(jsonData))
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Upserted))
+			obj := res[0].Object
+			Expect(obj.GetNamespace()).To(Equal("default"))
+			Expect(obj.GetName()).To(Equal("name"))
+			Expect(obj).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": map[string]any{
+						"namespace": "default",
+						"name":      "name",
+					},
+					"spec": map[string]any{
+						"a": int64(123),
+						"b": map[string]any{"c": int64(2)},
+					},
+				},
+			}))
+		})
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(1))
-	// 			Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 			obj := res[0].Object
-	// 			Expect(obj.GetNamespace()).To(Equal("default"))
-	// 			Expect(obj.GetName()).To(Equal("name"))
-	// 			Expect(obj).To(Equal(&dbsp.Documentured.Dbsp.Documentured{
-	// 				Object: dbsp.Document{
-	// 					"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 					"kind":       "view",
-	// 					"metadata": dbsp.Document{
-	// 						"namespace": "default",
-	// 						"name":      "name",
-	// 					},
-	// 					"spec": dbsp.Document{
-	// 						"a": int64(123),
-	// 						"b": dbsp.Document{"c": int64(2)},
-	// 					},
-	// 				},
-	// 			}))
-	// 		})
+		It("should evaluate a projection expression that contains a list of mixed (fix/JSONpath) setters", func() {
+			jsonData := `
+'@aggregate':
+  - '@project':
+      - {metadata: {name: name2}}
+      - $.metadata.namespace: "default2"
+      - $.spec.a: $.spec.b`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 		It("should evaluate a projection expression that contains a list of mixed (fix/JSONpath) setters", func() {
-	// 			jsonData := `
-	// '@aggregate':
-	//   - '@project':
-	//       - {metadata: {name: name2}}
-	//       - $.metadata.namespace: "default2"
-	//       - $.spec.a: $.spec.b`
-	// 			ag := newAggregation(eng, []byte(jsonData))
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Upserted))
+			obj := res[0].Object
+			Expect(obj.GetNamespace()).To(Equal("default2"))
+			Expect(obj.GetName()).To(Equal("name2"))
+			Expect(obj).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": map[string]any{
+						"namespace": "default2",
+						"name":      "name2",
+					},
+					"spec": map[string]any{
+						"a": map[string]any{"c": int64(2)},
+					},
+				},
+			}))
+		})
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(1))
-	// 			Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 			obj := res[0].Object
-	// 			Expect(obj.GetNamespace()).To(Equal("default2"))
-	// 			Expect(obj.GetName()).To(Equal("name2"))
-	// 			Expect(obj).To(Equal(&dbsp.Documentured.Dbsp.Documentured{
-	// 				Object: dbsp.Document{
-	// 					"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 					"kind":       "view",
-	// 					"metadata": dbsp.Document{
-	// 						"namespace": "default2",
-	// 						"name":      "name2",
-	// 					},
-	// 					"spec": dbsp.Document{
-	// 						"a": dbsp.Document{"c": int64(2)},
-	// 					},
-	// 				},
-	// 			}))
-	// 		})
+		It("should collapse multiple adds that yield the same object name to an update", func() {
+			jsonData := `
+'@aggregate':
+  - '@project':
+      $.metadata.name: "fixed"`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 		It("should collapse multiple adds that yield the same object name to an update", func() {
-	// 			jsonData := `
-	// '@aggregate':
-	//   - '@project':
-	//       $.metadata.name: "fixed"`
-	// 			ag := newAggregation(eng, []byte(jsonData))
-	// 			Expect(ag.Expressions).To(HaveLen(1))
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(1))
+			Expect(res[0]).To(Equal(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name": "fixed",
+							},
+						},
+					},
+				}))
 
-	// 			Expect(res[0]).To(Equal(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
-	// 								"name": "fixed",
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[1]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
 
-	// 			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[1]})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(1))
+			Expect(res[0]).To(Equal(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name": "fixed",
+							},
+						},
+					},
+				}))
+		})
 
-	// 			Expect(res[0]).To(Equal(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
-	// 								"name": "fixed",
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
-	// 		})
+		It("should err for a projection that drops .metadata.name", func() {
+			jsonData := `{"@aggregate":[{"@project":{"spec":"$.spec"}}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 		It("should err for a projection that drops .metadata.name", func() {
-	// 			jsonData := `{"@aggregate":[{"@project":{"spec":"$.spec"}}]}`
-	// 			ag := newAggregation(eng, []byte(jsonData))
+			_, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).To(HaveOccurred())
+		})
 
-	// 			_, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
-	// 			Expect(err).To(HaveOccurred())
-	// 		})
+		It("should err for a projection that asks for a non-existent field", func() {
+			jsonData := `{"@aggregate":[{"@project":{"x": "$.spec.x"}}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 		It("should err for a projection that asks for a non-existent field", func() {
-	// 			jsonData := `{"@aggregate":[{"@project":{"x": "$.spec.x"}}]}`
-	// 			ag := newAggregation(eng, []byte(jsonData))
+			_, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
+			Expect(err).To(HaveOccurred())
+		})
+	})
 
-	// 			_, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[0]})
-	// 			Expect(err).To(HaveOccurred())
-	// 		})
-	// 	})
+	Describe("Evaluating aggregations on native Unstructured objects", func() {
+		It("should evaluate a simple projection expression", func() {
+			jsonData := `{"@aggregate":[{"@project":{"metadata":"$.metadata"}}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 	Describe("Evaluating aggregations on native Dbsp.Documentured objects", func() {
-	// 		It("should evaluate a simple projection expression", func() {
-	// 			jsonData := `{"@aggregate":[{"@project":{"metadata":"$.metadata"}}]}`
-	// 			ag := newAggregation(eng, []byte(jsonData))
-	// 			Expect(ag.Expressions).To(HaveLen(1))
+			obj := object.New()
+			obj.SetGroupVersionKind(gvk)
+			obj.SetName("test-name")
+			obj.SetNamespace("test-ns")
 
-	// 			obj := &dbsp.Documentured.Dbsp.Documentured{}
-	// 			obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "testgroup", Version: "v1", Kind: "testkind"})
-	// 			obj.SetName("test-name")
-	// 			obj.SetNamespace("test-ns")
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Upserted))
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": map[string]any{
+						"namespace": "test-ns",
+						"name":      "test-name",
+					},
+				},
+			}))
+		})
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(1))
-	// 			Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 			Expect(res[0].Object).To(Equal(&dbsp.Documentured.Dbsp.Documentured{
-	// 				Object: dbsp.Document{
-	// 					"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 					"kind":       "view",
-	// 					"metadata": dbsp.Document{
-	// 						"namespace": "test-ns",
-	// 						"name":      "test-name",
-	// 					},
-	// 				},
-	// 			}))
-	// 		})
+		It("should evaluate true select expression", func() {
+			jsonData := `{"@aggregate":[{"@select":{"@eq":["$.spec.b",1]}}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 		It("should evaluate true select expression", func() {
-	// 			jsonData := `{"@aggregate":[{"@select":{"@eq":["$.spec.b",1]}}]}`
-	// 			ag := newAggregation(eng, []byte(jsonData))
+			// Add object
+			obj := object.New()
+			obj.SetUnstructuredContent(map[string]any{"spec": map[string]any{"b": int64(1)}})
+			obj.SetGroupVersionKind(gvk)
+			obj.SetName("test-name")
+			obj.SetNamespace("test-ns")
 
-	// 			gvk := schema.GroupVersionKind{Group: "testgroup", Version: "v1", Kind: "testkind"}
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			resObj := object.NewViewObject("view")
+			object.SetContent(resObj, obj.UnstructuredContent())
+			object.SetName(resObj, "test-ns", "test-name")
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Upserted, Object: resObj}))
 
-	// 			// Add object
-	// 			obj := &dbsp.Documentured.Dbsp.Documentured{}
-	// 			obj.SetDbsp.DocumenturedContent(map[string]any{"spec": map[string]any{"b": int64(1)}})
-	// 			obj.SetGroupVersionKind(gvk)
-	// 			obj.SetName("test-name")
-	// 			obj.SetNamespace("test-ns")
+			p, ok := ag.(*Pipeline)
+			Expect(ok).To(BeTrue())
+			Expect(p.sourceCache).To(HaveKey(gvk))
+			store := p.sourceCache[gvk]
+			Expect(store.List()).To(HaveLen(1))
+			x, ok, err := store.Get(obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(x).To(Equal(obj))
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(1))
-	// 			Expect(res[0].IsUnchanged()).To(BeFalse())
-	// 			resObj := object.NewViewObject("view")
-	// 			object.SetContent(resObj, obj.Dbsp.DocumenturedContent())
-	// 			object.SetName(resObj, "test-ns", "test-name")
-	// 			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Upserted, Object: resObj}))
+			// Update will remove the object from the view
+			oldObj := object.DeepCopy(obj)
+			obj.SetUnstructuredContent(map[string]any{"spec": map[string]any{"b": int64(2)}})
+			obj.SetGroupVersionKind(gvk)
+			obj.SetName("test-name") // the previous call removes namespace/name
+			obj.SetNamespace("test-ns")
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			resObj = object.NewViewObject("view")
+			object.SetContent(resObj, oldObj.UnstructuredContent())
+			object.SetName(resObj, "test-ns", "test-name")
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Deleted, Object: resObj}))
 
-	// 			Expect(eng.(*defaultEngine).baseViewStore).To(HaveKey(gvk))
-	// 			store := eng.(*defaultEngine).baseViewStore[gvk]
-	// 			Expect(store.List()).To(HaveLen(1))
-	// 			x, ok, err := store.Get(obj)
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(ok).To(BeTrue())
-	// 			Expect(x).To(Equal(obj))
+			Expect(store.List()).To(HaveLen(1)) // contains the changed base object
+			x, ok, err = store.Get(obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(x).To(Equal(obj))
 
-	// 			// Update will remove the object from the view
-	// 			oldObj := object.DeepCopy(obj)
-	// 			obj.SetDbsp.DocumenturedContent(map[string]any{"spec": map[string]any{"b": int64(2)}})
-	// 			obj.SetGroupVersionKind(gvk)
-	// 			obj.SetName("test-name") // the previous call removes namespace/name
-	// 			obj.SetNamespace("test-ns")
-	// 			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(1))
-	// 			Expect(res[0].IsUnchanged()).To(BeFalse())
-	// 			resObj = object.NewViewObject("view")
-	// 			object.SetContent(resObj, oldObj.Dbsp.DocumenturedContent())
-	// 			object.SetName(resObj, "test-ns", "test-name")
-	// 			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Deleted, Object: resObj}))
+			// re-introduce object into the view
+			obj.SetUnstructuredContent(map[string]any{"spec": map[string]any{"b": int64(1)}})
+			obj.SetGroupVersionKind(gvk)
+			obj.SetName("test-name") // the previous call removes namespace/name
+			obj.SetNamespace("test-ns")
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(res).To(HaveLen(1))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			resObj = object.NewViewObject("view")
+			object.SetContent(resObj, obj.UnstructuredContent())
+			object.SetName(resObj, "test-ns", "test-name")
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Upserted, Object: resObj}))
 
-	// 			Expect(store.List()).To(HaveLen(1)) // contains the changed base object
-	// 			x, ok, err = store.Get(obj)
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(ok).To(BeTrue())
-	// 			Expect(x).To(Equal(obj))
+			Expect(store.List()).To(HaveLen(1))
+			x, ok, err = store.Get(obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(x).To(Equal(obj))
 
-	// 			// re-introduce object into the view
-	// 			obj.SetDbsp.DocumenturedContent(map[string]any{"spec": map[string]any{"b": int64(1)}})
-	// 			obj.SetGroupVersionKind(gvk)
-	// 			obj.SetName("test-name") // the previous call removes namespace/name
-	// 			obj.SetNamespace("test-ns")
-	// 			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
-	// 			Expect(res).To(HaveLen(1))
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res[0].IsUnchanged()).To(BeFalse())
-	// 			resObj = object.NewViewObject("view")
-	// 			object.SetContent(resObj, obj.Dbsp.DocumenturedContent())
-	// 			object.SetName(resObj, "test-ns", "test-name")
-	// 			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Upserted, Object: resObj}))
+			// add another object into the view
+			obj2 := object.New()
+			obj2.SetUnstructuredContent(map[string]any{"spec": map[string]any{"b": int64(1)}})
+			obj2.SetGroupVersionKind(gvk)
+			obj2.SetName("test-name-2") // the previous call removes namespace/name
+			obj2.SetNamespace("test-ns")
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj2})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			resObj = object.NewViewObject("view")
+			object.SetContent(resObj, obj2.UnstructuredContent())
+			object.SetName(resObj, "test-ns", "test-name-2")
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Upserted, Object: resObj}))
 
-	// 			Expect(store.List()).To(HaveLen(1))
-	// 			x, ok, err = store.Get(obj)
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(ok).To(BeTrue())
-	// 			Expect(x).To(Equal(obj))
+			Expect(store.List()).To(HaveLen(2))
+			x, ok, err = store.Get(obj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(x).To(Equal(obj))
+			x, ok, err = store.Get(obj2)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(x).To(Equal(obj2))
 
-	// 			// add another object into the view
-	// 			obj2 := &dbsp.Documentured.Dbsp.Documentured{}
-	// 			obj2.SetDbsp.DocumenturedContent(map[string]any{"spec": map[string]any{"b": int64(1)}})
-	// 			obj2.SetGroupVersionKind(gvk)
-	// 			obj2.SetName("test-name-2") // the previous call removes namespace/name
-	// 			obj2.SetNamespace("test-ns")
-	// 			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj2})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(1))
-	// 			Expect(res[0].IsUnchanged()).To(BeFalse())
-	// 			resObj = object.NewViewObject("view")
-	// 			object.SetContent(resObj, obj2.Dbsp.DocumenturedContent())
-	// 			object.SetName(resObj, "test-ns", "test-name-2")
-	// 			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Upserted, Object: resObj}))
+			// remove first object
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Deleted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].IsUnchanged()).To(BeFalse())
+			resObj = object.NewViewObject("view")
+			object.SetContent(resObj, obj.UnstructuredContent())
+			object.SetName(resObj, "test-ns", "test-name")
+			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Deleted, Object: resObj}))
 
-	// 			Expect(store.List()).To(HaveLen(2))
-	// 			x, ok, err = store.Get(obj)
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(ok).To(BeTrue())
-	// 			Expect(x).To(Equal(obj))
-	// 			x, ok, err = store.Get(obj2)
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(ok).To(BeTrue())
-	// 			Expect(x).To(Equal(obj2))
-
-	// 			// remove first object
-	// 			res, err = ag.Evaluate(cache.Delta{Type: cache.Deleted, Object: obj})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(1))
-	// 			Expect(res[0].IsUnchanged()).To(BeFalse())
-	// 			resObj = object.NewViewObject("view")
-	// 			object.SetContent(resObj, obj.Dbsp.DocumenturedContent())
-	// 			object.SetName(resObj, "test-ns", "test-name")
-	// 			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Deleted, Object: resObj}))
-
-	// 			// doesn't really change anything
-	// 			obj.SetDbsp.DocumenturedContent(map[string]any{"spec": map[string]any{"b": int64(3)}})
-	// 			obj.SetName("test-name") // the previous call removes namespace/name
-	// 			obj.SetNamespace("test-ns")
-	// 			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(BeEmpty())
-	// 		})
-	// 	})
+			// doesn't really change anything
+			fmt.Println(object.Dump(obj))
+			obj.SetUnstructuredContent(map[string]any{"spec": map[string]any{"b": int64(3)}})
+			obj.SetName("test-name") // the previous call removes namespace/name
+			obj.SetNamespace("test-ns")
+			obj.SetGroupVersionKind(gvk)
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(BeEmpty())
+		})
+	})
 
 	// 	Describe("Evaluating demultiplexer aggregations", func() {
 	// 		It("should evaluate a simple demux expression", func() {
 	// 			obj := object.NewViewObject("view")
 	// 			// must have a valid name
-	// 			object.SetContent(obj, dbsp.Document{
-	// 				"spec": dbsp.Document{
+	// 			object.SetContent(obj, map[string]any{
+	// 				"spec": map[string]any{
 	// 					"list": []any{int64(1), "a", true},
 	// 				},
 	// 			})
@@ -531,15 +553,15 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name":      "name-0",
 	// 								"namespace": "default",
 	// 							},
-	// 							"spec": dbsp.Document{
+	// 							"spec": map[string]any{
 	// 								"list": int64(1),
 	// 							},
 	// 						},
@@ -549,15 +571,15 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name":      "name-1",
 	// 								"namespace": "default",
 	// 							},
-	// 							"spec": dbsp.Document{
+	// 							"spec": map[string]any{
 	// 								"list": "a",
 	// 							},
 	// 						},
@@ -567,15 +589,15 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name":      "name-2",
 	// 								"namespace": "default",
 	// 							},
-	// 							"spec": dbsp.Document{
+	// 							"spec": map[string]any{
 	// 								"list": true,
 	// 							},
 	// 						},
@@ -586,8 +608,8 @@ var _ = Describe("Aggregations", func() {
 	// 		It("should evaluate a nested demux expression", func() {
 	// 			obj := object.NewViewObject("view")
 	// 			// must have a valid name
-	// 			object.SetContent(obj, dbsp.Document{
-	// 				"spec": dbsp.Document{
+	// 			object.SetContent(obj, map[string]any{
+	// 				"spec": map[string]any{
 	// 					"list": []any{
 	// 						[]any{int64(1), int64(2), int64(3)},
 	// 						[]any{int64(5), int64(6)},
@@ -606,15 +628,15 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name":      "name-0-0",
 	// 								"namespace": "default",
 	// 							},
-	// 							"spec": dbsp.Document{
+	// 							"spec": map[string]any{
 	// 								"list": int64(1),
 	// 							},
 	// 						},
@@ -624,15 +646,15 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name":      "name-0-1",
 	// 								"namespace": "default",
 	// 							},
-	// 							"spec": dbsp.Document{
+	// 							"spec": map[string]any{
 	// 								"list": int64(2),
 	// 							},
 	// 						},
@@ -642,15 +664,15 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name":      "name-0-2",
 	// 								"namespace": "default",
 	// 							},
-	// 							"spec": dbsp.Document{
+	// 							"spec": map[string]any{
 	// 								"list": int64(3),
 	// 							},
 	// 						},
@@ -660,15 +682,15 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name":      "name-1-0",
 	// 								"namespace": "default",
 	// 							},
-	// 							"spec": dbsp.Document{
+	// 							"spec": map[string]any{
 	// 								"list": int64(5),
 	// 							},
 	// 						},
@@ -678,15 +700,15 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name":      "name-1-1",
 	// 								"namespace": "default",
 	// 							},
-	// 							"spec": dbsp.Document{
+	// 							"spec": map[string]any{
 	// 								"list": int64(6),
 	// 							},
 	// 						},
@@ -697,8 +719,8 @@ var _ = Describe("Aggregations", func() {
 	// 		It("a demux expression pointing to a nonexistent key should return a nil delta", func() {
 	// 			obj := object.NewViewObject("view")
 	// 			// must have a valid name
-	// 			object.SetContent(obj, dbsp.Document{
-	// 				"spec": dbsp.Document{},
+	// 			object.SetContent(obj, map[string]any{
+	// 				"spec": map[string]any{},
 	// 			})
 	// 			object.SetName(obj, "default", "name")
 
@@ -714,8 +736,8 @@ var _ = Describe("Aggregations", func() {
 	// 		It("should evaluate a demux expression with an empty list to a nil delta", func() {
 	// 			obj := object.NewViewObject("view")
 	// 			// must have a valid name
-	// 			object.SetContent(obj, dbsp.Document{
-	// 				"spec": dbsp.Document{
+	// 			object.SetContent(obj, map[string]any{
+	// 				"spec": map[string]any{
 	// 					"list": []any{},
 	// 				},
 	// 			})
@@ -733,8 +755,8 @@ var _ = Describe("Aggregations", func() {
 	// 		It("should evaluate an update with demux expressions that set the object name", func() {
 	// 			obj := object.NewViewObject("view")
 	// 			// must have a valid name
-	// 			object.SetContent(obj, dbsp.Document{
-	// 				"spec": dbsp.Document{
+	// 			object.SetContent(obj, map[string]any{
+	// 				"spec": map[string]any{
 	// 					"list": []any{"a", "b", "c"},
 	// 				},
 	// 			})
@@ -751,11 +773,11 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name": "a",
 	// 							},
 	// 						},
@@ -765,11 +787,11 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name": "b",
 	// 							},
 	// 						},
@@ -779,11 +801,11 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name": "c",
 	// 							},
 	// 						},
@@ -791,8 +813,8 @@ var _ = Describe("Aggregations", func() {
 	// 				}))
 
 	// 			// update the list
-	// 			object.SetContent(obj, dbsp.Document{
-	// 				"spec": dbsp.Document{
+	// 			object.SetContent(obj, map[string]any{
+	// 				"spec": map[string]any{
 	// 					"list": []any{"c", "d"},
 	// 				},
 	// 			})
@@ -805,11 +827,11 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Deleted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name": "a",
 	// 							},
 	// 						},
@@ -819,11 +841,11 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Deleted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name": "b",
 	// 							},
 	// 						},
@@ -833,11 +855,11 @@ var _ = Describe("Aggregations", func() {
 	// 			Expect(res).To(ContainElement(
 	// 				cache.Delta{
 	// 					Type: cache.Upserted,
-	// 					Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 						Object: dbsp.Document{
+	// 					Object: &unstructured.Unstructured{
+	// 						Object: map[string]any{
 	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 							"kind":       "view",
-	// 							"metadata": dbsp.Document{
+	// 							"metadata": map[string]any{
 	// 								"name": "d",
 	// 							},
 	// 						},
@@ -858,17 +880,17 @@ var _ = Describe("Aggregations", func() {
 	// 				Expect(res[0]).To(Equal(
 	// 					cache.Delta{
 	// 						Type: cache.Upserted,
-	// 						Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 							Object: dbsp.Document{
+	// 						Object: &unstructured.Unstructured{
+	// 							Object: map[string]any{
 	// 								"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 								"kind":       "view",
-	// 								"metadata": dbsp.Document{
+	// 								"metadata": map[string]any{
 	// 									"name":      "name",
 	// 									"namespace": "default",
 	// 								},
-	// 								"spec": dbsp.Document{
+	// 								"spec": map[string]any{
 	// 									"a": []any{int64(1)},
-	// 									"b": dbsp.Document{"c": int64(2)},
+	// 									"b": map[string]any{"c": int64(2)},
 	// 								},
 	// 								"c": "c",
 	// 							},
@@ -881,24 +903,24 @@ var _ = Describe("Aggregations", func() {
 
 	// 				// must sort
 	// 				Expect(res[0].Object).NotTo(BeNil())
-	// 				Expect(res[0].Object.Object["spec"].(dbsp.Document)).NotTo(BeNil())
-	// 				Expect(res[0].Object.Object["spec"].(dbsp.Document)["a"]).NotTo(BeNil())
-	// 				sortAnyInt64(res[0].Object.Object["spec"].(dbsp.Document)["a"].([]any))
+	// 				Expect(res[0].Object.Object["spec"].(map[string]any)).NotTo(BeNil())
+	// 				Expect(res[0].Object.Object["spec"].(map[string]any)["a"]).NotTo(BeNil())
+	// 				sortAnyInt64(res[0].Object.Object["spec"].(map[string]any)["a"].([]any))
 
 	// 				Expect(res[0]).To(Equal(
 	// 					cache.Delta{
 	// 						Type: cache.Upserted,
-	// 						Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 							Object: dbsp.Document{
+	// 						Object: &unstructured.Unstructured{
+	// 							Object: map[string]any{
 	// 								"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 								"kind":       "view",
-	// 								"metadata": dbsp.Document{
+	// 								"metadata": map[string]any{
 	// 									"name":      "name2",
 	// 									"namespace": "default",
 	// 								},
-	// 								"spec": dbsp.Document{
+	// 								"spec": map[string]any{
 	// 									"a": []any{int64(1), int64(2)},
-	// 									"b": dbsp.Document{"c": int64(3)},
+	// 									"b": map[string]any{"c": int64(3)},
 	// 								},
 	// 								"d": "d",
 	// 							},
@@ -906,7 +928,7 @@ var _ = Describe("Aggregations", func() {
 	// 					}))
 
 	// 				obj := objs[0].DeepCopy()
-	// 				Expect(dbsp.Documentured.SetNestedField(obj.Dbsp.DocumenturedContent(), int64(3), "spec", "a")).
+	// 				Expect(unstructured.SetNestedField(obj.UnstructuredContent(), int64(3), "spec", "a")).
 	// 					NotTo(HaveOccurred())
 
 	// 				res, err = ag.Evaluate(cache.Delta{Type: cache.Updated, Object: obj})
@@ -914,24 +936,24 @@ var _ = Describe("Aggregations", func() {
 	// 				Expect(res).To(HaveLen(1))
 
 	// 				Expect(res[0].Object).NotTo(BeNil())
-	// 				Expect(res[0].Object.Object["spec"].(dbsp.Document)).NotTo(BeNil())
-	// 				Expect(res[0].Object.Object["spec"].(dbsp.Document)["a"]).NotTo(BeNil())
-	// 				sortAnyInt64(res[0].Object.Object["spec"].(dbsp.Document)["a"].([]any))
+	// 				Expect(res[0].Object.Object["spec"].(map[string]any)).NotTo(BeNil())
+	// 				Expect(res[0].Object.Object["spec"].(map[string]any)["a"]).NotTo(BeNil())
+	// 				sortAnyInt64(res[0].Object.Object["spec"].(map[string]any)["a"].([]any))
 
 	// 				Expect(res[0]).To(Equal(
 	// 					cache.Delta{
 	// 						Type: cache.Upserted,
-	// 						Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 							Object: dbsp.Document{
+	// 						Object: &unstructured.Unstructured{
+	// 							Object: map[string]any{
 	// 								"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 								"kind":       "view",
-	// 								"metadata": dbsp.Document{
+	// 								"metadata": map[string]any{
 	// 									"name":      "name",
 	// 									"namespace": "default",
 	// 								},
-	// 								"spec": dbsp.Document{
+	// 								"spec": map[string]any{
 	// 									"a": []any{int64(2), int64(3)},
-	// 									"b": dbsp.Document{"c": int64(2)},
+	// 									"b": map[string]any{"c": int64(2)},
 	// 								},
 	// 								"c": "c",
 	// 							},
@@ -945,17 +967,17 @@ var _ = Describe("Aggregations", func() {
 	// 				Expect(res[0]).To(Equal(
 	// 					cache.Delta{
 	// 						Type: cache.Upserted,
-	// 						Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 							Object: dbsp.Document{
+	// 						Object: &unstructured.Unstructured{
+	// 							Object: map[string]any{
 	// 								"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 								"kind":       "view",
-	// 								"metadata": dbsp.Document{
+	// 								"metadata": map[string]any{
 	// 									"name":      "name",
 	// 									"namespace": "default",
 	// 								},
-	// 								"spec": dbsp.Document{
+	// 								"spec": map[string]any{
 	// 									"a": []any{int64(2)},
-	// 									"b": dbsp.Document{"c": int64(2)},
+	// 									"b": map[string]any{"c": int64(2)},
 	// 								},
 	// 								"c": "c",
 	// 							},
@@ -969,17 +991,17 @@ var _ = Describe("Aggregations", func() {
 	// 				Expect(res[0]).To(Equal(
 	// 					cache.Delta{
 	// 						Type: cache.Deleted,
-	// 						Object: &dbsp.Documentured.Dbsp.Documentured{
-	// 							Object: dbsp.Document{
+	// 						Object: &unstructured.Unstructured{
+	// 							Object: map[string]any{
 	// 								"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 								"kind":       "view",
-	// 								"metadata": dbsp.Document{
+	// 								"metadata": map[string]any{
 	// 									"name":      "name2",
 	// 									"namespace": "default",
 	// 								},
-	// 								"spec": dbsp.Document{
+	// 								"spec": map[string]any{
 	// 									"a": []any{},
-	// 									"b": dbsp.Document{"c": int64(3)},
+	// 									"b": map[string]any{"c": int64(3)},
 	// 								},
 	// 								"d": "d",
 	// 							},
@@ -1006,17 +1028,17 @@ var _ = Describe("Aggregations", func() {
 	// 				Expect(res).To(HaveLen(1))
 
 	// 				Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 				Expect(res[0].Object).To(Equal(&dbsp.Documentured.Dbsp.Documentured{
-	// 					Object: dbsp.Document{
+	// 				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+	// 					Object: map[string]any{
 	// 						"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 						"kind":       "view",
-	// 						"metadata": dbsp.Document{
+	// 						"metadata": map[string]any{
 	// 							"name":      "gathered",
 	// 							"namespace": "default",
 	// 						},
-	// 						"spec": dbsp.Document{
+	// 						"spec": map[string]any{
 	// 							"a": []any{int64(1)},
-	// 							"b": dbsp.Document{"c": int64(2)},
+	// 							"b": map[string]any{"c": int64(2)},
 	// 						},
 	// 					},
 	// 				}))
@@ -1026,17 +1048,17 @@ var _ = Describe("Aggregations", func() {
 	// 				Expect(res).To(HaveLen(1))
 
 	// 				Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 				Expect(res[0].Object).To(Equal(&dbsp.Documentured.Dbsp.Documentured{
-	// 					Object: dbsp.Document{
+	// 				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+	// 					Object: map[string]any{
 	// 						"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 						"kind":       "view",
-	// 						"metadata": dbsp.Document{
+	// 						"metadata": map[string]any{
 	// 							"name":      "gathered",
 	// 							"namespace": "default",
 	// 						},
-	// 						"spec": dbsp.Document{
+	// 						"spec": map[string]any{
 	// 							"a": []any{int64(1), int64(2)},
-	// 							"b": dbsp.Document{"c": int64(3)},
+	// 							"b": map[string]any{"c": int64(3)},
 	// 						},
 	// 					},
 	// 				}))
@@ -1046,17 +1068,17 @@ var _ = Describe("Aggregations", func() {
 	// 				Expect(res).To(HaveLen(1))
 
 	// 				Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 				Expect(res[0].Object).To(Equal(&dbsp.Documentured.Dbsp.Documentured{
-	// 					Object: dbsp.Document{
+	// 				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+	// 					Object: map[string]any{
 	// 						"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 						"kind":       "view",
-	// 						"metadata": dbsp.Document{
+	// 						"metadata": map[string]any{
 	// 							"name":      "gathered",
 	// 							"namespace": "default",
 	// 						},
-	// 						"spec": dbsp.Document{
+	// 						"spec": map[string]any{
 	// 							"a": []any{int64(1)},
-	// 							"b": dbsp.Document{"c": int64(3)},
+	// 							"b": map[string]any{"c": int64(3)},
 	// 						},
 	// 					},
 	// 				}))
@@ -1066,17 +1088,17 @@ var _ = Describe("Aggregations", func() {
 	// 				Expect(res).To(HaveLen(1))
 
 	// 				Expect(res[0].Type).To(Equal(cache.Deleted))
-	// 				Expect(res[0].Object).To(Equal(&dbsp.Documentured.Dbsp.Documentured{
-	// 					Object: dbsp.Document{
+	// 				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+	// 					Object: map[string]any{
 	// 						"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 						"kind":       "view",
-	// 						"metadata": dbsp.Document{
+	// 						"metadata": map[string]any{
 	// 							"name":      "gathered",
 	// 							"namespace": "default",
 	// 						},
-	// 						"spec": dbsp.Document{
+	// 						"spec": map[string]any{
 	// 							"a": []any{},
-	// 							"b": dbsp.Document{"c": int64(2)},
+	// 							"b": map[string]any{"c": int64(2)},
 	// 						},
 	// 					},
 	// 				}))
@@ -1098,23 +1120,23 @@ var _ = Describe("Aggregations", func() {
 	// 				Expect(ag.Expressions).To(HaveLen(3))
 
 	// 				obj := object.DeepCopy(objs[0])
-	// 				Expect(dbsp.Documentured.SetNestedMap(obj.Dbsp.DocumenturedContent(), map[string]any{},
+	// 				Expect(unstructured.SetNestedMap(obj.UnstructuredContent(), map[string]any{},
 	// 					"spec")).NotTo(HaveOccurred()) // clean up spec
-	// 				Expect(dbsp.Documentured.SetNestedSlice(obj.Dbsp.DocumenturedContent(), []any{"a", "b"},
+	// 				Expect(unstructured.SetNestedSlice(obj.UnstructuredContent(), []any{"a", "b"},
 	// 					"spec", "list")).NotTo(HaveOccurred())
 	// 				res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
 	// 				Expect(err).NotTo(HaveOccurred())
 	// 				Expect(res).To(HaveLen(1))
 	// 				Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 				Expect(res[0].Object).To(Equal(&dbsp.Documentured.Dbsp.Documentured{
-	// 					Object: dbsp.Document{
+	// 				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+	// 					Object: map[string]any{
 	// 						"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 						"kind":       "view",
-	// 						"metadata": dbsp.Document{
+	// 						"metadata": map[string]any{
 	// 							"name":      "gathered",
 	// 							"namespace": "default",
 	// 						},
-	// 						"spec": dbsp.Document{
+	// 						"spec": map[string]any{
 	// 							"list": []any{"a", "b"},
 	// 						},
 	// 					},
@@ -1125,15 +1147,15 @@ var _ = Describe("Aggregations", func() {
 	// 				Expect(res).To(HaveLen(1))
 	// 				Expect(res[0].Type).To(Equal(cache.Deleted))
 	// 				// TODO ATM gather semantics is not quite settled in such a situation
-	// 				Expect(res[0].Object).To(Equal(&dbsp.Documentured.Dbsp.Documentured{
-	// 					Object: dbsp.Document{
+	// 				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+	// 					Object: map[string]any{
 	// 						"apiVersion": "view.dcontroller.io/v1alpha1",
 	// 						"kind":       "view",
-	// 						"metadata": dbsp.Document{
+	// 						"metadata": map[string]any{
 	// 							"name":      "gathered",
 	// 							"namespace": "default",
 	// 						},
-	// 						"spec": dbsp.Document{
+	// 						"spec": map[string]any{
 	// 							// "list": []any{"a", "b"},
 	// 							"list": []any{},
 	// 						},
@@ -1170,14 +1192,17 @@ var _ = Describe("Aggregations", func() {
 	//	})
 })
 
-func newTestAggregation(data string) Evaluator {
+func newAggregation(data string) (Evaluator, error) {
 	var a opv1a1.Aggregation
 	err := yaml.Unmarshal([]byte(data), &a)
-	Expect(err).NotTo(HaveOccurred())
-	p, err := NewPipeline("view", []schema.GroupVersionKind{viewv1a1.NewGVK("view")},
-		opv1a1.Pipeline{Aggregation: &a}, logger)
-	Expect(err).NotTo(HaveOccurred())
-	return p
+	if err != nil {
+		return nil, err
+	}
+	p, err := NewPipeline(gvk.Kind, []schema.GroupVersionKind{gvk}, opv1a1.Pipeline{Aggregation: &a}, logger)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 // func sortAnyInt64(l []any) {

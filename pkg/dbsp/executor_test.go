@@ -38,7 +38,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			// Build: Input -> Project -> Select -> Output
 			graph.AddInput(NewInput("users"))
 			graph.AddToChain(NewProjection(NewFieldProjection("name", "age")))
-			graph.AddToChain(NewSelection("adults", NewRangeFilter("age", 18, 100)))
+			graph.AddToChain(NewSelection(NewRangeFilter("age", 18, 100)))
 
 			// Optimize and create executor
 			err := rewriter.Optimize(graph)
@@ -517,7 +517,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			graph.AddInput(NewInput("sales"))
 			graph.SetJoin(NewBinaryJoin(NewFlexibleJoin("user_id")))
 			graph.AddToChain(NewProjection(NewFieldProjection("left_name", "right_amount", "right_dept")))
-			graph.AddToChain(NewSelection("big_sales", NewRangeFilter("right_amount", 1000, 10000)))
+			graph.AddToChain(NewSelection(NewRangeFilter("right_amount", 1000, 10000)))
 
 			keyExt, valueExt, aggregator := createGatherEvaluators("right_dept", "right_amount",
 				"department", "amounts")
@@ -723,7 +723,7 @@ var _ = Describe("LinearChainExecutor", func() {
 		BeforeEach(func() {
 			graph.AddInput(NewInput("users"))
 			graph.AddToChain(NewProjection(NewFieldProjection("name")))
-			graph.AddToChain(NewSelection("filter", NewFieldFilter("name", "Alice")))
+			graph.AddToChain(NewSelection(NewFieldFilter("name", "Alice")))
 
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
@@ -927,7 +927,7 @@ var _ = Describe("LinearChainExecutor", func() {
 
 		It("should handle operations that produce empty results", func() {
 			graph.AddInput(NewInput("data"))
-			graph.AddToChain(NewSelection("impossible", NewFieldFilter("nonexistent_field", "impossible_value")))
+			graph.AddToChain(NewSelection(NewFieldFilter("nonexistent_field", "impossible_value")))
 
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
@@ -966,7 +966,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			graph.AddToChain(NewDistinct())
 
 			// Add fuseable operations (will be fused)
-			graph.AddToChain(NewSelection("filter", NewFieldFilter("active", true)))
+			graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 			graph.AddToChain(NewProjection(NewFieldProjection("name")))
 
 			// Add gather (will be incrementalized)

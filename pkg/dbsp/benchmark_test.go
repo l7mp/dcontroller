@@ -106,7 +106,7 @@ func createSnapshotGraph() *ChainGraph {
 	graph.AddInput(NewInput("employees"))
 
 	// Filter: active employees only
-	graph.AddToChain(NewSelection("active_filter", NewFieldFilter("active", true)))
+	graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 
 	// Project: extract relevant fields
 	graph.AddToChain(NewProjection(NewFieldProjection("name", "department", "salary", "skills")))
@@ -137,7 +137,7 @@ func createIncrementalGraph() *ChainGraph {
 	graph.AddInput(NewInput("employees"))
 
 	// Filter: active employees only (linear, already incremental)
-	graph.AddToChain(NewSelection("active_filter", NewFieldFilter("active", true)))
+	graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 
 	// Project: extract relevant fields (linear, already incremental)
 	graph.AddToChain(NewProjection(NewFieldProjection("name", "department", "salary", "skills")))
@@ -172,7 +172,7 @@ func createOptimizedGraph() *ChainGraph {
 	graph.AddToChain(NewDifferentiator()) // Will be eliminated in I->D pairs
 
 	// Filter: active employees only
-	graph.AddToChain(NewSelection("active_filter", NewFieldFilter("active", true)))
+	graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 
 	// Project: extract relevant fields (will be fused with selection)
 	graph.AddToChain(NewProjection(NewFieldProjection("name", "department", "salary", "skills")))
@@ -611,7 +611,7 @@ func createJoinGraph(incremental, optimize bool) *ChainGraph {
 
 	// Add some post-join processing
 	graph.AddToChain(NewProjection(NewFieldProjection("left_name", "right_project", "right_budget")))
-	graph.AddToChain(NewSelection("big_budget", NewRangeFilter("right_budget", 15000, 1000000)))
+	graph.AddToChain(NewSelection(NewRangeFilter("right_budget", 15000, 1000000)))
 
 	if optimize {
 		rewriter := NewLinearChainRewriteEngine()

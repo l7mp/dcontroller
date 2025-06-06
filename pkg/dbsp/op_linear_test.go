@@ -360,7 +360,7 @@ var _ = Describe("Linear Operators", func() {
 		})
 
 		It("should filter by exact field match", func() {
-			selectionOp = NewSelection("active_filter", NewFieldFilter("active", true))
+			selectionOp = NewSelection(NewFieldFilter("active", true))
 
 			result, err := selectionOp.Process(inputZSet)
 			Expect(err).NotTo(HaveOccurred())
@@ -380,7 +380,7 @@ var _ = Describe("Linear Operators", func() {
 		})
 
 		It("should filter by numeric range", func() {
-			selectionOp = NewSelection("age_filter", NewRangeFilter("age", 25, 30))
+			selectionOp = NewSelection(NewRangeFilter("age", 25, 30))
 
 			result, err := selectionOp.Process(inputZSet)
 			Expect(err).NotTo(HaveOccurred())
@@ -391,7 +391,7 @@ var _ = Describe("Linear Operators", func() {
 		})
 
 		It("should preserve multiplicities during filtering", func() {
-			selectionOp = NewSelection("name_filter", NewFieldFilter("name", "Bob"))
+			selectionOp = NewSelection(NewFieldFilter("name", "Bob"))
 
 			result, err := selectionOp.Process(inputZSet)
 			Expect(err).NotTo(HaveOccurred())
@@ -408,7 +408,7 @@ var _ = Describe("Linear Operators", func() {
 		})
 
 		It("should return empty for no matches", func() {
-			selectionOp = NewSelection("nonexistent_filter", NewFieldFilter("name", "Nonexistent"))
+			selectionOp = NewSelection(NewFieldFilter("name", "Nonexistent"))
 
 			result, err := selectionOp.Process(inputZSet)
 			Expect(err).NotTo(HaveOccurred())
@@ -417,7 +417,7 @@ var _ = Describe("Linear Operators", func() {
 		})
 
 		It("should handle missing fields", func() {
-			selectionOp = NewSelection("missing_field_filter", NewFieldFilter("nonexistent", "value"))
+			selectionOp = NewSelection(NewFieldFilter("nonexistent", "value"))
 
 			result, err := selectionOp.Process(inputZSet)
 			Expect(err).NotTo(HaveOccurred())
@@ -426,7 +426,7 @@ var _ = Describe("Linear Operators", func() {
 		})
 
 		It("should be linear (OpType)", func() {
-			selectionOp = NewSelection("test", NewFieldFilter("name", "Alice"))
+			selectionOp = NewSelection(NewFieldFilter("name", "Alice"))
 			Expect(selectionOp.OpType()).To(Equal(OpTypeLinear))
 			Expect(selectionOp.IsTimeInvariant()).To(BeTrue())
 			Expect(selectionOp.HasZeroPreservationProperty()).To(BeTrue())
@@ -452,7 +452,7 @@ var _ = Describe("Linear Operators", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// First filter active users
-			selectionOp := NewSelection("active_filter", NewFieldFilter("active", true))
+			selectionOp := NewSelection(NewFieldFilter("active", true))
 			filtered, err := selectionOp.Process(inputZSet)
 			Expect(err).NotTo(HaveOccurred())
 

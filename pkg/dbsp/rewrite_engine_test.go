@@ -261,7 +261,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 		It("should fuse selection followed by projection", func() {
 			graph.AddInput(NewInput("users"))
 
-			_ = graph.AddToChain(NewSelection("active", NewFieldFilter("active", true)))
+			_ = graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 			_ = graph.AddToChain(NewProjection(NewFieldProjection("name", "email")))
 
 			Expect(len(graph.chain)).To(Equal(2))
@@ -286,7 +286,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 		It("should not fuse non-adjacent operations", func() {
 			graph.AddInput(NewInput("users"))
 
-			selID := graph.AddToChain(NewSelection("active", NewFieldFilter("active", true)))
+			selID := graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 			_ = graph.AddToChain(NewDistinct())
 			projID := graph.AddToChain(NewProjection(NewFieldProjection("name")))
 
@@ -319,9 +319,9 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 		It("should handle multiple fuseable pairs", func() {
 			graph.AddInput(NewInput("users"))
 
-			_ = graph.AddToChain(NewSelection("active", NewFieldFilter("active", true)))
+			_ = graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 			_ = graph.AddToChain(NewProjection(NewFieldProjection("name", "email")))
-			_ = graph.AddToChain(NewSelection("verified", NewFieldFilter("verified", true)))
+			_ = graph.AddToChain(NewSelection(NewFieldFilter("verified", true)))
 			_ = graph.AddToChain(NewProjection(NewFieldProjection("name")))
 
 			Expect(len(graph.chain)).To(Equal(4))
@@ -366,7 +366,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			graph.AddToChain(NewDistinct())
 
 			// Fuseable selection + projection
-			graph.AddToChain(NewSelection("active", NewFieldFilter("active", true)))
+			graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 			graph.AddToChain(NewProjection(NewFieldProjection("name")))
 
 			initialChainLength := len(graph.chain)
@@ -411,7 +411,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			graph.AddToChain(NewDifferentiator())
 			graph.AddToChain(NewDistinct())
 			graph.AddToChain(NewDistinct())
-			graph.AddToChain(NewSelection("filter", NewFieldFilter("active", true)))
+			graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 			graph.AddToChain(NewProjection(NewFieldProjection("name")))
 
 			// Should converge without hitting iteration limit
@@ -431,7 +431,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			diffID := graph.AddToChain(NewDifferentiator())
 
 			// Add operations after I->D
-			_ = graph.AddToChain(NewSelection("active", NewFieldFilter("active", true)))
+			_ = graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 			_ = graph.AddToChain(NewProjection(NewFieldProjection("name")))
 
 			err := rewriter.Optimize(graph)
@@ -482,7 +482,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			graph.AddInput(NewInput("users"))
 
 			_ = graph.AddToChain(NewProjection(NewFieldProjection("name")))
-			_ = graph.AddToChain(NewSelection("active", NewFieldFilter("active", true)))
+			_ = graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 
 			// Record original structure
 			originalInputs := len(graph.inputs)
