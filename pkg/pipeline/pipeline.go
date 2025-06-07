@@ -82,13 +82,20 @@ func NewPipeline(target string, sources []schema.GroupVersionKind, config opv1a1
 				// @project is one-to-one
 				op = p.NewProjectionOp(&e)
 
-			// case "@unwind", "@demux":
-			// 	// @demux is one to many
-			// 	op = p.makeUnwind(e)
-
-			// case "@gather", "@mux":
-			// 	// @mux is many to one
-			// 	op = p.makeGather(e)
+			case "@unwind", "@demux":
+				// @demux is one to many
+				o, err := p.NewUnwindOp(&e)
+				if err != nil {
+					return nil, NewPipelineError(fmt.Errorf("failed to instantiate unwind op: %w", err))
+				}
+				op = o
+			case "@gather", "@mux":
+				// @mux is many to one
+				o, err := p.NewGatherOp(&e)
+				if err != nil {
+					return nil, NewPipelineError(fmt.Errorf("failed to instantiate gather op: %w", err))
+				}
+				op = o
 
 			default:
 				return nil, NewPipelineError(errors.New("unknown aggregation op"))
@@ -97,6 +104,8 @@ func NewPipeline(target string, sources []schema.GroupVersionKind, config opv1a1
 			p.graph.AddToChain(op)
 		}
 	}
+
+	p.log.Info("pipeline initialization ready", "num-inputs", len(sources), "graph", p.graph.String())
 
 	// Optimize
 	if err := p.rewriter.Optimize(p.graph); err != nil {
@@ -110,7 +119,7 @@ func NewPipeline(target string, sources []schema.GroupVersionKind, config opv1a1
 	}
 	p.executor = executor
 
-	p.log.Info("pipeline setup ready", "graph", p.graph.String())
+	p.log.Info("pipeline optimization ready", "graph", p.graph.String())
 
 	return p, nil
 }

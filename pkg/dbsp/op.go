@@ -18,7 +18,7 @@ type Extractor interface {
 
 // Transform documents by setting/replacing fields.
 type Transformer interface {
-	Transform(doc Document, value any) (Document, error)
+	Transform(Document, any) (Document, error)
 	fmt.Stringer
 }
 

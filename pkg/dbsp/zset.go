@@ -180,7 +180,7 @@ func (dz *DocumentZSet) DeepCopy() (*DocumentZSet, error) {
 	}
 
 	for key, doc := range dz.docs {
-		copied, err := deepCopy(doc)
+		copied, err := DeepCopyAny(doc)
 		if err != nil {
 			return nil, newZSetError("failed to deep copy document in Z-set", err)
 		}
@@ -202,7 +202,7 @@ func (dz *DocumentZSet) List() ([]DocumentEntry, error) {
 	result := make([]DocumentEntry, 0, len(dz.counts))
 
 	for key, mult := range dz.counts {
-		doc, err := deepCopy(dz.docs[key])
+		doc, err := DeepCopyAny(dz.docs[key])
 		if err != nil {
 			return nil, newZSetError("failed to copy document in List", err)
 		}
@@ -228,7 +228,7 @@ func (dz *DocumentZSet) GetDocuments() ([]Document, error) {
 
 		doc := dz.docs[key]
 		for i := 0; i < count; i++ {
-			copied, err := deepCopy(doc)
+			copied, err := DeepCopyAny(doc)
 			if err != nil {
 				return nil, newZSetError("failed to copy document in GetDocuments", err)
 			}
@@ -246,7 +246,7 @@ func (dz *DocumentZSet) GetUniqueDocuments() ([]Document, error) {
 	for key, count := range dz.counts {
 		if count > 0 {
 			doc := dz.docs[key]
-			copied, err := deepCopy(doc)
+			copied, err := DeepCopyAny(doc)
 			if err != nil {
 				return nil, newZSetError("failed to copy document in GetUniqueDocuments", err)
 			}

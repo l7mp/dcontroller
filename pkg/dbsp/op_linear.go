@@ -31,7 +31,7 @@ func (n *ProjectionOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 
 	for key, multiplicity := range input.counts {
 		// evaluator modifies doc
-		doc, err := deepCopyDocument(input.docs[key])
+		doc, err := DeepCopyDocument(input.docs[key])
 		if err != nil {
 			return nil, fmt.Errorf("failed to deep copy document for modification: %w", err)
 		}
@@ -141,7 +141,7 @@ func (op *UnwindOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 		// Create one document for each array element
 		for _, element := range arraySlice {
 			// Transform document with current element: modifies document
-			transformed, err := deepCopyDocument(input.docs[key])
+			transformed, err := DeepCopyDocument(input.docs[key])
 			if err != nil {
 				return nil, fmt.Errorf("failed to deep copy document for modification: %w", err)
 			}

@@ -1,7 +1,7 @@
 package pipeline
 
 import (
-	"fmt"
+	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -520,7 +520,6 @@ var _ = Describe("Aggregations", func() {
 			Expect(res[0]).To(Equal(cache.Delta{Type: cache.Deleted, Object: resObj}))
 
 			// doesn't really change anything
-			fmt.Println(object.Dump(obj))
 			obj.SetUnstructuredContent(map[string]any{"spec": map[string]any{"b": int64(3)}})
 			obj.SetName("test-name") // the previous call removes namespace/name
 			obj.SetNamespace("test-ns")
@@ -531,665 +530,663 @@ var _ = Describe("Aggregations", func() {
 		})
 	})
 
-	// 	Describe("Evaluating demultiplexer aggregations", func() {
-	// 		It("should evaluate a simple demux expression", func() {
-	// 			obj := object.NewViewObject("view")
-	// 			// must have a valid name
-	// 			object.SetContent(obj, map[string]any{
-	// 				"spec": map[string]any{
-	// 					"list": []any{int64(1), "a", true},
-	// 				},
-	// 			})
-	// 			object.SetName(obj, "default", "name")
+	Describe("Evaluating demultiplexer/unwind aggregations", func() {
+		It("should evaluate a simple demux expression", func() {
+			obj := object.NewViewObject("view")
+			// must have a valid name
+			object.SetContent(obj, map[string]any{
+				"spec": map[string]any{
+					"list": []any{int64(1), "a", true},
+				},
+			})
+			object.SetName(obj, "default", "name")
 
-	// 			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}]}`
-	// 			ag := newAggregation(eng, []byte(jsonData))
-	// 			Expect(ag.Expressions).To(HaveLen(1))
+			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(3))
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(3))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name":      "name-0",
-	// 								"namespace": "default",
-	// 							},
-	// 							"spec": map[string]any{
-	// 								"list": int64(1),
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name-0",
+								"namespace": "default",
+							},
+							"spec": map[string]any{
+								"list": int64(1),
+							},
+						},
+					},
+				}))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name":      "name-1",
-	// 								"namespace": "default",
-	// 							},
-	// 							"spec": map[string]any{
-	// 								"list": "a",
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name-1",
+								"namespace": "default",
+							},
+							"spec": map[string]any{
+								"list": "a",
+							},
+						},
+					},
+				}))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name":      "name-2",
-	// 								"namespace": "default",
-	// 							},
-	// 							"spec": map[string]any{
-	// 								"list": true,
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
-	// 		})
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name-2",
+								"namespace": "default",
+							},
+							"spec": map[string]any{
+								"list": true,
+							},
+						},
+					},
+				}))
+		})
 
-	// 		It("should evaluate a nested demux expression", func() {
-	// 			obj := object.NewViewObject("view")
-	// 			// must have a valid name
-	// 			object.SetContent(obj, map[string]any{
-	// 				"spec": map[string]any{
-	// 					"list": []any{
-	// 						[]any{int64(1), int64(2), int64(3)},
-	// 						[]any{int64(5), int64(6)},
-	// 					},
-	// 				},
-	// 			})
-	// 			object.SetName(obj, "default", "name")
+		It("should evaluate a nested demux expression", func() {
+			obj := object.NewViewObject("view")
+			// must have a valid name
+			object.SetContent(obj, map[string]any{
+				"spec": map[string]any{
+					"list": []any{
+						[]any{int64(1), int64(2), int64(3)},
+						[]any{int64(5), int64(6)},
+					},
+				},
+			})
+			object.SetName(obj, "default", "name")
 
-	// 			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}, {"@unwind": "$.spec.list"}]}`
-	// 			ag := newAggregation(eng, []byte(jsonData))
+			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}, {"@unwind": "$.spec.list"}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(5))
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(5))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name":      "name-0-0",
-	// 								"namespace": "default",
-	// 							},
-	// 							"spec": map[string]any{
-	// 								"list": int64(1),
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name-0-0",
+								"namespace": "default",
+							},
+							"spec": map[string]any{
+								"list": int64(1),
+							},
+						},
+					},
+				}))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name":      "name-0-1",
-	// 								"namespace": "default",
-	// 							},
-	// 							"spec": map[string]any{
-	// 								"list": int64(2),
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name-0-1",
+								"namespace": "default",
+							},
+							"spec": map[string]any{
+								"list": int64(2),
+							},
+						},
+					},
+				}))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name":      "name-0-2",
-	// 								"namespace": "default",
-	// 							},
-	// 							"spec": map[string]any{
-	// 								"list": int64(3),
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name-0-2",
+								"namespace": "default",
+							},
+							"spec": map[string]any{
+								"list": int64(3),
+							},
+						},
+					},
+				}))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name":      "name-1-0",
-	// 								"namespace": "default",
-	// 							},
-	// 							"spec": map[string]any{
-	// 								"list": int64(5),
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name-1-0",
+								"namespace": "default",
+							},
+							"spec": map[string]any{
+								"list": int64(5),
+							},
+						},
+					},
+				}))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name":      "name-1-1",
-	// 								"namespace": "default",
-	// 							},
-	// 							"spec": map[string]any{
-	// 								"list": int64(6),
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
-	// 		})
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name-1-1",
+								"namespace": "default",
+							},
+							"spec": map[string]any{
+								"list": int64(6),
+							},
+						},
+					},
+				}))
+		})
 
-	// 		It("a demux expression pointing to a nonexistent key should return a nil delta", func() {
-	// 			obj := object.NewViewObject("view")
-	// 			// must have a valid name
-	// 			object.SetContent(obj, map[string]any{
-	// 				"spec": map[string]any{},
-	// 			})
-	// 			object.SetName(obj, "default", "name")
+		It("a demux expression pointing to a nonexistent key should return a nil delta", func() {
+			obj := object.NewViewObject("view")
+			// must have a valid name
+			object.SetContent(obj, map[string]any{
+				"spec": map[string]any{},
+			})
+			object.SetName(obj, "default", "name")
 
-	// 			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}]}`
-	// 			ag := newAggregation(eng, []byte(jsonData))
-	// 			Expect(ag.Expressions).To(HaveLen(1))
+			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(BeEmpty())
-	// 		})
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(BeEmpty())
+		})
 
-	// 		It("should evaluate a demux expression with an empty list to a nil delta", func() {
-	// 			obj := object.NewViewObject("view")
-	// 			// must have a valid name
-	// 			object.SetContent(obj, map[string]any{
-	// 				"spec": map[string]any{
-	// 					"list": []any{},
-	// 				},
-	// 			})
-	// 			object.SetName(obj, "default", "name")
+		It("should evaluate a demux expression with an empty list to a nil delta", func() {
+			obj := object.NewViewObject("view")
+			// must have a valid name
+			object.SetContent(obj, map[string]any{
+				"spec": map[string]any{
+					"list": []any{},
+				},
+			})
+			object.SetName(obj, "default", "name")
 
-	// 			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}]}`
-	// 			ag := newAggregation(eng, []byte(jsonData))
-	// 			Expect(ag.Expressions).To(HaveLen(1))
+			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(BeEmpty())
-	// 		})
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(BeEmpty())
+		})
 
-	// 		It("should evaluate an update with demux expressions that set the object name", func() {
-	// 			obj := object.NewViewObject("view")
-	// 			// must have a valid name
-	// 			object.SetContent(obj, map[string]any{
-	// 				"spec": map[string]any{
-	// 					"list": []any{"a", "b", "c"},
-	// 				},
-	// 			})
-	// 			object.SetName(obj, "default", "name")
+		It("should evaluate an update with demux expressions that set the object name", func() {
+			obj := object.NewViewObject("view")
+			// must have a valid name
+			object.SetContent(obj, map[string]any{
+				"spec": map[string]any{
+					"list": []any{"a", "b", "c"},
+				},
+			})
+			object.SetName(obj, "default", "name")
 
-	// 			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"},{"@project":{"metadata":{"name":"$.spec.list"}}}]}`
-	// 			ag := newAggregation(eng, []byte(jsonData))
-	// 			Expect(ag.Expressions).To(HaveLen(2))
+			jsonData := `{"@aggregate":[{"@unwind":"$.spec.list"},{"@project":{"metadata":{"name":"$.spec.list"}}}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(3))
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(3))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name": "a",
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name": "a",
+							},
+						},
+					},
+				}))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name": "b",
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name": "b",
+							},
+						},
+					},
+				}))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name": "c",
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name": "c",
+							},
+						},
+					},
+				}))
 
-	// 			// update the list
-	// 			object.SetContent(obj, map[string]any{
-	// 				"spec": map[string]any{
-	// 					"list": []any{"c", "d"},
-	// 				},
-	// 			})
-	// 			object.SetName(obj, "default", "name")
+			// update the list
+			object.SetContent(obj, map[string]any{
+				"spec": map[string]any{
+					"list": []any{"c", "d"},
+				},
+			})
+			object.SetName(obj, "default", "name")
 
-	// 			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
-	// 			Expect(err).NotTo(HaveOccurred())
-	// 			Expect(res).To(HaveLen(3))
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(3))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Deleted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name": "a",
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Deleted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name": "a",
+							},
+						},
+					},
+				}))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Deleted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name": "b",
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Deleted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name": "b",
+							},
+						},
+					},
+				}))
 
-	// 			Expect(res).To(ContainElement(
-	// 				cache.Delta{
-	// 					Type: cache.Upserted,
-	// 					Object: &unstructured.Unstructured{
-	// 						Object: map[string]any{
-	// 							"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 							"kind":       "view",
-	// 							"metadata": map[string]any{
-	// 								"name": "d",
-	// 							},
-	// 						},
-	// 					},
-	// 				}))
-	// 		})
+			Expect(res).To(ContainElement(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name": "d",
+							},
+						},
+					},
+				}))
+		})
+	})
 
-	// 		Describe("Evaluating multiplexer aggregations", func() {
-	// 			It("should evaluate a raw mux expression", func() {
-	// 				jsonData := `{"@aggregate":[{"@gather":["$.metadata.namespace","$.spec.a"]}]}`
-	// 				ag := newAggregation(eng, []byte(jsonData))
-	// 				Expect(ag.Expressions).To(HaveLen(1))
+	Describe("Evaluating multiplexer aggregations", func() {
+		It("should evaluate a raw mux expression", func() {
+			jsonData := `{"@aggregate":[{"@gather":["$.metadata.namespace","$.spec.a"]}]}`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 				res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: objs[0]})
-	// 				Expect(err).NotTo(HaveOccurred())
-	// 				Expect(res).To(HaveLen(1))
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
 
-	// 				Expect(res[0]).To(Equal(
-	// 					cache.Delta{
-	// 						Type: cache.Upserted,
-	// 						Object: &unstructured.Unstructured{
-	// 							Object: map[string]any{
-	// 								"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 								"kind":       "view",
-	// 								"metadata": map[string]any{
-	// 									"name":      "name",
-	// 									"namespace": "default",
-	// 								},
-	// 								"spec": map[string]any{
-	// 									"a": []any{int64(1)},
-	// 									"b": map[string]any{"c": int64(2)},
-	// 								},
-	// 								"c": "c",
-	// 							},
-	// 						},
-	// 					}))
+			Expect(res[0]).To(Equal(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name",
+								"namespace": "default",
+							},
+							"spec": map[string]any{
+								"a": []any{int64(1)},
+								"b": map[string]any{"c": int64(2)},
+							},
+							"c": "c",
+						},
+					},
+				}))
 
-	// 				res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[1]})
-	// 				Expect(err).NotTo(HaveOccurred())
-	// 				Expect(res).To(HaveLen(1))
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[1]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
 
-	// 				// must sort
-	// 				Expect(res[0].Object).NotTo(BeNil())
-	// 				Expect(res[0].Object.Object["spec"].(map[string]any)).NotTo(BeNil())
-	// 				Expect(res[0].Object.Object["spec"].(map[string]any)["a"]).NotTo(BeNil())
-	// 				sortAnyInt64(res[0].Object.Object["spec"].(map[string]any)["a"].([]any))
+			// must sort
+			Expect(res[0].Object).NotTo(BeNil())
+			Expect(res[0].Object.Object["spec"].(map[string]any)).NotTo(BeNil())
+			Expect(res[0].Object.Object["spec"].(map[string]any)["a"]).NotTo(BeNil())
+			sortAnyInt64(res[0].Object.Object["spec"].(map[string]any)["a"].([]any))
 
-	// 				Expect(res[0]).To(Equal(
-	// 					cache.Delta{
-	// 						Type: cache.Upserted,
-	// 						Object: &unstructured.Unstructured{
-	// 							Object: map[string]any{
-	// 								"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 								"kind":       "view",
-	// 								"metadata": map[string]any{
-	// 									"name":      "name2",
-	// 									"namespace": "default",
-	// 								},
-	// 								"spec": map[string]any{
-	// 									"a": []any{int64(1), int64(2)},
-	// 									"b": map[string]any{"c": int64(3)},
-	// 								},
-	// 								"d": "d",
-	// 							},
-	// 						},
-	// 					}))
+			Expect(res[0]).To(Equal(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name",
+								"namespace": "default",
+							},
+							"spec": map[string]any{
+								"a": []any{int64(1), int64(2)},
+								"b": map[string]any{"c": int64(2)},
+							},
+							"c": "c",
+						},
+					},
+				}))
 
-	// 				obj := objs[0].DeepCopy()
-	// 				Expect(unstructured.SetNestedField(obj.UnstructuredContent(), int64(3), "spec", "a")).
-	// 					NotTo(HaveOccurred())
+			obj := objs[0].DeepCopy()
+			Expect(unstructured.SetNestedField(obj.UnstructuredContent(), int64(3), "spec", "a")).
+				NotTo(HaveOccurred())
 
-	// 				res, err = ag.Evaluate(cache.Delta{Type: cache.Updated, Object: obj})
-	// 				Expect(err).NotTo(HaveOccurred())
-	// 				Expect(res).To(HaveLen(1))
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Updated, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
 
-	// 				Expect(res[0].Object).NotTo(BeNil())
-	// 				Expect(res[0].Object.Object["spec"].(map[string]any)).NotTo(BeNil())
-	// 				Expect(res[0].Object.Object["spec"].(map[string]any)["a"]).NotTo(BeNil())
-	// 				sortAnyInt64(res[0].Object.Object["spec"].(map[string]any)["a"].([]any))
+			Expect(res[0].Object).NotTo(BeNil())
+			Expect(res[0].Object.Object["spec"].(map[string]any)).NotTo(BeNil())
+			Expect(res[0].Object.Object["spec"].(map[string]any)["a"]).NotTo(BeNil())
+			sortAnyInt64(res[0].Object.Object["spec"].(map[string]any)["a"].([]any))
 
-	// 				Expect(res[0]).To(Equal(
-	// 					cache.Delta{
-	// 						Type: cache.Upserted,
-	// 						Object: &unstructured.Unstructured{
-	// 							Object: map[string]any{
-	// 								"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 								"kind":       "view",
-	// 								"metadata": map[string]any{
-	// 									"name":      "name",
-	// 									"namespace": "default",
-	// 								},
-	// 								"spec": map[string]any{
-	// 									"a": []any{int64(2), int64(3)},
-	// 									"b": map[string]any{"c": int64(2)},
-	// 								},
-	// 								"c": "c",
-	// 							},
-	// 						},
-	// 					}))
+			Expect(res[0]).To(Equal(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name",
+								"namespace": "default",
+							},
+							"spec": map[string]any{
+								"a": []any{int64(2), int64(3)},
+								"b": map[string]any{"c": int64(2)},
+							},
+							"c": "c",
+						},
+					},
+				}))
 
-	// 				res, err = ag.Evaluate(cache.Delta{Type: cache.Deleted, Object: obj})
-	// 				Expect(err).NotTo(HaveOccurred())
-	// 				Expect(res).To(HaveLen(1))
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Deleted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
 
-	// 				Expect(res[0]).To(Equal(
-	// 					cache.Delta{
-	// 						Type: cache.Upserted,
-	// 						Object: &unstructured.Unstructured{
-	// 							Object: map[string]any{
-	// 								"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 								"kind":       "view",
-	// 								"metadata": map[string]any{
-	// 									"name":      "name",
-	// 									"namespace": "default",
-	// 								},
-	// 								"spec": map[string]any{
-	// 									"a": []any{int64(2)},
-	// 									"b": map[string]any{"c": int64(2)},
-	// 								},
-	// 								"c": "c",
-	// 							},
-	// 						},
-	// 					}))
+			Expect(res[0]).To(Equal(
+				cache.Delta{
+					Type: cache.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name",
+								"namespace": "default",
+							},
+							"spec": map[string]any{
+								"a": []any{int64(2)},
+								"b": map[string]any{"c": int64(2)},
+							},
+							"c": "c",
+						},
+					},
+				}))
 
-	// 				res, err = ag.Evaluate(cache.Delta{Type: cache.Deleted, Object: objs[1]})
-	// 				Expect(err).NotTo(HaveOccurred())
-	// 				Expect(res).To(HaveLen(1))
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Deleted, Object: objs[1]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
 
-	// 				Expect(res[0]).To(Equal(
-	// 					cache.Delta{
-	// 						Type: cache.Deleted,
-	// 						Object: &unstructured.Unstructured{
-	// 							Object: map[string]any{
-	// 								"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 								"kind":       "view",
-	// 								"metadata": map[string]any{
-	// 									"name":      "name2",
-	// 									"namespace": "default",
-	// 								},
-	// 								"spec": map[string]any{
-	// 									"a": []any{},
-	// 									"b": map[string]any{"c": int64(3)},
-	// 								},
-	// 								"d": "d",
-	// 							},
-	// 						},
-	// 					}))
-	// 			})
+			Expect(res[0]).To(Equal(
+				cache.Delta{
+					Type: cache.Deleted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name",
+								"namespace": "default",
+							},
+							"spec": map[string]any{
+								"a": []any{int64(2)},
+								"b": map[string]any{"c": int64(2)},
+							},
+							"c": "c",
+						},
+					},
+				}))
+		})
 
-	// 			It("should evaluate a mux expression that updates the same object name", func() {
-	// 				yamlData := `
-	// '@aggregate':
-	//   - '@gather':
-	//       - $.metadata.namespace
-	//       - $.spec.a
-	//   - '@project':
-	//       metadata:
-	//         name: "gathered"
-	//         namespace: "default"
-	//       spec: $.spec`
-	// 				ag := newAggregation(eng, []byte(yamlData))
-	// 				Expect(ag.Expressions).To(HaveLen(2))
+		It("should evaluate a mux expression that updates the same object name", func() {
+			jsonData := `
+'@aggregate':
+  - '@gather':
+      - $.metadata.namespace
+      - $.spec.a
+  - '@project':
+      metadata:
+        name: "gathered"
+        namespace: "default"
+      spec:
+        a: $.spec.a`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 				res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: objs[0]})
-	// 				Expect(err).NotTo(HaveOccurred())
-	// 				Expect(res).To(HaveLen(1))
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
 
-	// 				Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
-	// 					Object: map[string]any{
-	// 						"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 						"kind":       "view",
-	// 						"metadata": map[string]any{
-	// 							"name":      "gathered",
-	// 							"namespace": "default",
-	// 						},
-	// 						"spec": map[string]any{
-	// 							"a": []any{int64(1)},
-	// 							"b": map[string]any{"c": int64(2)},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res[0].Type).To(Equal(cache.Upserted))
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": map[string]any{
+						"name":      "gathered",
+						"namespace": "default",
+					},
+					"spec": map[string]any{
+						"a": []any{int64(1)},
+					},
+				},
+			}))
 
-	// 				res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[1]})
-	// 				Expect(err).NotTo(HaveOccurred())
-	// 				Expect(res).To(HaveLen(1))
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Upserted, Object: objs[1]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
 
-	// 				Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
-	// 					Object: map[string]any{
-	// 						"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 						"kind":       "view",
-	// 						"metadata": map[string]any{
-	// 							"name":      "gathered",
-	// 							"namespace": "default",
-	// 						},
-	// 						"spec": map[string]any{
-	// 							"a": []any{int64(1), int64(2)},
-	// 							"b": map[string]any{"c": int64(3)},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res[0].Type).To(Equal(cache.Upserted))
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": map[string]any{
+						"name":      "gathered",
+						"namespace": "default",
+					},
+					"spec": map[string]any{
+						"a": []any{int64(1), int64(2)},
+					},
+				},
+			}))
 
-	// 				res, err = ag.Evaluate(cache.Delta{Type: cache.Deleted, Object: objs[1]})
-	// 				Expect(err).NotTo(HaveOccurred())
-	// 				Expect(res).To(HaveLen(1))
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Deleted, Object: objs[1]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
 
-	// 				Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
-	// 					Object: map[string]any{
-	// 						"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 						"kind":       "view",
-	// 						"metadata": map[string]any{
-	// 							"name":      "gathered",
-	// 							"namespace": "default",
-	// 						},
-	// 						"spec": map[string]any{
-	// 							"a": []any{int64(1)},
-	// 							"b": map[string]any{"c": int64(3)},
-	// 						},
-	// 					},
-	// 				}))
+			Expect(res[0].Type).To(Equal(cache.Upserted))
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": map[string]any{
+						"name":      "gathered",
+						"namespace": "default",
+					},
+					"spec": map[string]any{
+						"a": []any{int64(1)},
+					},
+				},
+			}))
 
-	// 				res, err = ag.Evaluate(cache.Delta{Type: cache.Deleted, Object: objs[0]})
-	// 				Expect(err).NotTo(HaveOccurred())
-	// 				Expect(res).To(HaveLen(1))
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Deleted, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
 
-	// 				Expect(res[0].Type).To(Equal(cache.Deleted))
-	// 				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
-	// 					Object: map[string]any{
-	// 						"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 						"kind":       "view",
-	// 						"metadata": map[string]any{
-	// 							"name":      "gathered",
-	// 							"namespace": "default",
-	// 						},
-	// 						"spec": map[string]any{
-	// 							"a": []any{},
-	// 							"b": map[string]any{"c": int64(2)},
-	// 						},
-	// 					},
-	// 				}))
-	// 			})
+			Expect(res[0].Type).To(Equal(cache.Deleted))
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": map[string]any{
+						"name":      "gathered",
+						"namespace": "default",
+					},
+					"spec": map[string]any{
+						"a": []any{int64(1)},
+					},
+				},
+			}))
+		})
 
-	// 			It("should allow a demux followd by a mux", func() {
-	// 				yamlData := `
-	// '@aggregate':
-	//   - '@unwind': $.spec.list
-	//   - '@gather':
-	//       - $.metadata.namespace
-	//       - $.spec.list
-	//   - '@project':
-	//       metadata:
-	//         name: "gathered"
-	//         namespace: "default"
-	//       spec: $.spec`
-	// 				ag := newAggregation(eng, []byte(yamlData))
-	// 				Expect(ag.Expressions).To(HaveLen(3))
+		It("should allow a demux followd by a mux", func() {
+			jsonData := `
+'@aggregate':
+  - '@unwind': $.spec.list
+  - '@gather':
+      - $.metadata.namespace
+      - $.spec.list
+  - '@project':
+      metadata:
+        name: "gathered"
+        namespace: "default"
+      spec: $.spec`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 				obj := object.DeepCopy(objs[0])
-	// 				Expect(unstructured.SetNestedMap(obj.UnstructuredContent(), map[string]any{},
-	// 					"spec")).NotTo(HaveOccurred()) // clean up spec
-	// 				Expect(unstructured.SetNestedSlice(obj.UnstructuredContent(), []any{"a", "b"},
-	// 					"spec", "list")).NotTo(HaveOccurred())
-	// 				res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
-	// 				Expect(err).NotTo(HaveOccurred())
-	// 				Expect(res).To(HaveLen(1))
-	// 				Expect(res[0].Type).To(Equal(cache.Upserted))
-	// 				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
-	// 					Object: map[string]any{
-	// 						"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 						"kind":       "view",
-	// 						"metadata": map[string]any{
-	// 							"name":      "gathered",
-	// 							"namespace": "default",
-	// 						},
-	// 						"spec": map[string]any{
-	// 							"list": []any{"a", "b"},
-	// 						},
-	// 					},
-	// 				}))
+			obj := object.DeepCopy(objs[0])
+			Expect(unstructured.SetNestedMap(obj.UnstructuredContent(), map[string]any{},
+				"spec")).NotTo(HaveOccurred()) // clean up spec
+			Expect(unstructured.SetNestedSlice(obj.UnstructuredContent(), []any{"a", "b"},
+				"spec", "list")).NotTo(HaveOccurred())
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Upserted))
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": map[string]any{
+						"name":      "gathered",
+						"namespace": "default",
+					},
+					"spec": map[string]any{
+						"list": []any{"a", "b"},
+					},
+				},
+			}))
 
-	// 				res, err = ag.Evaluate(cache.Delta{Type: cache.Deleted, Object: obj})
-	// 				Expect(err).NotTo(HaveOccurred())
-	// 				Expect(res).To(HaveLen(1))
-	// 				Expect(res[0].Type).To(Equal(cache.Deleted))
-	// 				// TODO ATM gather semantics is not quite settled in such a situation
-	// 				Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
-	// 					Object: map[string]any{
-	// 						"apiVersion": "view.dcontroller.io/v1alpha1",
-	// 						"kind":       "view",
-	// 						"metadata": map[string]any{
-	// 							"name":      "gathered",
-	// 							"namespace": "default",
-	// 						},
-	// 						"spec": map[string]any{
-	// 							// "list": []any{"a", "b"},
-	// 							"list": []any{},
-	// 						},
-	// 					},
-	// 				}))
-	// 			})
+			res, err = ag.Evaluate(cache.Delta{Type: cache.Deleted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+			Expect(res[0].Type).To(Equal(cache.Deleted))
+			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": map[string]any{
+						"name":      "gathered",
+						"namespace": "default",
+					},
+					"spec": map[string]any{
+						"list": []any{"a", "b"},
+					},
+				},
+			}))
+		})
 
-	// 			It("should err for a mux expression using an invalid obj id", func() {
-	// 				yamlData := `
-	// '@aggregate':
-	//   - '@gather':
-	//       - $.x.y.z
-	//       - $.spec.a`
-	// 				ag := newAggregation(eng, []byte(yamlData))
-	// 				Expect(ag.Expressions).To(HaveLen(1))
+		It("should yield an empty delta for a mux expression using an invalid obj id", func() {
+			jsonData := `
+'@aggregate':
+  - '@gather':
+      - $.x.y.z
+      - $.spec.a`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	// 				_, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: objs[0]})
-	// 				Expect(err).To(HaveOccurred())
-	// 			})
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(BeEmpty())
+		})
 
-	// 			It("should err for a mux expression using an invalid obj elem", func() {
-	// 				yamlData := `
-	// '@aggregate':
-	//   - '@gather':
-	//       - $.metadata.name
-	//       - $.spec.q`
-	// 				ag := newAggregation(eng, []byte(yamlData))
-	// 				Expect(ag.Expressions).To(HaveLen(1))
+		It("should yield an empty delta for a mux expression using an invalid obj elem", func() {
+			jsonData := `
+'@aggregate':
+  - '@gather':
+      - $.metadata.name
+      - $.spec.q`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
 
-	//				_, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: objs[0]})
-	//				Expect(err).To(HaveOccurred())
-	//			})
-	//		})
-	//	})
+			res, err := ag.Evaluate(cache.Delta{Type: cache.Added, Object: objs[0]})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(BeEmpty())
+		})
+	})
 })
 
 func newAggregation(data string) (Evaluator, error) {
@@ -1205,15 +1202,15 @@ func newAggregation(data string) (Evaluator, error) {
 	return p, nil
 }
 
-// func sortAnyInt64(l []any) {
-// 	slices.SortFunc(l, func(a, b any) int {
-// 		switch {
-// 		case a.(int64) < b.(int64):
-// 			return -1
-// 		case a.(int64) == b.(int64):
-// 			return 0
-// 		default:
-// 			return 1
-// 		}
-// 	})
-// }
+func sortAnyInt64(l []any) {
+	slices.SortFunc(l, func(a, b any) int {
+		switch {
+		case a.(int64) < b.(int64):
+			return -1
+		case a.(int64) == b.(int64):
+			return 0
+		default:
+			return 1
+		}
+	})
+}

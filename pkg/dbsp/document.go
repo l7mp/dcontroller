@@ -80,13 +80,13 @@ func DeepEqual(a, b Document) (bool, error) {
 	return keyA == keyB, nil
 }
 
-// deepCopy creates a deep copy of a document or any nested structure
-func deepCopy(val any) (any, error) {
+// DeepCopyAny creates a deep copy of a document or any nested structure
+func DeepCopyAny(val any) (any, error) {
 	switch v := val.(type) {
 	case map[string]any:
 		result := make(map[string]any)
 		for k, subVal := range v {
-			copied, err := deepCopy(subVal)
+			copied, err := DeepCopyAny(subVal)
 			if err != nil {
 				return nil, newZSetError(fmt.Sprintf("failed to deep copy map field '%s'", k), err)
 			}
@@ -97,7 +97,7 @@ func deepCopy(val any) (any, error) {
 	case []any:
 		result := make([]any, len(v))
 		for i, subVal := range v {
-			copied, err := deepCopy(subVal)
+			copied, err := DeepCopyAny(subVal)
 			if err != nil {
 				return nil, newZSetError(fmt.Sprintf("failed to deep copy array element at index %d", i), err)
 			}
@@ -115,9 +115,9 @@ func deepCopy(val any) (any, error) {
 	}
 }
 
-// deepCopyDocument creates a deep copy of a document.
-func deepCopyDocument(val any) (Document, error) {
-	c, err := deepCopy(val)
+// DeepCopyDocument creates a deep copy of a document.
+func DeepCopyDocument(val any) (Document, error) {
+	c, err := DeepCopyAny(val)
 	if err != nil {
 		return nil, err
 	}

@@ -599,6 +599,174 @@ var _ = Describe("Gather Operations", func() {
 			Expect(amounts).To(HaveLen(3))
 			Expect(amounts).To(ConsistOf(int64(1000), int64(1000), int64(1000)))
 		})
+
+		It("should handle an add followed by a delete", func() {
+			// add 1: should yield one add for list [1000]
+			sales1, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1000))
+			Expect(err).NotTo(HaveOccurred())
+			delta := NewDocumentZSet()
+			delta, err = delta.AddDocument(sales1, 1)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := incrementalGather.Process(delta)
+			Expect(err).NotTo(HaveOccurred())
+			des, err := result.List() // preserve negative multiplicities
+			Expect(err).NotTo(HaveOccurred())
+			Expect(des).To(HaveLen(1))
+			Expect(des[0].Multiplicity).To(Equal(1))
+			doc := des[0].Document
+			amounts := doc["amounts"].([]any)
+			Expect(amounts).To(HaveLen(1))
+			Expect(amounts).To(ConsistOf(int64(1000)))
+
+			// add 2: should yield one delete for list [1000] and one add for list [1000,100]
+			sales2, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(100))
+			Expect(err).NotTo(HaveOccurred())
+			delta = NewDocumentZSet()
+			delta, err = delta.AddDocument(sales2, 1)
+			Expect(err).NotTo(HaveOccurred())
+			result, err = incrementalGather.Process(delta)
+			Expect(err).NotTo(HaveOccurred())
+
+			des, err = result.List() // preserve negative multiplicities
+			Expect(err).NotTo(HaveOccurred())
+			Expect(des).To(HaveLen(2))
+			de := des[0] // dunno the order
+			if de.Multiplicity == 1 {
+				de = des[1]
+			}
+			Expect(de.Multiplicity).To(Equal(-1))
+			doc = de.Document
+			amounts = doc["amounts"].([]any)
+			Expect(amounts).To(HaveLen(1))
+			Expect(amounts).To(ConsistOf(int64(1000)))
+
+			de = des[1] // dunno the order
+			if de.Multiplicity == -1 {
+				de = des[0]
+			}
+			Expect(de.Multiplicity).To(Equal(1))
+			doc = de.Document
+			amounts = doc["amounts"].([]any)
+			Expect(amounts).To(HaveLen(2))
+			Expect(amounts).To(ConsistOf(int64(1000), int64(100)))
+
+			// delete 1: should yield one delete for list [1000,100] and one add for list [100]
+			delta = NewDocumentZSet()
+			delta, err = delta.AddDocument(sales1, -1)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err = incrementalGather.Process(delta)
+			Expect(err).NotTo(HaveOccurred())
+			des, err = result.List() // preserve negative multiplicities
+			Expect(err).NotTo(HaveOccurred())
+			Expect(des).To(HaveLen(2))
+			de = des[0] // dunno the order
+			if de.Multiplicity == 1 {
+				de = des[1]
+			}
+			Expect(de.Multiplicity).To(Equal(-1))
+			doc = de.Document
+			amounts = doc["amounts"].([]any)
+			Expect(amounts).To(HaveLen(2))
+			Expect(amounts).To(ConsistOf(int64(1000), int64(100)))
+			de = des[1] // dunno the order
+			if de.Multiplicity == -1 {
+				de = des[0]
+			}
+			Expect(de.Multiplicity).To(Equal(1))
+			doc = de.Document
+			amounts = doc["amounts"].([]any)
+			Expect(amounts).To(HaveLen(1))
+			Expect(amounts).To(ConsistOf(int64(100)))
+
+			// delete 2: should yield one delete for list [100]
+			delta = NewDocumentZSet()
+			delta, err = delta.AddDocument(sales2, -1)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err = incrementalGather.Process(delta)
+			Expect(err).NotTo(HaveOccurred())
+			des, err = result.List() // preserve negative multiplicities
+			Expect(err).NotTo(HaveOccurred())
+			Expect(des).To(HaveLen(1))
+			de = des[0] // dunno the order
+			Expect(de.Multiplicity).To(Equal(-1))
+			doc = de.Document
+			amounts = doc["amounts"].([]any)
+			Expect(amounts).To(HaveLen(1))
+			Expect(amounts).To(ConsistOf(int64(100)))
+		})
+
+		It("should handle a multi-add followed by 2 deletes", func() {
+			// add 1: should yield one add for list [1000]
+			sales1, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1000))
+			Expect(err).NotTo(HaveOccurred())
+			sales2, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(100))
+			Expect(err).NotTo(HaveOccurred())
+
+			delta := NewDocumentZSet()
+			delta, err = delta.AddDocument(sales1, 1)
+			delta, err = delta.AddDocument(sales2, 1)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := incrementalGather.Process(delta)
+			Expect(err).NotTo(HaveOccurred())
+			des, err := result.List() // preserve negative multiplicities
+			Expect(err).NotTo(HaveOccurred())
+			Expect(des).To(HaveLen(1))
+			Expect(des[0].Multiplicity).To(Equal(1))
+			doc := des[0].Document
+			amounts := doc["amounts"].([]any)
+			Expect(amounts).To(HaveLen(2))
+			Expect(amounts).To(ConsistOf(int64(100), int64(1000)))
+
+			// delete 1: should yield one delete for list [1000,100] and one add for list [1000]
+			delta = NewDocumentZSet()
+			delta, err = delta.AddDocument(sales2, -1)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err = incrementalGather.Process(delta)
+			Expect(err).NotTo(HaveOccurred())
+			des, err = result.List() // preserve negative multiplicities
+			Expect(err).NotTo(HaveOccurred())
+			Expect(des).To(HaveLen(2))
+			de := des[0] // dunno the order
+			if de.Multiplicity == 1 {
+				de = des[1]
+			}
+			Expect(de.Multiplicity).To(Equal(-1))
+			doc = de.Document
+			amounts = doc["amounts"].([]any)
+			Expect(amounts).To(HaveLen(2))
+			Expect(amounts).To(ConsistOf(int64(1000), int64(100)))
+			de = des[1] // dunno the order
+			if de.Multiplicity == -1 {
+				de = des[0]
+			}
+			Expect(de.Multiplicity).To(Equal(1))
+			doc = de.Document
+			amounts = doc["amounts"].([]any)
+			Expect(amounts).To(HaveLen(1))
+			Expect(amounts).To(ConsistOf(int64(1000)))
+
+			// delete 2: should yield one delete for list [1000]
+			delta = NewDocumentZSet()
+			delta, err = delta.AddDocument(sales1, -1)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err = incrementalGather.Process(delta)
+			Expect(err).NotTo(HaveOccurred())
+			des, err = result.List() // preserve negative multiplicities
+			Expect(err).NotTo(HaveOccurred())
+			Expect(des).To(HaveLen(1))
+			de = des[0]
+			Expect(de.Multiplicity).To(Equal(-1))
+			doc = de.Document
+			amounts = doc["amounts"].([]any)
+			Expect(amounts).To(HaveLen(1))
+			Expect(amounts).To(ConsistOf(int64(1000)))
+		})
 	})
 
 	Context("Incremental vs Snapshot Consistency", func() {
