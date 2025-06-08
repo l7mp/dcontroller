@@ -240,9 +240,8 @@ func (p *Pipeline) NewGatherOp(e *expression.Expression) (dbsp.Operator, error) 
 // //////////////////////
 // Join
 type JoinOp struct {
-	e      *expression.Expression
-	inputs []string
-	log    logr.Logger
+	e   *expression.Expression
+	log logr.Logger
 }
 
 func (eval *JoinOp) String() string {

@@ -578,8 +578,7 @@ var _ = Describe("DocumentZSet", func() {
 			original, err := SingletonZSet(doc1)
 			Expect(err).NotTo(HaveOccurred())
 
-			copied, err := original.DeepCopy()
-			Expect(err).NotTo(HaveOccurred())
+			copied := original.DeepCopy()
 
 			// Modify the copy
 			modified, err := copied.AddDocument(doc2, 1)
@@ -610,8 +609,7 @@ var _ = Describe("DocumentZSet", func() {
 			zset, err := SingletonZSet(complexDoc)
 			Expect(err).NotTo(HaveOccurred())
 
-			copied, err := zset.DeepCopy()
-			Expect(err).NotTo(HaveOccurred())
+			copied := zset.DeepCopy()
 
 			// Verify the copy is independent
 			docs1, err := zset.GetDocuments()

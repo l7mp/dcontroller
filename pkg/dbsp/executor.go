@@ -11,9 +11,8 @@ type DeltaZSet = map[string]*DocumentZSet
 
 // Executor executes incremental queries on the specialized linear chain graph
 type Executor struct {
-	graph    *ChainGraph
-	inputIdx map[string]string
-	log      logr.Logger
+	graph *ChainGraph
+	log   logr.Logger
 }
 
 func NewExecutor(graph *ChainGraph, log logr.Logger) (*Executor, error) {
@@ -57,7 +56,7 @@ func (e *Executor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet, error) {
 	var err error
 
 	if e.graph.joinNode != "" {
-		e.log.V(4).Info("processing join", "delta", strings.Join(inputs, ","))
+		e.log.V(2).Info("processing join", "delta", strings.Join(inputs, ","))
 
 		// Execute incremental N-ary join
 		joinNode := e.graph.nodes[e.graph.joinNode]
@@ -71,16 +70,13 @@ func (e *Executor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet, error) {
 			return nil, fmt.Errorf("join operation %s failed: %w", joinNode.Op.id(), err)
 		}
 
-		// fmt.Printf("Join %s: %d -> %d documents\n",
-		// 	joinNode.Op.Name(),
-		// 	e.sumInputSizes(joinInputs),
-		// 	currentResult.Size())
+		e.log.V(4).Info("join ready", "result", currentResult.String())
 	} else {
 		// Single input, no join needed
 		currentResult = deltaInputs[e.graph.inputIdx[e.graph.inputs[0]]]
 	}
 
-	e.log.V(4).Info("processing aggregations", "delta", strings.Join(inputs, ","))
+	e.log.V(2).Info("processing aggregations", "delta", strings.Join(inputs, ","))
 
 	// Step 3: Execute linear chain (all operations are incremental-friendly)
 	for i, nodeID := range e.graph.chain {
@@ -95,6 +91,8 @@ func (e *Executor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet, error) {
 		// fmt.Printf("Step %d - %s: %d -> %d documents\n",
 		// 	i, node.Op.Name(), previousSize, currentResult.Size())
 	}
+
+	e.log.V(4).Info("aggregations ready", "result", currentResult.String())
 
 	return currentResult, nil
 }
@@ -202,15 +200,6 @@ func (e *Executor) getOpTypeString(op Operator) string {
 	default:
 		return "Unknown"
 	}
-}
-
-// Helper function to sum input sizes for logging
-func (e *Executor) sumInputSizes(inputs []*DocumentZSet) int {
-	total := 0
-	for _, input := range inputs {
-		total += input.Size()
-	}
-	return total
 }
 
 // GetNodeResult returns intermediate results for debugging (optional caching)
@@ -331,7 +320,7 @@ func (ctx *IncrementalExecutionContext) ProcessDelta(deltaInputs map[string]*Doc
 
 // GetCumulativeOutput returns the current cumulative output
 func (ctx *IncrementalExecutionContext) GetCumulativeOutput() *DocumentZSet {
-	result, _ := ctx.cumulativeOutput.DeepCopy()
+	result := ctx.cumulativeOutput.DeepCopy()
 	return result
 }
 

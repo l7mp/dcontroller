@@ -85,11 +85,7 @@ func (op *GatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	result := NewDocumentZSet()
 	for _, groupData := range groups {
 		// Pass a deepcopy of the representative document to aggregator to preserve content
-		doc, err := DeepCopyDocument(groupData.Document)
-		if err != nil {
-			return nil, fmt.Errorf("document deepcopy failed: %w", err)
-		}
-		resultDoc, err := op.aggregator.Transform(doc, &AggregateInput{
+		resultDoc, err := op.aggregator.Transform(DeepCopyDocument(groupData.Document), &AggregateInput{
 			Key:    groupData.Key,
 			Values: groupData.Values,
 		})
@@ -192,23 +188,14 @@ func (op *IncrementalGatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, 
 			representativeDoc = currentGroup.Document
 		} else {
 			// First document in this group becomes the representative
-			representativeDoc, err = DeepCopyDocument(doc)
-			if err != nil {
-				return nil, fmt.Errorf("failed to deepcopy representative doc for group %q: %w",
-					groupKeyStr, err)
-			}
+			representativeDoc = DeepCopyDocument(doc)
 		}
 
 		// Calculate old result for this group (for delta calculation)
 		var oldResultDoc Document
 		if len(oldValues) > 0 {
 			// Pass a deepcopy of the representative document to aggregator to preserve content
-			doc, err := DeepCopyDocument(representativeDoc)
-			if err != nil {
-				return nil, fmt.Errorf("document deepcopy failed: %w", err)
-			}
-
-			oldResultDoc, err = op.aggregator.Transform(doc, &AggregateInput{
+			oldResultDoc, err = op.aggregator.Transform(DeepCopyDocument(representativeDoc), &AggregateInput{
 				Key:    groupKey,
 				Values: oldValues,
 			})
@@ -234,12 +221,7 @@ func (op *IncrementalGatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, 
 		var newResultDoc Document
 		if len(newValues) > 0 {
 			// Pass a deepcopy of the representative document to aggregator to preserve content
-			doc, err := DeepCopyDocument(representativeDoc)
-			if err != nil {
-				return nil, fmt.Errorf("document deepcopy failed: %w", err)
-			}
-
-			newResultDoc, err = op.aggregator.Transform(doc, &AggregateInput{
+			newResultDoc, err = op.aggregator.Transform(DeepCopyDocument(representativeDoc), &AggregateInput{
 				Key:    groupKey,
 				Values: newValues,
 			})

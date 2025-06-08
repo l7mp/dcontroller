@@ -388,7 +388,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			// Check for negative result (removal)
 			docs, err := result4.List()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(len(docs)).To(BeNumerically(">", 0))
+			Expect(docs).NotTo(BeEmpty())
 
 			// At least one document should have negative multiplicity
 			hasNegative := false
@@ -759,7 +759,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[0]]: deltaUsers,
 			}
 
-			Expect(len(graph.chain)).To(Equal(1)) // Fused operation
+			Expect(graph.chain).To(HaveLen(1)) // Fused operation
 
 			// Get final result
 			finalResult, err := executor.ProcessDelta(deltaInputs)

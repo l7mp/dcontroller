@@ -2,7 +2,6 @@ package dbsp
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 )
 
@@ -81,51 +80,36 @@ func DeepEqual(a, b Document) (bool, error) {
 }
 
 // DeepCopyAny creates a deep copy of a document or any nested structure
-func DeepCopyAny(val any) (any, error) {
+func DeepCopyAny(val any) any {
 	switch v := val.(type) {
 	case map[string]any:
 		result := make(map[string]any)
 		for k, subVal := range v {
-			copied, err := DeepCopyAny(subVal)
-			if err != nil {
-				return nil, newZSetError(fmt.Sprintf("failed to deep copy map field '%s'", k), err)
-			}
-			result[k] = copied
+			result[k] = DeepCopyAny(subVal)
 		}
-		return result, nil
+		return result
 
 	case []any:
 		result := make([]any, len(v))
 		for i, subVal := range v {
-			copied, err := DeepCopyAny(subVal)
-			if err != nil {
-				return nil, newZSetError(fmt.Sprintf("failed to deep copy array element at index %d", i), err)
-			}
-			result[i] = copied
+			result[i] = DeepCopyAny(subVal)
 		}
-		return result, nil
+		return result
 
 	case int64, float64, string, bool, nil:
 		// Primitives can be copied directly
-		return v, nil
+		return v
 
 	default:
 		// For unknown types, try to copy directly
-		return v, nil
+		return v
 	}
 }
 
 // DeepCopyDocument creates a deep copy of a document.
-func DeepCopyDocument(val any) (Document, error) {
-	c, err := DeepCopyAny(val)
-	if err != nil {
-		return nil, err
-	}
-	doc, ok := c.(Document)
-	if !ok {
-		return nil, errors.New("failed to cast document after deepCopy")
-	}
-	return doc, nil
+func DeepCopyDocument(val any) Document {
+	c := DeepCopyAny(val)
+	return c.(Document)
 }
 
 // computeJSONAny creates a deterministic JSON representation for an arbitrary any value

@@ -79,7 +79,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should be unchanged
-			Expect(len(graph.chain)).To(Equal(originalChainLength))
+			Expect(graph.chain).To(HaveLen(originalChainLength))
 			Expect(graph.joinNode).To(Equal(""))
 
 			// Projection should still be there
@@ -130,7 +130,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// I->D pair should be eliminated
-			Expect(len(graph.chain)).To(Equal(1)) // Only projection remains
+			Expect(graph.chain).To(HaveLen(1))
 
 			// Verify the nodes were actually removed
 			_, integExists := graph.nodes[integID]
@@ -155,15 +155,14 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			integ2ID := graph.AddToChain(NewIntegrator())
 			diff2ID := graph.AddToChain(NewDifferentiator())
 			_ = graph.AddToChain(NewProjection(NewFieldProjection("name")))
-
-			Expect(len(graph.chain)).To(Equal(5))
+			Expect(graph.chain).To(HaveLen(5))
 
 			// Apply rewrite rules
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Both I->D pairs should be eliminated
-			Expect(len(graph.chain)).To(Equal(1)) // Only projection remains
+			Expect(graph.chain).To(HaveLen(1)) // Only projection remains
 
 			// Verify all I/D nodes were removed
 			_, integ1Exists := graph.nodes[integ1ID]
@@ -189,7 +188,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// All operations should remain (no adjacent I->D pair)
-			Expect(len(graph.chain)).To(Equal(3))
+			Expect(graph.chain).To(HaveLen(3))
 
 			// Verify all nodes still exist
 			_, integExists := graph.nodes[integID]
@@ -209,15 +208,14 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			dist1ID := graph.AddToChain(NewDistinct())
 			dist2ID := graph.AddToChain(NewDistinct())
 			projID := graph.AddToChain(NewProjection(NewFieldProjection("name")))
-
-			Expect(len(graph.chain)).To(Equal(3))
+			Expect(graph.chain).To(HaveLen(3))
 
 			// Apply rewrite rules
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
 			// First distinct should be removed, second kept
-			Expect(len(graph.chain)).To(Equal(2))
+			Expect(graph.chain).To(HaveLen(2))
 
 			// First distinct should be gone
 			_, dist1Exists := graph.nodes[dist1ID]
@@ -245,7 +243,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should keep only last distinct
-			Expect(len(graph.chain)).To(Equal(1))
+			Expect(graph.chain).To(HaveLen(1))
 
 			_, dist1Exists := graph.nodes[dist1ID]
 			_, dist2Exists := graph.nodes[dist2ID]
@@ -266,14 +264,14 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			_ = graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 			_ = graph.AddToChain(NewProjection(NewFieldProjection("name", "email")))
 
-			Expect(len(graph.chain)).To(Equal(2))
+			Expect(graph.chain).To(HaveLen(2))
 
 			// Apply rewrite rules
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should be fused into single operation
-			Expect(len(graph.chain)).To(Equal(1))
+			Expect(graph.chain).To(HaveLen(1))
 
 			// Original selection should be removed
 			node, nodeExists := graph.nodes[graph.chain[0]]
@@ -312,9 +310,6 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 				// No fusion happened
 				Expect(isSelection).To(BeTrue())
 				Expect(isProjection).To(BeTrue())
-			} else {
-				// Fusion may have happened after distinct optimization
-				// This is fine - rules can interact
 			}
 		})
 
@@ -326,14 +321,14 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			_ = graph.AddToChain(NewSelection(NewFieldFilter("verified", true)))
 			_ = graph.AddToChain(NewProjection(NewFieldProjection("name")))
 
-			Expect(len(graph.chain)).To(Equal(4))
+			Expect(graph.chain).To(HaveLen(4))
 
 			// Apply rewrite rules
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should fuse into 2 operations
-			Expect(len(graph.chain)).To(Equal(2))
+			Expect(graph.chain).To(HaveLen(2))
 
 			// Selections should be substituted with fused-ops
 			for _, id := range graph.chain {
@@ -384,7 +379,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			// - Redundant distinct eliminated (saves 1 op)
 			// - Selection+projection fused (saves 1 op)
 			// Final: 6 - 2 - 1 - 1 = 2 operations
-			Expect(len(graph.chain)).To(Equal(2))
+			Expect(graph.chain).To(HaveLen(2))
 
 			// Join should be incremental
 			joinNode := graph.nodes[graph.joinNode]
@@ -395,14 +390,13 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 		It("should handle empty chains gracefully", func() {
 			// Just inputs, no operations
 			graph.AddInput(NewInput("collection"))
-
-			Expect(len(graph.chain)).To(Equal(0))
+			Expect(graph.chain).To(BeEmpty())
 
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should remain empty
-			Expect(len(graph.chain)).To(Equal(0))
+			Expect(graph.chain).To(BeEmpty())
 		})
 
 		It("should converge within iteration limit", func() {
@@ -447,7 +441,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			Expect(diffExists).To(BeFalse())
 
 			// Then selection+projection should be fused
-			Expect(len(graph.chain)).To(Equal(1)) // Fused operation
+			Expect(graph.chain).To(HaveLen(1)) // Fused operation
 
 			// Remaining node should be fused
 			remainingID := graph.chain[0]
@@ -495,7 +489,7 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Structure should be preserved
-			Expect(len(graph.inputs)).To(Equal(originalInputs))
+			Expect(graph.inputs).To(HaveLen(originalInputs))
 			Expect(graph.output).NotTo(Equal("")) // Should have an output
 
 			// Graph should still be valid

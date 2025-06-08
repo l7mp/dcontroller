@@ -54,11 +54,7 @@ func (n *IntegratorOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	}
 	n.state = s
 
-	res, err := n.state.DeepCopy()
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
+	return n.state.DeepCopy(), nil
 }
 
 func (n *IntegratorOp) OpType() OperatorType              { return OpTypeLinear }
@@ -98,11 +94,7 @@ func (n *DifferentiatorOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, erro
 	}
 
 	// Update state for next call
-	p, err := snapshot.DeepCopy()
-	if err != nil {
-		return nil, err
-	}
-	n.prevState = p
+	n.prevState = snapshot.DeepCopy()
 
 	return delta, nil
 }
@@ -139,11 +131,7 @@ func (n *InputOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err
 	}
-	res, err := n.data.DeepCopy()
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
+	return n.data.DeepCopy(), nil
 }
 
 func (n *InputOp) SetData(data *DocumentZSet) { n.data = data }
@@ -166,11 +154,7 @@ func (n *ConstantOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err
 	}
-	res, err := n.value.DeepCopy()
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
+	return n.value.DeepCopy(), nil
 }
 
 // Addition node
@@ -261,16 +245,10 @@ func (n *DelayOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	input := inputs[0]
 
 	// Output the buffered value from previous timestep
-	output, err := n.buffer.DeepCopy()
-	if err != nil {
-		return nil, err
-	}
+	output := n.buffer.DeepCopy()
 
 	// Buffer current input for next timestep
-	n.buffer, err = input.DeepCopy()
-	if err != nil {
-		return nil, err
-	}
+	n.buffer = input.DeepCopy()
 
 	return output, nil
 }

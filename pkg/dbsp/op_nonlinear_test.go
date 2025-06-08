@@ -180,14 +180,16 @@ var _ = Describe("Gather Operations", func() {
 				dept := doc["department"]
 				amounts := doc["amounts"].([]any)
 
-				if dept == "Engineering" {
+				switch dept {
+				case "Engineering":
 					foundEngineering = true
 					Expect(amounts).To(HaveLen(2))
 					Expect(amounts).To(ConsistOf(int64(1000), int64(1500)))
-				} else if dept == "Marketing" {
+				case "Marketing":
 					foundMarketing = true
 					Expect(amounts).To(HaveLen(2))
 					Expect(amounts).To(ConsistOf(int64(800), int64(1200)))
+				default:
 				}
 			}
 
@@ -344,10 +346,12 @@ var _ = Describe("Gather Operations", func() {
 			Expect(docs).To(HaveLen(2)) // 2 categories
 
 			for _, doc := range docs {
-				if doc["group_key"] == "electronics" {
+				switch doc["group_key"] {
+				case "electronics":
 					Expect(doc["count"]).To(Equal(int64(2)))
-				} else if doc["group_key"] == "books" {
+				case "books":
 					Expect(doc["count"]).To(Equal(int64(1)))
+				default:
 				}
 			}
 		})
@@ -392,14 +396,16 @@ var _ = Describe("Gather Operations", func() {
 				dept := doc["department"]
 				amounts := doc["amounts"].([]any)
 
-				if dept == "Engineering" {
+				switch dept {
+				case "Engineering":
 					foundEng = true
 					Expect(amounts).To(HaveLen(1))
 					Expect(amounts[0]).To(Equal(int64(1000)))
-				} else if dept == "Marketing" {
+				case "Marketing":
 					foundMkt = true
 					Expect(amounts).To(HaveLen(1))
 					Expect(amounts[0]).To(Equal(int64(800)))
+				default:
 				}
 			}
 			Expect(foundEng).To(BeTrue())
@@ -707,6 +713,7 @@ var _ = Describe("Gather Operations", func() {
 
 			delta := NewDocumentZSet()
 			delta, err = delta.AddDocument(sales1, 1)
+			Expect(err).NotTo(HaveOccurred())
 			delta, err = delta.AddDocument(sales2, 1)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -783,7 +790,7 @@ var _ = Describe("Gather Operations", func() {
 
 		It("should produce consistent results through multiple timesteps", func() {
 			// Track cumulative result from incremental operations
-			var cumulativeIncremental *DocumentZSet = NewDocumentZSet()
+			cumulativeIncremental := NewDocumentZSet()
 
 			// Timeline data
 			allData := NewDocumentZSet()
@@ -863,7 +870,7 @@ var _ = Describe("Gather Operations", func() {
 		})
 
 		It("should handle removals consistently", func() {
-			var cumulativeIncremental *DocumentZSet = NewDocumentZSet()
+			cumulativeIncremental := NewDocumentZSet()
 
 			// Add initial data
 			game1, err := newDocumentFromPairs("team", "Red", "score", int64(10))
@@ -1150,10 +1157,12 @@ var _ = Describe("Gather Operations", func() {
 				key := doc["key"]
 				values := doc["values"].([]any)
 
-				if key == "A" {
+				switch key {
+				case "A":
 					Expect(values).To(ConsistOf(int64(1), int64(2)))
-				} else if key == "B" {
+				case "B":
 					Expect(values).To(ConsistOf(int64(10)))
+				default:
 				}
 			}
 		})

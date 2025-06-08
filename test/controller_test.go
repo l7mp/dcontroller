@@ -162,7 +162,11 @@ target:
 			Expect(k8sClient.Delete(ctrlCtx, svc)).Should(Succeed())
 
 			// removed from the cache?
-			Expect(mgr.GetCache().Get(ctrlCtx, client.ObjectKeyFromObject(svc), svc)).NotTo(Succeed())
+			Eventually(func() bool {
+				return apierrors.IsNotFound(mgr.GetCache().Get(ctrlCtx,
+					client.ObjectKeyFromObject(svc), svc))
+			}, timeout, interval).Should(BeTrue())
+
 		})
 	})
 })

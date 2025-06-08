@@ -41,6 +41,7 @@ type Controller struct {
 	name, kind  string
 	config      opv1a1.Controller
 	sources     []reconciler.Source
+	cache       map[schema.GroupVersionKind]*cache.Store // needed to recover deleted objects
 	target      reconciler.Target
 	mgr         runtimeManager.Manager
 	watcher     chan reconciler.Request
@@ -61,6 +62,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 	c := &Controller{
 		mgr:           mgr,
 		sources:       []reconciler.Source{},
+		cache:         make(map[schema.GroupVersionKind]*cache.Store),
 		config:        config,
 		watcher:       make(chan reconciler.Request, WatcherBufferSize),
 		errorReporter: NewErrorReporter(opts.ErrorChan),
@@ -98,7 +100,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 	// Create the reconciler
 	controllerReconciler := NewControllerReconciler(mgr, c)
 
-	// Create the sources
+	// Create the sources and the cache
 	srcs := []string{}
 	for _, s := range config.Sources {
 		source := reconciler.NewSource(mgr, s)
@@ -115,6 +117,9 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 			return c, c.PushCriticalError(fmt.Errorf("failed to obtain GVK for source %s: %w",
 				util.Stringify(s), err))
 		}
+
+		// Init the cache
+		c.cache[gvk] = cache.NewStore()
 
 		// Create the controller
 		ctrl, err := controller.NewTyped(name, mgr, controller.TypedOptions[reconciler.Request]{
@@ -245,12 +250,37 @@ func processRequest(ctx context.Context, c *Controller, req reconciler.Request) 
 	obj.SetNamespace(req.Namespace)
 	obj.SetName(req.Name)
 
-	if req.EventType == cache.Added || req.EventType == cache.Updated || req.EventType == cache.Replaced {
+	switch req.EventType {
+	case cache.Added, cache.Updated, cache.Replaced:
 		if err := c.mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
-			return fmt.Errorf("object %s/%s disappeared for Add/Update event: %w",
-				req.GVK, client.ObjectKeyFromObject(obj), err)
+			return fmt.Errorf("object %s/%s disappeared from client for Add/Update event: %w",
+				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
 		}
+		if err := c.cache[req.GVK].Add(obj); err != nil {
+			return fmt.Errorf("failed to add object %s/%s to cache: %w",
+				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
+		}
+	case cache.Deleted:
+		d, ok, err := c.cache[req.GVK].Get(obj)
+		if err != nil {
+			return fmt.Errorf("failed to get object %s/%s to cache in Delete event: %w",
+				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
+		}
+		if !ok {
+			c.log.Info("ignoring Delete event for unknown object %s/%s",
+				req.GVK, client.ObjectKeyFromObject(obj).String())
+		}
+		if err := c.cache[req.GVK].Delete(obj); err != nil {
+			return fmt.Errorf("failed to delete object %s/%s from cache: %w",
+				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
+		}
+
+		obj = d
+	default:
+		c.log.Info("ignoring event %s", req.EventType)
+		return nil
 	}
+
 	delta := cache.Delta{
 		Type:   req.EventType,
 		Object: obj,

@@ -180,12 +180,14 @@ func (r *IntegrationDifferentiationEliminationRule) Apply(graph *ChainGraph) err
 	graph.chain = newChain
 
 	// Update output
-	if len(graph.chain) > 0 {
+	switch {
+	case len(graph.chain) > 0:
 		graph.output = graph.chain[len(graph.chain)-1]
-	} else if graph.joinNode != "" {
+	case graph.joinNode != "":
 		graph.output = graph.joinNode
-	} else if len(graph.inputs) > 0 {
+	case len(graph.inputs) > 0:
 		graph.output = graph.inputs[0]
+	default:
 	}
 
 	return nil

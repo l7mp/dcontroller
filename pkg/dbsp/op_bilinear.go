@@ -131,11 +131,7 @@ func cartesianJoin(eval Evaluator, inputNames []string, inputs []*DocumentZSet, 
 
 		result := NewDocumentZSet()
 		for _, joinedDoc := range joinedDocs {
-			doc, err := DeepCopyDocument(joinedDoc)
-			if err != nil {
-				return nil, err
-			}
-			if err := result.AddDocumentMutate(doc, totalMult); err != nil {
+			if err := result.AddDocumentMutate(DeepCopyDocument(joinedDoc), totalMult); err != nil {
 				return nil, err
 			}
 		}
@@ -215,11 +211,7 @@ func (n *BinaryJoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 			resultMult := leftMult * rightMult
 
 			for _, joinedDoc := range joinedDocs {
-				doc, err := DeepCopyDocument(joinedDoc)
-				if err != nil {
-					return nil, err
-				}
-				result, err = result.AddDocument(doc, resultMult)
+				result, err = result.AddDocument(DeepCopyDocument(joinedDoc), resultMult)
 				if err != nil {
 					return nil, err
 				}

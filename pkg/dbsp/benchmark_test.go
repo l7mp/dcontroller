@@ -1,3 +1,4 @@
+//nolint:gosec
 package dbsp
 
 // # Run all benchmarks
@@ -71,16 +72,16 @@ func createTestData(size int) *DocumentZSet {
 		doc, err := newDocumentFromPairs(
 			"id", int64(i),
 			"name", fmt.Sprintf("Employee_%d", i),
-			"department", departments[rand.Intn(len(departments))],
-			"location", locations[rand.Intn(len(locations))],
-			"salary", int64(50000+rand.Intn(100000)),
-			"active", rand.Float32() > 0.1, // 90% active
-			"skills", skills[rand.Intn(len(skills))],
-			"hire_date", fmt.Sprintf("2020-%02d-%02d", rand.Intn(12)+1, rand.Intn(28)+1),
-			"performance_score", rand.Float64()*5.0,
+			"department", departments[rnd.Intn(len(departments))],
+			"location", locations[rnd.Intn(len(locations))],
+			"salary", int64(50000+rnd.Intn(100000)),
+			"active", rnd.Float32() > 0.1, // 90% active
+			"skills", skills[rnd.Intn(len(skills))],
+			"hire_date", fmt.Sprintf("2020-%02d-%02d", rnd.Intn(12)+1, rnd.Intn(28)+1),
+			"performance_score", rnd.Float64()*5.0,
 			"metadata", map[string]any{
-				"last_login": fmt.Sprintf("2024-%02d-%02d", rand.Intn(12)+1, rand.Intn(28)+1),
-				"projects":   rand.Intn(10),
+				"last_login": fmt.Sprintf("2024-%02d-%02d", rnd.Intn(12)+1, rnd.Intn(28)+1),
+				"projects":   rnd.Intn(10),
 			},
 		)
 		if err != nil {
@@ -88,7 +89,7 @@ func createTestData(size int) *DocumentZSet {
 		}
 
 		// Add with random multiplicity (1-3) to test Z-set properties
-		multiplicity := rand.Intn(3) + 1
+		multiplicity := rnd.Intn(3) + 1
 		err = delta.AddDocumentMutate(doc, multiplicity)
 		if err != nil {
 			panic(err)

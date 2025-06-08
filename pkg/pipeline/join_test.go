@@ -100,11 +100,11 @@ var _ = Describe("Joins", func() {
 
 			deltas, err := j.Evaluate(cache.Delta{Type: cache.Upserted, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(deltas).To(HaveLen(0))
+			Expect(deltas).To(BeEmpty())
 
 			deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: dep2})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(deltas).To(HaveLen(0))
+			Expect(deltas).To(BeEmpty())
 
 			deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
@@ -133,7 +133,7 @@ var _ = Describe("Joins", func() {
 
 			deltas, err := j.Evaluate(cache.Delta{Type: cache.Upserted, Object: dep1})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(deltas).To(HaveLen(0))
+			Expect(deltas).To(BeEmpty())
 
 			deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: pod1})
 			Expect(err).NotTo(HaveOccurred())
@@ -172,7 +172,7 @@ var _ = Describe("Joins", func() {
 			for _, p := range []object.Object{pod1, pod2, pod3} {
 				deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: p})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(deltas).To(HaveLen(0))
+				Expect(deltas).To(BeEmpty())
 			}
 
 			deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: dep1})
@@ -204,7 +204,7 @@ var _ = Describe("Joins", func() {
 			for _, p := range []object.Object{pod1, pod2, pod3} {
 				deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: p})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(deltas).To(HaveLen(0))
+				Expect(deltas).To(BeEmpty())
 			}
 
 			deltas, err = j.Evaluate(cache.Delta{Type: cache.Added, Object: dep1})
@@ -231,7 +231,7 @@ var _ = Describe("Joins", func() {
 			for _, p := range []object.Object{dep1, dep2, rs1, rs2} {
 				deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: p})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(deltas).To(HaveLen(0))
+				Expect(deltas).To(BeEmpty())
 			}
 
 			deltas, err = j.Evaluate(cache.Delta{Type: cache.Added, Object: pod1})
@@ -270,7 +270,7 @@ var _ = Describe("Joins", func() {
 			for _, p := range []object.Object{dep1, dep2} {
 				deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: p})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(deltas).To(HaveLen(0))
+				Expect(deltas).To(BeEmpty())
 			}
 
 			deltas, err = j.Evaluate(cache.Delta{Type: cache.Added, Object: pod3})
@@ -314,7 +314,7 @@ var _ = Describe("Joins", func() {
 			for _, p := range []object.Object{dep1, dep2} {
 				deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: p})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(deltas).To(HaveLen(0))
+				Expect(deltas).To(BeEmpty())
 			}
 
 			_, err = j.Evaluate(cache.Delta{Type: cache.Deleted, Object: pod3})
@@ -343,7 +343,7 @@ var _ = Describe("Joins", func() {
 
 			var deltas []cache.Delta
 			for _, p := range []object.Object{dep1, dep2, pod1, pod2} {
-				deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: p})
+				_, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: p})
 				Expect(err).NotTo(HaveOccurred())
 			}
 
@@ -390,7 +390,7 @@ var _ = Describe("Joins", func() {
 
 			var deltas []cache.Delta
 			for _, p := range []object.Object{dep1, dep2, pod1, pod2} {
-				deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: p})
+				_, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: p})
 				Expect(err).NotTo(HaveOccurred())
 			}
 
@@ -452,7 +452,7 @@ var _ = Describe("Joins", func() {
 
 			var deltas []cache.Delta
 			for _, p := range []object.Object{dep1, dep2, pod1, pod2, pod3} {
-				deltas, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: p})
+				_, err = j.Evaluate(cache.Delta{Type: cache.Upserted, Object: p})
 				Expect(err).NotTo(HaveOccurred())
 			}
 

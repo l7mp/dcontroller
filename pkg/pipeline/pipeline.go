@@ -27,6 +27,7 @@ type Evaluator interface {
 
 // Pipeline is query that knows how to evaluate itself.
 type Pipeline struct {
+	config      opv1a1.Pipeline
 	executor    *dbsp.Executor
 	graph       *dbsp.ChainGraph
 	rewriter    *dbsp.LinearChainRewriteEngine
@@ -45,6 +46,7 @@ func NewPipeline(target string, sources []schema.GroupVersionKind, config opv1a1
 	}
 
 	p := &Pipeline{
+		config:      config,
 		graph:       dbsp.NewChainGraph(),
 		rewriter:    dbsp.NewLinearChainRewriteEngine(),
 		sources:     sources,
@@ -61,13 +63,13 @@ func NewPipeline(target string, sources []schema.GroupVersionKind, config opv1a1
 
 	// Add optional Join
 	if config.Join != nil {
-		joinOp := p.NewJoinOp(&config.Join.Expression, sources)
+		joinOp := p.NewJoinOp(&config.Join.Expression, sources) //nolint:staticcheck
 		p.graph.SetJoin(joinOp)
 	}
 
 	// Add the the Aggregation chain
 	if config.Aggregation != nil {
-		for _, e := range config.Aggregation.Expressions {
+		for _, e := range config.Aggregation.Expressions { //nolint:staticcheck
 			var op dbsp.Operator
 
 			switch e.Op {

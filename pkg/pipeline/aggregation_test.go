@@ -1153,6 +1153,12 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].Type).To(Equal(cache.Deleted))
+			list, ok, err = unstructured.NestedSlice(res[0].Object.UnstructuredContent(), "spec", "list")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(list).To(ConsistOf("a", "b"))
+			Expect(unstructured.SetNestedSlice(res[0].Object.UnstructuredContent(), []any{"a", "b"},
+				"spec", "list")).NotTo(HaveOccurred())
 			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
 					"apiVersion": "view.dcontroller.io/v1alpha1",

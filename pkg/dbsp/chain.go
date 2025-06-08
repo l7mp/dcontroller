@@ -125,23 +125,23 @@ func (g *ChainGraph) Validate() error {
 	}
 	if g.output == "" {
 		// Try to infer output
-		if len(g.chain) > 0 {
+		switch {
+		case len(g.chain) > 0:
 			g.output = g.chain[len(g.chain)-1]
-		} else if g.joinNode != "" {
+		case g.joinNode != "":
 			g.output = g.joinNode
-		} else if len(g.inputs) == 1 {
+		case len(g.inputs) == 1:
 			g.output = g.inputs[0]
-		} else {
+		default:
 			return fmt.Errorf("no output node and cannot infer one")
 		}
 	}
 	return nil
 }
 
-// String representation for debugging
 // String representation for debugging (horizontal layout)
 func (g *ChainGraph) String() string {
-	var parts []string
+	parts := []string{}
 
 	// Build the flow description
 	if len(g.inputs) == 1 {

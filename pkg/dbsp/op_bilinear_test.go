@@ -275,8 +275,7 @@ var _ = Describe("Binary Join Operators", func() {
 					Expect(err).NotTo(HaveOccurred())
 					cumulativeDocs, err := cumulativeSnapshot.GetUniqueDocuments()
 					Expect(err).NotTo(HaveOccurred())
-
-					Expect(len(cumulativeDocs)).To(Equal(len(snapshotDocs)))
+					Expect(cumulativeDocs).To(HaveLen(len(snapshotDocs)))
 
 					// Check multiplicities match
 					for _, snapDoc := range snapshotDocs {
@@ -323,7 +322,7 @@ var _ = Describe("Binary Join Operators", func() {
 			// The result should be a negative (removal) of the Alice-WebApp join
 			docs, err := incrementalResult.GetDocuments()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(len(docs)).To(Equal(0)) // No positive documents
+			Expect(docs).To(BeEmpty()) // No positive documents
 
 			// Check for negative multiplicity directly
 			expectedJoin := Document{
@@ -471,9 +470,6 @@ func (e *NaryJoinEvaluator) Evaluate(doc Document) ([]Document, error) {
 	var inputDocs []Document
 	var joinKey any
 	joinKeySet := false
-
-	fmt.Printf("1AAAAAAAAaaa------------>%#v\n", e.inputs)
-	fmt.Printf("1AAAAAAAAaaa------------>%#v\n", doc)
 
 	// Collect all input documents and verify they have the same join key
 	var joinKeyJSON string
@@ -1015,7 +1011,7 @@ var _ = Describe("N-ary Join Operators", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Add incremental delta to cumulative snapshot
-			cumulativeSnapshot, err = cumulativeSnapshot.Add(incrementalResult)
+			_, err = cumulativeSnapshot.Add(incrementalResult)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Snapshot should have 2 joins total

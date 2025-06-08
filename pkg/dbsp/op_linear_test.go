@@ -45,11 +45,11 @@ func (e *FieldFilterEvaluator) Evaluate(doc Document) ([]Document, error) {
 		// Use JSON comparison for consistency with your document equality
 		docKey, err := computeJSONAny(docValue)
 		if err != nil {
-			return []Document{}, nil
+			return nil, err
 		}
 		expectedKey, err := computeJSONAny(e.value)
 		if err != nil {
-			return []Document{}, nil
+			return nil, err
 		}
 
 		if docKey == expectedKey {
