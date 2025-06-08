@@ -4,10 +4,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 	"time"
 
@@ -513,6 +515,8 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 
 		It("should match the expected EndpointView objects", func() {
 			Expect(specs).To(HaveLen(2))
+			// addresses is in random order
+			sortAtField(specs, "addresses")
 			Expect(specs).To(ContainElement(map[string]any{
 				"serviceName": "test-service-1",
 				"type":        "ClusterIP",
@@ -573,13 +577,14 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 
 		It("should match the expected EndpointView objects", func() {
 			Expect(specs).To(HaveLen(2))
+			sortAtField(specs, "addresses")
 			Expect(specs).To(ContainElement(map[string]any{
 				"serviceName": "test-service-1",
 				"type":        "ClusterIP",
 				"port":        int64(80),
 				"targetPort":  int64(8080),
 				"protocol":    "TCP",
-				"addresses":   []any{"192.0.2.3", "192.0.2.2"},
+				"addresses":   []any{"192.0.2.2", "192.0.2.3"},
 			}))
 
 			Expect(specs).To(ContainElement(map[string]any{
@@ -588,7 +593,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 				"port":        int64(3478),
 				"targetPort":  int64(33478),
 				"protocol":    "UDP",
-				"addresses":   []any{"192.0.2.3", "192.0.2.2"},
+				"addresses":   []any{"192.0.2.2", "192.0.2.3"},
 			}))
 
 		})
@@ -632,4 +637,28 @@ func watchEvent(d time.Duration) (dreconciler.Request, error) {
 	case <-time.After(d):
 		return dreconciler.Request{}, errors.New("timeout")
 	}
+}
+
+func sortAtField(specs []map[string]any, fields ...string) {
+	for _, spec := range specs {
+		list, ok, err := unstructured.NestedSlice(spec, fields...)
+		if err != nil || !ok {
+			continue
+		}
+
+		sortAny(list)
+		err = unstructured.SetNestedSlice(spec, list, fields...)
+		if err != nil {
+			continue
+		}
+	}
+}
+
+func sortAny(slice []any) {
+	sort.Slice(slice, func(i, j int) bool {
+		// Convert both to JSON for consistent comparison
+		jsonI, _ := json.Marshal(slice[i])
+		jsonJ, _ := json.Marshal(slice[j])
+		return string(jsonI) < string(jsonJ)
+	})
 }
