@@ -32,9 +32,11 @@ pipeline.
 
 The literal delta in the name connotes that operators in Δ-controller use *incremental
 reconciliation* style control loops. This means that the controllers watch the incremental changes
-to Kubernetes API resources and internal views and act only on the deltas. This simplifies writing
-[edge-triggered
-controllers](https://hackernoon.com/level-triggering-and-reconciliation-in-kubernetes-1f17fe30333d).
+to Kubernetes API resources and internal views and act only on the deltas. Deltas are traced
+through possibly multiple stacked controllers without having to re-generate the entire API state,
+like in usual "state-of-the-world-reconciliation" style controllers. Δ-controller's incremental
+view maintenance implementation is based a solid theoretical foundation provided by
+[DBSP](https://mihaibudiu.github.io/work/dbsp-spec.pdf).
 
 ## Installation
 
@@ -256,9 +258,9 @@ kubectl delete operators.dcontroller.io pod-container-num-annotator
   running operators may need.
 - The strategic merge patch implementation does not handle lists. Since Kubernetes does not
   implement native strategic merge patching for schemaless unstructured resources that Δ-controller
-  uses internally, currently patches must be implemented a simplified local JSON patch code that
-  does not handle lists. Use `Patcher` targets carefully or, whenever possible, opt for `Updater`
-  targets.
+  uses internally, currently patches are implemented via a simplified local JSON patch engine that
+  does not handle strategic merges on lists. Use `Patcher` targets carefully or, whenever possible,
+  opt for `Updater` targets.
 
 ## License
 
