@@ -9,16 +9,17 @@ import (
 
 // Enhanced join evaluator with more flexible conditions
 type FlexibleJoinEvaluator struct {
+	inputs    []string
 	condition string // "id", "category", etc.
 }
 
-func NewFlexibleJoin(condition string) *FlexibleJoinEvaluator {
-	return &FlexibleJoinEvaluator{condition: condition}
+func NewFlexibleJoin(condition string, inputs []string) *FlexibleJoinEvaluator {
+	return &FlexibleJoinEvaluator{condition: condition, inputs: inputs}
 }
 
 func (e *FlexibleJoinEvaluator) Evaluate(doc Document) ([]Document, error) {
-	left, leftOk := doc["left"].(Document)
-	right, rightOk := doc["right"].(Document)
+	left, leftOk := doc[e.inputs[0]].(Document)
+	right, rightOk := doc[e.inputs[1]].(Document)
 
 	if !leftOk || !rightOk {
 		return []Document{}, nil
@@ -62,7 +63,7 @@ func (e *FlexibleJoinEvaluator) Evaluate(doc Document) ([]Document, error) {
 }
 
 func (e *FlexibleJoinEvaluator) String() string {
-	return fmt.Sprintf("FlexibleJoin(left.%s = right.%s)", e.condition, e.condition)
+	return fmt.Sprintf("FlexibleJoin(%s.%s = %s.%s)", e.inputs[0], e.condition, e.inputs[1], e.condition)
 }
 
 var _ = Describe("Binary Join Operators", func() {
@@ -73,9 +74,10 @@ var _ = Describe("Binary Join Operators", func() {
 	)
 
 	BeforeEach(func() {
-		evaluator = NewFlexibleJoin("id")
-		snapshotJoin = NewBinaryJoin(evaluator)
-		incrementalJoin = NewIncrementalBinaryJoin(evaluator)
+		inputs := []string{"users", "projects"}
+		evaluator = NewFlexibleJoin("id", inputs)
+		snapshotJoin = NewBinaryJoin(evaluator, inputs)
+		incrementalJoin = NewIncrementalBinaryJoin(evaluator, inputs)
 	})
 
 	Context("Basic Join Functionality", func() {
@@ -409,7 +411,8 @@ var _ = Describe("Binary Join Operators", func() {
 
 	Context("Join on Different Fields", func() {
 		It("should join on non-id fields", func() {
-			categoryJoin := NewBinaryJoin(NewFlexibleJoin("category"))
+			inputs := []string{"left", "right"}
+			categoryJoin := NewBinaryJoin(NewFlexibleJoin("category", inputs), inputs)
 
 			leftDoc := Document{"id": int64(1), "name": "Laptop", "category": "Electronics"}
 			leftZSet, err := SingletonZSet(leftDoc)
@@ -454,11 +457,13 @@ var _ = Describe("Binary Join Operators", func() {
 
 // N-ary join evaluator that joins documents based on matching "id" fields across all inputs
 type NaryJoinEvaluator struct {
+	inputs    []string
+	n         int
 	condition string // field to join on (e.g., "id")
 }
 
-func NewNaryJoin(condition string) *NaryJoinEvaluator {
-	return &NaryJoinEvaluator{condition: condition}
+func NewNaryJoin(condition string, inputs []string) *NaryJoinEvaluator {
+	return &NaryJoinEvaluator{condition: condition, inputs: inputs, n: len(inputs)}
 }
 
 func (e *NaryJoinEvaluator) Evaluate(doc Document) ([]Document, error) {
@@ -467,42 +472,43 @@ func (e *NaryJoinEvaluator) Evaluate(doc Document) ([]Document, error) {
 	var joinKey any
 	joinKeySet := false
 
-	// Collect all input documents and verify they have the same join key
-	i := 0
-	for {
-		inputKey := fmt.Sprintf("input_%d", i)
-		if inputDoc, exists := doc[inputKey].(Document); exists {
-			inputDocs = append(inputDocs, inputDoc)
+	fmt.Printf("1AAAAAAAAaaa------------>%#v\n", e.inputs)
+	fmt.Printf("1AAAAAAAAaaa------------>%#v\n", doc)
 
-			// Extract join key
-			if keyValue, keyExists := inputDoc[e.condition]; keyExists {
-				if !joinKeySet {
-					joinKey = keyValue
-					joinKeySet = true
-				} else {
-					// Check if this key matches the first one
-					keyJSON, err := computeJSONAny(keyValue)
-					if err != nil {
-						return []Document{}, err
-					}
-					joinKeyJSON, err := computeJSONAny(joinKey)
-					if err != nil {
-						return []Document{}, err
-					}
-					if keyJSON != joinKeyJSON {
-						return []Document{}, nil // Keys don't match, no join
-					}
+	// Collect all input documents and verify they have the same join key
+	var joinKeyJSON string
+	for i := 0; i < e.n; i++ {
+		inputKey := e.inputs[i]
+		inputDoc, exists := doc[inputKey].(Document)
+		if !exists {
+			return nil, fmt.Errorf("no input for %q (index %d)", inputKey, i)
+		}
+
+		// Extract join key
+		if keyValue, keyExists := inputDoc[e.condition]; keyExists {
+			inputDocs = append(inputDocs, inputDoc)
+			if !joinKeySet {
+				joinKey = keyValue
+				joinKeySet = true
+				joinKeyString, err := computeJSONAny(joinKey)
+				if err != nil {
+					return []Document{}, err
 				}
+				joinKeyJSON = joinKeyString
 			} else {
-				return []Document{}, nil // Missing join key, no join
+				// Check if this key matches the first one
+				keyJSON, err := computeJSONAny(keyValue)
+				if err != nil {
+					return []Document{}, err
+				}
+				if keyJSON != joinKeyJSON {
+					return []Document{}, nil // Keys don't match, no join
+				}
 			}
-			i++
-		} else {
-			break
 		}
 	}
 
-	if len(inputDocs) < 2 || !joinKeySet {
+	if len(inputDocs) != e.n || !joinKeySet {
 		return []Document{}, nil
 	}
 
@@ -534,8 +540,9 @@ var _ = Describe("N-ary Join Operators", func() {
 		)
 
 		BeforeEach(func() {
-			evaluator = NewNaryJoin("id")
-			snapshotJoin = NewJoin(evaluator, 3)
+			inputs := []string{"users", "projects", "departments"}
+			evaluator = NewNaryJoin("id", inputs)
+			snapshotJoin = NewJoin(evaluator, inputs)
 			// incrementalJoin = NewIncrementalJoin(evaluator, 3)
 		})
 
@@ -629,8 +636,9 @@ var _ = Describe("N-ary Join Operators", func() {
 		)
 
 		BeforeEach(func() {
-			evaluator = NewNaryJoin("category")
-			snapshotJoin = NewJoin(evaluator, 4)
+			inputs := []string{"products", "reviews", "suppliers", "inventories"}
+			evaluator = NewNaryJoin("category", inputs)
+			snapshotJoin = NewJoin(evaluator, inputs)
 			// incrementalJoin = NewIncrementalJoin(evaluator, 4)
 		})
 
@@ -690,12 +698,14 @@ var _ = Describe("N-ary Join Operators", func() {
 			snapshotJoin    *JoinOp
 			incrementalJoin *IncrementalJoinOp
 			evaluator       *NaryJoinEvaluator
+			inputs          []string
 		)
 
 		BeforeEach(func() {
-			evaluator = NewNaryJoin("id")
-			snapshotJoin = NewJoin(evaluator, 3)
-			incrementalJoin = NewIncrementalJoin(evaluator, 3)
+			inputs = []string{"input_0", "input_1", "input_2"}
+			evaluator = NewNaryJoin("id", inputs)
+			snapshotJoin = NewJoin(evaluator, inputs)
+			incrementalJoin = NewIncrementalJoin(evaluator, inputs)
 		})
 
 		It("should handle the simplest possible 3-way join", func() {
@@ -760,7 +770,7 @@ var _ = Describe("N-ary Join Operators", func() {
 			// fmt.Printf("\n=== INCREMENTAL 3-WAY JOIN DEBUG ===\n")
 
 			// Reset to clean state
-			incrementalJoin = NewIncrementalJoin(evaluator, 3)
+			incrementalJoin = NewIncrementalJoin(evaluator, inputs)
 
 			// Same simple data
 			doc1 := Document{"id": int64(1), "name": "A"}
@@ -821,8 +831,9 @@ var _ = Describe("N-ary Join Operators", func() {
 	Context("Binary vs 3-ary Comparison", func() {
 		It("should compare binary join result with equivalent manual 3-way", func() {
 			// Let's see if the issue is specific to N-ary or affects binary too
-			binaryEval := NewFlexibleJoin("id")
-			binaryJoin := NewBinaryJoin(binaryEval)
+			inputs := []string{"left", "right"}
+			binaryEval := NewFlexibleJoin("id", inputs)
+			binaryJoin := NewBinaryJoin(binaryEval, inputs)
 
 			doc1 := Document{"id": int64(1), "name": "A"}
 			doc2 := Document{"id": int64(1), "name": "B"}
@@ -847,7 +858,8 @@ var _ = Describe("N-ary Join Operators", func() {
 	Context("Manual Cartesian Product Debug", func() {
 		It("should manually trace the cartesian product logic", func() {
 			// Let's debug the cartesianJoin function step by step
-			evaluator := NewNaryJoin("id")
+			inputNames := []string{"input_0", "input_1", "input_2"}
+			evaluator := NewNaryJoin("id", inputNames)
 
 			doc1 := Document{"id": int64(1), "value": "A"}
 			doc2 := Document{"id": int64(1), "value": "B"}
@@ -868,7 +880,7 @@ var _ = Describe("N-ary Join Operators", func() {
 			// fmt.Printf("Input 2: %d documents\n", input3.Size())
 
 			// Let's manually call the cartesian join function
-			result, err := cartesianJoin(evaluator, 3, inputs, 0, make([]Document, 3), make([]int, 3))
+			result, err := cartesianJoin(evaluator, inputNames, inputs, 0, make([]Document, 3), make([]int, 3))
 			Expect(err).NotTo(HaveOccurred())
 
 			// fmt.Printf("Cartesian result: size=%d, unique=%d\n", result.Size(), result.UniqueCount())
@@ -889,8 +901,9 @@ var _ = Describe("N-ary Join Operators", func() {
 
 	Context("Incremental State Inspection", func() {
 		It("should inspect the incremental join's internal state", func() {
-			evaluator := NewNaryJoin("id")
-			incrementalJoin := NewIncrementalJoin(evaluator, 3)
+			inputs := []string{"input_0", "input_1", "input_2"}
+			evaluator := NewNaryJoin("id", inputs)
+			incrementalJoin := NewIncrementalJoin(evaluator, inputs)
 
 			doc := Document{"id": int64(1), "name": "test"}
 			delta, err := SingletonZSet(doc)
@@ -926,12 +939,14 @@ var _ = Describe("N-ary Join Operators", func() {
 			snapshotJoin    *JoinOp
 			incrementalJoin *IncrementalJoinOp
 			evaluator       *NaryJoinEvaluator
+			inputs          []string
 		)
 
 		BeforeEach(func() {
-			evaluator = NewNaryJoin("id")
-			snapshotJoin = NewJoin(evaluator, 3)
-			incrementalJoin = NewIncrementalJoin(evaluator, 3)
+			inputs = []string{"input_0", "input_1", "input_2"}
+			evaluator = NewNaryJoin("id", inputs)
+			snapshotJoin = NewJoin(evaluator, inputs)
+			incrementalJoin = NewIncrementalJoin(evaluator, inputs)
 		})
 
 		It("should produce consistent results for 3-way incremental join", func() {
@@ -1015,11 +1030,13 @@ var _ = Describe("N-ary Join Operators", func() {
 		var (
 			snapshotJoin *JoinOp
 			evaluator    *NaryJoinEvaluator
+			inputs       []string
 		)
 
 		BeforeEach(func() {
-			evaluator = NewNaryJoin("id")
-			snapshotJoin = NewJoin(evaluator, 3)
+			inputs = []string{"users", "projects", "departments"}
+			evaluator = NewNaryJoin("id", inputs)
+			snapshotJoin = NewJoin(evaluator, inputs)
 		})
 
 		It("should handle documents missing join keys", func() {
@@ -1094,8 +1111,9 @@ var _ = Describe("N-ary Join Operators", func() {
 		var joinOp *JoinOp
 
 		BeforeEach(func() {
-			evaluator := NewNaryJoin("id")
-			joinOp = NewJoin(evaluator, 3)
+			inputs := []string{"input_0", "input_1", "input_2"}
+			evaluator := NewNaryJoin("id", inputs)
+			joinOp = NewJoin(evaluator, inputs)
 		})
 
 		It("should have correct operator properties", func() {

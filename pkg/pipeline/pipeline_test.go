@@ -5,9 +5,13 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/yaml"
+
+	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 )
 
 var (
@@ -767,13 +771,19 @@ func TestPipeline(t *testing.T) {
 // 	})
 // })
 
-// func newTestPipeline(data string) *Pipeline {
-// 	var p opv1a1.Pipeline
-// 	err := yaml.Unmarshal(data, &p)
-// 	Expect(err).NotTo(HaveOccurred())
-// 	return &Pipeline{
-// 		Join:        NewJoin(eng, p.Join),
-// 		Aggregation: NewAggregation(eng, p.Aggregation),
-// 		engine:      eng,
-// 	}
-// }
+func newPipeline(data string, srcs []string) (Evaluator, error) {
+	var conf opv1a1.Pipeline
+	err := yaml.Unmarshal([]byte(data), &conf)
+	if err != nil {
+		return nil, err
+	}
+	gvks := []schema.GroupVersionKind{}
+	for _, view := range srcs {
+		gvks = append(gvks, opv1a1.GroupVersion.WithKind(view))
+	}
+	p, err := NewPipeline(gvk.Kind, gvks, conf, logger)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}

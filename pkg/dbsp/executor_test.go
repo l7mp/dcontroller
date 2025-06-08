@@ -164,9 +164,10 @@ var _ = Describe("LinearChainExecutor", func() {
 	Context("Binary Join Pipeline", func() {
 		BeforeEach(func() {
 			// Build: Users + Projects -> Join -> Project -> Output
-			graph.AddInput(NewInput("users"))
-			graph.AddInput(NewInput("projects"))
-			graph.SetJoin(NewBinaryJoin(NewFlexibleJoin("id")))
+			inputs := []string{"users", "projects"}
+			graph.AddInput(NewInput(inputs[0]))
+			graph.AddInput(NewInput(inputs[1]))
+			graph.SetJoin(NewBinaryJoin(NewFlexibleJoin("id", inputs), inputs))
 			graph.AddToChain(NewProjection(NewFieldProjection("left_name", "right_title")))
 
 			// Optimize and create executor
@@ -280,9 +281,10 @@ var _ = Describe("LinearChainExecutor", func() {
 
 		BeforeEach(func() {
 			// Build join pipeline
-			graph.AddInput(NewInput("users"))
-			graph.AddInput(NewInput("projects"))
-			graph.SetJoin(NewBinaryJoin(NewFlexibleJoin("id")))
+			inputs := []string{"users", "projects"}
+			graph.AddInput(NewInput(inputs[0]))
+			graph.AddInput(NewInput(inputs[1]))
+			graph.SetJoin(NewBinaryJoin(NewFlexibleJoin("id", inputs), inputs))
 
 			// Optimize for incremental execution
 			err := rewriter.Optimize(graph)
@@ -513,9 +515,10 @@ var _ = Describe("LinearChainExecutor", func() {
 	Context("Complex Pipelines", func() {
 		It("should handle join + project + select + gather pipeline", func() {
 			// Build complex pipeline: Join -> Project -> Select -> Gather
-			graph.AddInput(NewInput("users"))
-			graph.AddInput(NewInput("sales"))
-			graph.SetJoin(NewBinaryJoin(NewFlexibleJoin("user_id")))
+			inputs := []string{"users", "projects"}
+			graph.AddInput(NewInput(inputs[0]))
+			graph.AddInput(NewInput(inputs[1]))
+			graph.SetJoin(NewBinaryJoin(NewFlexibleJoin("user_id", inputs), inputs))
 			graph.AddToChain(NewProjection(NewFieldProjection("left_name", "right_amount", "right_dept")))
 			graph.AddToChain(NewSelection(NewRangeFilter("right_amount", 1000, 10000)))
 
@@ -625,10 +628,11 @@ var _ = Describe("LinearChainExecutor", func() {
 
 		It("should reject non-incremental graphs", func() {
 			// Create non-optimized graph
+			inputs := []string{"users", "projects"}
 			badGraph := NewChainGraph()
-			badGraph.AddInput(NewInput("users"))
-			badGraph.AddInput(NewInput("projects"))
-			badGraph.SetJoin(NewBinaryJoin(NewFlexibleJoin("id"))) // Non-incremental join
+			badGraph.AddInput(NewInput(inputs[0]))
+			badGraph.AddInput(NewInput(inputs[1]))
+			badGraph.SetJoin(NewBinaryJoin(NewFlexibleJoin("id", inputs), inputs)) // Non-incremental join
 
 			// Should reject at executor creation
 			_, err := NewExecutor(badGraph, logger)

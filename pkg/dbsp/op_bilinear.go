@@ -1,19 +1,23 @@
 package dbsp
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // Snapshot N-ary join (non-incremental)
 type JoinOp struct {
 	BaseOp
-	eval Evaluator
-	n    int
+	eval   Evaluator
+	inputs []string
+	n      int
 }
 
-func NewJoin(eval Evaluator, n int) *JoinOp {
+func NewJoin(eval Evaluator, inputs []string) *JoinOp {
 	return &JoinOp{
-		BaseOp: NewBaseOp(fmt.Sprintf("snapshot_⋈_%d", n), n),
+		BaseOp: NewBaseOp(fmt.Sprintf("snapshot_⋈_%d", len(inputs)), len(inputs)),
 		eval:   eval,
-		n:      n,
+		inputs: inputs,
+		n:      len(inputs),
 	}
 }
 
@@ -26,24 +30,25 @@ func (op *JoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 		return nil, err
 	}
 
-	return cartesianJoin(op.eval, op.n, inputs, 0, make([]Document, op.n), make([]int, op.n))
+	return cartesianJoin(op.eval, op.inputs, inputs, 0, make([]Document, op.n), make([]int, op.n))
 }
 
 type IncrementalJoinOp struct {
 	BaseOp
-	eval Evaluator
-	n    int // number of inputs
-
+	eval   Evaluator
+	n      int // number of inputs
+	inputs []string
 	// State for each input (previous snapshots)
 	prevStates []*DocumentZSet
 }
 
-func NewIncrementalJoin(eval Evaluator, n int) *IncrementalJoinOp {
+func NewIncrementalJoin(eval Evaluator, inputs []string) *IncrementalJoinOp {
 	return &IncrementalJoinOp{
-		BaseOp:     NewBaseOp(fmt.Sprintf("⋈_%d", n), n),
+		BaseOp:     NewBaseOp(fmt.Sprintf("⋈_%d", len(inputs)), len(inputs)),
 		eval:       eval,
-		n:          n,
-		prevStates: make([]*DocumentZSet, n),
+		inputs:     inputs,
+		n:          len(inputs),
+		prevStates: make([]*DocumentZSet, len(inputs)),
 	}
 }
 
@@ -63,9 +68,8 @@ func (op *IncrementalJoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, er
 		}
 	}
 
-	result := NewDocumentZSet()
-
 	// Generate all 2^n - 1 terms where exactly k inputs are deltas
+	result := NewDocumentZSet()
 	for mask := 1; mask < (1 << op.n); mask++ {
 		term, err := op.computeTerm(inputs, mask)
 		if err != nil {
@@ -105,17 +109,17 @@ func (op *IncrementalJoinOp) computeTerm(inputs []*DocumentZSet, mask int) (*Doc
 	}
 
 	// Generate all combinations of documents from all inputs
-	return cartesianJoin(op.eval, op.n, termInputs, 0, make([]Document, op.n), make([]int, op.n))
+	return cartesianJoin(op.eval, op.inputs, termInputs, 0, make([]Document, op.n), make([]int, op.n))
 }
 
-func cartesianJoin(eval Evaluator, n int, inputs []*DocumentZSet, inputIndex int, currentDocs []Document, currentMults []int) (*DocumentZSet, error) {
-	if inputIndex == n {
+func cartesianJoin(eval Evaluator, inputNames []string, inputs []*DocumentZSet, inputIndex int, currentDocs []Document, currentMults []int) (*DocumentZSet, error) {
+	if inputIndex == len(inputNames) {
 		// We have a complete tuple - evaluate the join condition
 		joinInput := make(Document)
 		totalMult := 1
 
 		for i, doc := range currentDocs {
-			joinInput[fmt.Sprintf("input_%d", i)] = doc
+			joinInput[inputNames[i]] = doc
 			totalMult *= currentMults[i]
 		}
 
@@ -127,10 +131,15 @@ func cartesianJoin(eval Evaluator, n int, inputs []*DocumentZSet, inputIndex int
 
 		result := NewDocumentZSet()
 		for _, joinedDoc := range joinedDocs {
-			if err := result.AddDocumentMutate(joinedDoc, totalMult); err != nil {
+			doc, err := DeepCopyDocument(joinedDoc)
+			if err != nil {
+				return nil, err
+			}
+			if err := result.AddDocumentMutate(doc, totalMult); err != nil {
 				return nil, err
 			}
 		}
+
 		return result, nil
 	}
 
@@ -143,7 +152,7 @@ func cartesianJoin(eval Evaluator, n int, inputs []*DocumentZSet, inputIndex int
 		currentDocs[inputIndex] = doc
 		currentMults[inputIndex] = mult
 
-		termResult, err := cartesianJoin(eval, n, inputs, inputIndex+1, currentDocs, currentMults)
+		termResult, err := cartesianJoin(eval, inputNames, inputs, inputIndex+1, currentDocs, currentMults)
 		if err != nil {
 			return nil, err
 		}
@@ -160,13 +169,15 @@ func cartesianJoin(eval Evaluator, n int, inputs []*DocumentZSet, inputIndex int
 // Binary join
 type BinaryJoinOp struct {
 	BaseOp
-	eval Evaluator
+	inputs []string
+	eval   Evaluator
 }
 
-func NewBinaryJoin(eval Evaluator) *BinaryJoinOp {
+func NewBinaryJoin(eval Evaluator, inputs []string) *BinaryJoinOp {
 	return &BinaryJoinOp{
 		BaseOp: NewBaseOp("⋈", 2),
 		eval:   eval,
+		inputs: inputs,
 	}
 }
 
@@ -190,8 +201,8 @@ func (n *BinaryJoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 
 			// Create join input for evaluator
 			joinInput := Document{
-				"left":  leftDoc,
-				"right": rightDoc,
+				n.inputs[0]: leftDoc,
+				n.inputs[1]: rightDoc,
 			}
 
 			// Apply join condition
@@ -204,7 +215,11 @@ func (n *BinaryJoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 			resultMult := leftMult * rightMult
 
 			for _, joinedDoc := range joinedDocs {
-				result, err = result.AddDocument(joinedDoc, resultMult)
+				doc, err := DeepCopyDocument(joinedDoc)
+				if err != nil {
+					return nil, err
+				}
+				result, err = result.AddDocument(doc, resultMult)
 				if err != nil {
 					return nil, err
 				}
@@ -218,7 +233,8 @@ func (n *BinaryJoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 // New stateful incremental join that composes 3 snapshot joins
 type IncrementalBinaryJoinOp struct {
 	BaseOp
-	eval Evaluator
+	eval   Evaluator
+	inputs []string
 
 	// Internal state (previous snapshots)
 	prevLeft  *DocumentZSet
@@ -230,15 +246,16 @@ type IncrementalBinaryJoinOp struct {
 	join3 *BinaryJoinOp // ΔL ⋈ prev_R
 }
 
-func NewIncrementalBinaryJoin(eval Evaluator) *IncrementalBinaryJoinOp {
+func NewIncrementalBinaryJoin(eval Evaluator, inputs []string) *IncrementalBinaryJoinOp {
 	return &IncrementalBinaryJoinOp{
 		BaseOp:    NewBaseOp("incremental_join", 2),
 		eval:      eval,
+		inputs:    inputs,
 		prevLeft:  NewDocumentZSet(),
 		prevRight: NewDocumentZSet(),
-		join1:     NewBinaryJoin(eval),
-		join2:     NewBinaryJoin(eval),
-		join3:     NewBinaryJoin(eval),
+		join1:     NewBinaryJoin(eval, inputs),
+		join2:     NewBinaryJoin(eval, inputs),
+		join3:     NewBinaryJoin(eval, inputs),
 	}
 }
 

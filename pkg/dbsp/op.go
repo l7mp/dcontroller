@@ -82,9 +82,9 @@ func IncrementalizeOp(in Operator) (Operator, bool) {
 		return NewIncrementalGather(op.keyExtractor, op.valueExtractor, op.aggregator), true
 	case *BinaryJoinOp:
 		// Join ops need incrementalization
-		return NewIncrementalBinaryJoin(op.eval), true
+		return NewIncrementalBinaryJoin(op.eval, op.inputs), true
 	case *JoinOp:
-		return NewIncrementalJoin(op.eval, op.Arity()), true
+		return NewIncrementalJoin(op.eval, op.inputs), true
 	default:
 		return op, false
 	}

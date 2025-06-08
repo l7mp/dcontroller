@@ -8,6 +8,7 @@ import (
 	"github.com/l7mp/dcontroller/pkg/dbsp"
 	"github.com/l7mp/dcontroller/pkg/expression"
 	"github.com/l7mp/dcontroller/pkg/object"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // //////////////////////
@@ -141,12 +142,6 @@ func (eval *UnwindOp) Transform(doc dbsp.Document, v any) (dbsp.Document, error)
 		return nil, errors.New("expected list-elem")
 	}
 
-	// no need to ddepcopy doc: dbsp.UnwindOp does that for us
-	value, err := dbsp.DeepCopyAny(elem.value)
-	if err != nil {
-		return nil, fmt.Errorf("failed to deepcopy value: %w", err)
-	}
-
 	// the elem to the corresponding jsonpath
 	jp, err := eval.e.Arg.GetLiteralString()
 	if err != nil {
@@ -154,8 +149,8 @@ func (eval *UnwindOp) Transform(doc dbsp.Document, v any) (dbsp.Document, error)
 	}
 
 	// must use the low-level jsonpath setter so that we retain the original object
-	if err := expression.SetJSONPathRaw(jp, value, doc); err != nil {
-		return nil, fmt.Errorf("failed to set JSONpath %q to value %v: %w", jp, value, err)
+	if err := expression.SetJSONPathRaw(jp, elem.value, doc); err != nil {
+		return nil, fmt.Errorf("failed to set JSONpath %q to value %v: %w", jp, elem.value, err)
 	}
 
 	name, err := expression.GetJSONPathRaw("$.metadata.name", doc)
@@ -240,4 +235,44 @@ func (p *Pipeline) NewGatherOp(e *expression.Expression) (dbsp.Operator, error) 
 	}
 
 	return dbsp.NewIncrementalGather(eval.keyExtractor, eval.valueExtractor, eval), nil
+}
+
+// //////////////////////
+// Join
+type JoinOp struct {
+	e      *expression.Expression
+	inputs []string
+	log    logr.Logger
+}
+
+func (eval *JoinOp) String() string {
+	return fmt.Sprintf("join:%s", eval.e.String())
+}
+
+func (eval *JoinOp) Evaluate(doc dbsp.Document) ([]dbsp.Document, error) {
+	res, err := eval.e.Evaluate(expression.EvalCtx{Object: doc, Log: eval.log})
+	if err != nil {
+		return nil, fmt.Errorf("failed to evaluate join expression: %w", err)
+	}
+
+	arg, err := expression.AsBool(res)
+	if err != nil {
+		return nil, fmt.Errorf("expected boolean result from join expression: %w", err)
+	}
+
+	ret := []dbsp.Document{}
+	if arg {
+		ret = append(ret, doc)
+	}
+
+	return ret, nil
+}
+
+func (p *Pipeline) NewJoinOp(e *expression.Expression, sources []schema.GroupVersionKind) dbsp.Operator {
+	inputs := make([]string, len(sources))
+	for i, src := range sources {
+		inputs[i] = src.Kind
+	}
+	eval := &JoinOp{e: e, log: p.log.WithName("@join")}
+	return dbsp.NewIncrementalJoin(eval, inputs)
 }

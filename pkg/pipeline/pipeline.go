@@ -56,17 +56,14 @@ func NewPipeline(target string, sources []schema.GroupVersionKind, config opv1a1
 
 	// Add inputs
 	for _, src := range sources {
-		p.graph.AddInput(dbsp.NewInput(src.String()))
+		p.graph.AddInput(dbsp.NewInput(src.Kind))
 	}
 
-	// // Add optional Join
-	// if config.Join != nil {
-	// 	joinOp, err := p.makeJoin(config.Join)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	p.graph.SetJoin(joinOp)
-	// }
+	// Add optional Join
+	if config.Join != nil {
+		joinOp := p.NewJoinOp(&config.Join.Expression, sources)
+		p.graph.SetJoin(joinOp)
+	}
 
 	// Add the the Aggregation chain
 	if config.Aggregation != nil {
@@ -142,18 +139,17 @@ func (p *Pipeline) Evaluate(delta cache.Delta) ([]cache.Delta, error) {
 	// init the input for the changed object
 	dzset := make(map[string]*dbsp.DocumentZSet, len(p.sources))
 	for _, src := range p.sources {
-		dzset[src.String()] = dbsp.NewDocumentZSet()
+		dzset[src.Kind] = dbsp.NewDocumentZSet()
 	}
-	key := delta.Object.GroupVersionKind().String()
+	key := delta.Object.GetKind()
 	dzset[key] = zset
 
-	// p.log.V(4).Info("prepared input zset", "object", ObjectKey(delta.Object),
-	// 	"input", util.Stringify(dzset))
+	p.log.V(8).Info("input zset ready", "object", ObjectKey(delta.Object), "input", util.Stringify(dzset))
 
 	// Run the DBSP executor
 	res, err := p.executor.ProcessDelta(dzset)
 	if err != nil {
-		return nil, NewPipelineError(err)
+		return nil, NewPipelineError(fmt.Errorf("failed to evaluate the DBSP graph: %w", err))
 	}
 
 	rawDeltas, err := p.ConvertZSetToDelta(res, p.target)

@@ -19,12 +19,13 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 	Context("Join Incrementalization Rule", func() {
 		It("should incrementalize binary joins", func() {
 			// Setup: Create a graph with a non-incremental binary join
-			graph.AddInput(NewInput("users"))
-			graph.AddInput(NewInput("projects"))
+			inputs := []string{"users", "projects"}
+			graph.AddInput(NewInput(inputs[0]))
+			graph.AddInput(NewInput(inputs[1]))
 
 			// Add a regular (non-incremental) binary join
-			joinEval := NewFlexibleJoin("id")
-			joinID := graph.SetJoin(NewBinaryJoin(joinEval))
+			joinEval := NewFlexibleJoin("id", inputs)
+			joinID := graph.SetJoin(NewBinaryJoin(joinEval, inputs))
 
 			// Verify it's not incremental initially
 			joinNode := graph.nodes[joinID]
@@ -44,12 +45,13 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 
 		It("should incrementalize N-ary joins", func() {
 			// Setup: 3-way join
+			inputs := []string{"users", "projects", "departments"}
 			graph.AddInput(NewInput("users"))
 			graph.AddInput(NewInput("projects"))
 			graph.AddInput(NewInput("departments"))
 
-			joinEval := NewNaryJoin("id")
-			joinID := graph.SetJoin(NewJoin(joinEval, 3))
+			joinEval := NewNaryJoin("id", inputs)
+			joinID := graph.SetJoin(NewJoin(joinEval, inputs))
 
 			// Verify it's not incremental initially
 			joinNode := graph.nodes[joinID]
@@ -350,12 +352,13 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 	Context("Complex Optimization Scenarios", func() {
 		It("should apply multiple rules in sequence", func() {
 			// Complex graph with multiple optimization opportunities
-			graph.AddInput(NewInput("users"))
-			graph.AddInput(NewInput("projects"))
+			inputs := []string{"users", "projects"}
+			graph.AddInput(NewInput(inputs[0]))
+			graph.AddInput(NewInput(inputs[1]))
 
 			// Non-incremental join
-			joinEval := NewFlexibleJoin("id")
-			graph.SetJoin(NewBinaryJoin(joinEval))
+			joinEval := NewFlexibleJoin("id", inputs)
+			graph.SetJoin(NewBinaryJoin(joinEval, inputs))
 
 			// I->D pair that should be eliminated
 			graph.AddToChain(NewIntegrator())

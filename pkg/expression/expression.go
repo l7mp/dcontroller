@@ -684,7 +684,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 				return nil, NewExpressionError(e, errors.New("expected 2 arguments"))
 			}
 
-			v := reflect.DeepEqual(args[0], args[1])
+			v := args[0] != nil && args[1] != nil && reflect.DeepEqual(args[0], args[1])
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
 			return v, nil
 

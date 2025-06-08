@@ -143,7 +143,12 @@ func (op *UnwindOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 			// Transform document with current element: modifies document
 			transformed, err := DeepCopyDocument(input.docs[key])
 			if err != nil {
-				return nil, fmt.Errorf("failed to deep copy document for modification: %w", err)
+				return nil, fmt.Errorf("failed to deepcopy document for modification: %w", err)
+			}
+
+			element, err = DeepCopyAny(element)
+			if err != nil {
+				return nil, fmt.Errorf("failed to deepcopy element for modification: %w", err)
 			}
 
 			transformedDoc, err := op.transformer.Transform(transformed, element)

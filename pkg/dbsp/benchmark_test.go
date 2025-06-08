@@ -596,17 +596,17 @@ func createProjectData(size int) *DocumentZSet {
 }
 
 func createJoinGraph(incremental, optimize bool) *ChainGraph {
+	inputs := []string{"users", "projects"}
 	graph := NewChainGraph()
-
-	graph.AddInput(NewInput("users"))
-	graph.AddInput(NewInput("projects"))
+	graph.AddInput(NewInput(inputs[0]))
+	graph.AddInput(NewInput(inputs[1]))
 
 	// Add join
-	joinEval := NewFlexibleJoin("user_id")
+	joinEval := NewFlexibleJoin("user_id", inputs)
 	if incremental {
-		graph.SetJoin(NewIncrementalBinaryJoin(joinEval))
+		graph.SetJoin(NewIncrementalBinaryJoin(joinEval, inputs))
 	} else {
-		graph.SetJoin(NewBinaryJoin(joinEval))
+		graph.SetJoin(NewBinaryJoin(joinEval, inputs))
 	}
 
 	// Add some post-join processing
