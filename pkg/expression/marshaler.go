@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"time"
 )
 
 func (e *Expression) UnmarshalJSON(b []byte) error {
@@ -33,6 +34,11 @@ func (e *Expression) UnmarshalJSON(b []byte) error {
 	sv := ""
 	if err := json.Unmarshal(b, &sv); err == nil && sv != "" {
 		*e = Expression{Op: "@string", Literal: sv}
+		if sv == "@now" {
+			*e = Expression{Op: "@now"}
+		} else {
+			*e = Expression{Op: "@string", Literal: sv}
+		}
 		return nil
 	}
 
@@ -72,6 +78,10 @@ func (e *Expression) MarshalJSON() ([]byte, error) {
 	switch e.Op {
 	case "@any":
 		return json.Marshal(e.Literal)
+
+	case "@now":
+		v := time.Now().UTC().Format(time.RFC3339)
+		return []byte(v), nil
 
 	case "@bool":
 		if e.Arg != nil {
