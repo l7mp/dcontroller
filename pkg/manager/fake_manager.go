@@ -39,6 +39,8 @@ type FakeManager struct {
 	tracker            testing.ObjectTracker
 	// composite
 	compositeCache *ccache.CompositeCache
+	// allow to push a fake config
+	Cfg *rest.Config
 }
 
 // NewFakeManager creates a new fake manager.
