@@ -64,31 +64,3 @@ var _ = Describe("Object", func() {
 		}))
 	})
 })
-
-var _ = Describe("Object", func() {
-	It("newobjectlist", func() {
-		list := NewViewObjectList("view")
-		Expect(list.UnstructuredContent()).To(Equal(map[string]any{
-			"apiVersion": "view.dcontroller.io/v1alpha1",
-			"kind":       "view",
-			"items":      []any{},
-		}))
-	})
-
-	It("appendtoobjectlist", func() {
-		list := NewViewObjectList("view")
-		obj := NewViewObject("view")
-
-		AppendToListItem(list, obj)
-
-		Expect(list.UnstructuredContent()).To(Equal(map[string]any{
-			"apiVersion": "view.dcontroller.io/v1alpha1",
-			"kind":       "view",
-			"items": []any{map[string]any{
-				"apiVersion": "view.dcontroller.io/v1alpha1",
-				"kind":       "view",
-			}},
-		}))
-	})
-
-})

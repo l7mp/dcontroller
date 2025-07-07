@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
-	runtimeCache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
@@ -25,7 +24,7 @@ import (
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/reconciler"
@@ -201,7 +200,7 @@ var _ = Describe("Controller", func() {
 				GVK:       viewv1a1.NewGVK("view"),
 				Namespace: "default",
 				Name:      "viewname",
-				EventType: cache.Added,
+				EventType: object.Added,
 			}))
 		})
 
@@ -276,7 +275,7 @@ var _ = Describe("Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a viewcache watcher
-			watcher, err := vcache.Watch(ctx, object.NewViewObjectList("view"))
+			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("view"))
 			Expect(err).NotTo(HaveOccurred())
 
 			res = view.DeepCopy()
@@ -578,7 +577,7 @@ target:
 			}
 
 			log.V(1).Info("Create a viewcache watcher")
-			watcher, err := vcache.Watch(ctx, object.NewViewObjectList("rs"))
+			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("rs"))
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should obtain one object in the rs view: pod1-dep1
@@ -595,7 +594,7 @@ target:
 
 			// should be a single object only
 			Eventually(func() bool {
-				list := object.NewViewObjectList("rs")
+				list := composite.NewViewObjectList("rs")
 				err := vcache.List(ctx, list)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -642,7 +641,7 @@ target:
 
 			// Should be two objects
 			Eventually(func() bool {
-				list := object.NewViewObjectList("rs")
+				list := composite.NewViewObjectList("rs")
 				err := vcache.List(ctx, list)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -692,7 +691,7 @@ target:
 
 			// should be 1 object
 			Eventually(func() bool {
-				list := object.NewViewObjectList("rs")
+				list := composite.NewViewObjectList("rs")
 				err := vcache.List(ctx, list)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -820,7 +819,7 @@ target:
 			}
 
 			// Create a viewcache watcher for the kind rs
-			watcher, err := vcache.Watch(ctx, object.NewViewObjectList("pod"))
+			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("pod"))
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() bool {
@@ -852,7 +851,7 @@ target:
 
 			// should be a single object only
 			Eventually(func() bool {
-				list := object.NewViewObjectList("rs")
+				list := composite.NewViewObjectList("rs")
 				err := vcache.List(ctx, list)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -871,7 +870,7 @@ func tryWatchWatcher(watcher watch.Interface, d time.Duration) (watch.Event, boo
 	}
 }
 
-func getRuntimeObjFromCache(ctx context.Context, c runtimeCache.Cache, kind string, obj runtime.Object) (object.Object, error) {
+func getRuntimeObjFromCache(ctx context.Context, c composite.CompositeCache, kind string, obj runtime.Object) (object.Object, error) {
 	m, err := meta.Accessor(obj)
 	if err != nil {
 		return nil, err

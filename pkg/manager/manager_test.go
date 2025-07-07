@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	ccache "github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
@@ -89,16 +89,15 @@ var _ = Describe("Startup", func() {
 			go mgr.Start(ctx)
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			cc := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			cc := cache.(*composite.CompositeCache)
 			Expect(cc).NotTo(BeNil())
-			Expect(cc.GetViewCache()).Should(BeAssignableToTypeOf(&ccache.ViewCache{}))
+			Expect(cc.GetViewCache()).Should(BeAssignableToTypeOf(&composite.ViewCache{}))
 			Expect(cc.GetViewCache()).NotTo(BeNil())
 
 			c := mgr.GetClient()
 			Expect(c).NotTo(BeNil())
-			Expect(c).Should(BeAssignableToTypeOf(&compositeClient{}))
-
+			Expect(c).Should(BeAssignableToTypeOf(&composite.CompositeClient{}))
 		})
 	})
 
@@ -113,7 +112,7 @@ var _ = Describe("Startup", func() {
 			Expect(mgr.GetRuntimeCache().Add(pod)).NotTo(HaveOccurred())
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
 
 			obj := &unstructured.Unstructured{}
 			obj.GetObjectKind().SetGroupVersionKind(pod.GetObjectKind().GroupVersionKind())
@@ -136,8 +135,8 @@ var _ = Describe("Startup", func() {
 			go mgr.Start(ctx)
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			ccache := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			ccache := cache.(*composite.CompositeCache)
 
 			obj := object.NewViewObject("view")
 			object.SetName(obj, "test-ns", "test-obj")
@@ -191,8 +190,8 @@ var _ = Describe("Startup", func() {
 			object.SetName(obj, "ns", "test-1")
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			ccache := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			ccache := cache.(*composite.CompositeCache)
 
 			err = ccache.GetViewCache().Add(obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -219,8 +218,8 @@ var _ = Describe("Startup", func() {
 			object.SetName(obj, "ns", "test-1")
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			ccache := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			ccache := cache.(*composite.CompositeCache)
 
 			err = ccache.GetViewCache().Add(obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -409,8 +408,8 @@ var _ = Describe("Startup", func() {
 			object.SetName(obj, "ns", "test-1")
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			ccache := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			ccache := cache.(*composite.CompositeCache)
 
 			err = ccache.GetViewCache().Add(obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -452,8 +451,8 @@ var _ = Describe("Startup", func() {
 				map[string]any{"ready": "true"}, "status")).NotTo(HaveOccurred())
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			ccache := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			ccache := cache.(*composite.CompositeCache)
 
 			err = ccache.GetViewCache().Add(obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -486,8 +485,8 @@ var _ = Describe("Startup", func() {
 			object.SetName(obj, "ns", "test-1")
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			ccache := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			ccache := cache.(*composite.CompositeCache)
 
 			err = ccache.GetViewCache().Add(obj) // this adds the status but anyway
 			Expect(err).NotTo(HaveOccurred())

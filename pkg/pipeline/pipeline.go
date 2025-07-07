@@ -9,8 +9,9 @@ import (
 	toolscache "k8s.io/client-go/tools/cache"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/dbsp"
+	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/util"
 )
 
@@ -21,7 +22,7 @@ var (
 
 // Evaluator is a query that knows how to evaluate itself on a given delta and how to print itself.
 type Evaluator interface {
-	Evaluate(cache.Delta) ([]cache.Delta, error)
+	Evaluate(object.Delta) ([]object.Delta, error)
 	fmt.Stringer
 }
 
@@ -32,9 +33,9 @@ type Pipeline struct {
 	graph       *dbsp.ChainGraph
 	rewriter    *dbsp.LinearChainRewriteEngine
 	sources     []schema.GroupVersionKind
-	sourceCache map[schema.GroupVersionKind]*cache.Store
+	sourceCache map[schema.GroupVersionKind]*composite.Store
 	target      string
-	targetCache *cache.Store
+	targetCache *composite.Store
 	log         logr.Logger
 }
 
@@ -50,9 +51,9 @@ func NewPipeline(target string, sources []schema.GroupVersionKind, config opv1a1
 		graph:       dbsp.NewChainGraph(),
 		rewriter:    dbsp.NewLinearChainRewriteEngine(),
 		sources:     sources,
-		sourceCache: make(map[schema.GroupVersionKind]*cache.Store),
+		sourceCache: make(map[schema.GroupVersionKind]*composite.Store),
 		target:      target,
-		targetCache: cache.NewStore(),
+		targetCache: composite.NewStore(),
 		log:         log,
 	}
 
@@ -128,7 +129,7 @@ func (p *Pipeline) String() string {
 }
 
 // Evaluate processes an pipeline expression on the given delta.
-func (p *Pipeline) Evaluate(delta cache.Delta) ([]cache.Delta, error) {
+func (p *Pipeline) Evaluate(delta object.Delta) ([]object.Delta, error) {
 	p.log.V(2).Info("processing event", "event-type", delta.Type, "object", ObjectKey(delta.Object))
 
 	// Init

@@ -1,4 +1,4 @@
-package manager
+package composite
 
 import (
 	"context"
@@ -10,49 +10,59 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/rest"
-	ctrlCache "sigs.k8s.io/controller-runtime/pkg/cache"
+	cache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
-	ccache "github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
-var _ client.Client = &compositeClient{}
+var _ client.Client = &CompositeClient{}
 
-type compositeClient struct {
-	compositeCache *ccache.CompositeCache // cache client: must be set up after the client has been created!
-	log            logr.Logger
+type CompositeClient struct {
+	compositeCache  *CompositeCache // cache client: must be set up after the client has been created!
+	discoveryClient *ViewDiscovery
+	log             logr.Logger
 	client.Client
 }
 
 // NewCompositeClient creates a composite client: views are served through the viewcache, native
 // Kubernetes resources served from a native client (can be split client).
-func NewCompositeClient(config *rest.Config, options client.Options) (client.Client, error) {
-	defaultClient, err := client.New(config, options)
-	if err != nil {
-		return nil, err
+func NewCompositeClient(config *rest.Config, options ClientOptions) (*CompositeClient, error) {
+	var nativeClient client.Client
+	if config != nil {
+		c, err := client.New(config, options)
+		if err != nil {
+			return nil, err
+		}
+		nativeClient = c
 	}
-	return &compositeClient{Client: defaultClient, log: logr.New(nil)}, nil
+	return &CompositeClient{
+		Client:          nativeClient,
+		discoveryClient: NewViewDiscovery(),
+		log:             logr.New(nil),
+	}, nil
 }
 
-func (c *compositeClient) setCache(cache ctrlCache.Cache) error {
-	ccache, ok := cache.(*ccache.CompositeCache)
+// SetClient sets the native client.
+func (c *CompositeClient) SetClient(client client.Client) {
+	c.Client = client
+}
+
+func (c *CompositeClient) SetCache(cache cache.Cache) {
+	ccache, ok := cache.(*CompositeCache)
 	if !ok {
-		return errors.New("cache must be a composite cache")
+		return
 	}
 	c.compositeCache = ccache
-	c.log = ccache.GetLogger().WithName("composite-client")
-	return nil
 }
 
 // split client:
 // client.Reader: implemented by the cache.Reader in the native manager.client
 // client.Writer: views are written to the viewcache, rest handled by the default client
 
-func (c *compositeClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+func (c *CompositeClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Group == viewv1a1.GroupVersion.Group {
+	if c.discoveryClient.IsViewKind(gvk) {
 		if c.compositeCache == nil {
 			return errors.New("cache is not set")
 		}
@@ -66,9 +76,9 @@ func (c *compositeClient) Create(ctx context.Context, obj client.Object, opts ..
 	return c.Client.Create(ctx, obj, opts...)
 }
 
-func (c *compositeClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+func (c *CompositeClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Group == viewv1a1.GroupVersion.Group {
+	if c.discoveryClient.IsViewKind(gvk) {
 		if c.compositeCache == nil {
 			return errors.New("cache is not set")
 		}
@@ -82,9 +92,9 @@ func (c *compositeClient) Delete(ctx context.Context, obj client.Object, opts ..
 	return c.Client.Delete(ctx, obj, opts...)
 }
 
-func (c *compositeClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+func (c *CompositeClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Group == viewv1a1.GroupVersion.Group {
+	if c.discoveryClient.IsViewKind(gvk) {
 		if c.compositeCache == nil {
 			return errors.New("cache is not set")
 		}
@@ -106,9 +116,9 @@ func (c *compositeClient) Update(ctx context.Context, obj client.Object, opts ..
 	return c.Client.Update(ctx, obj, opts...)
 }
 
-func (c *compositeClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (c *CompositeClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Group == viewv1a1.GroupVersion.Group {
+	if c.discoveryClient.IsViewKind(gvk) {
 		if c.compositeCache == nil {
 			return errors.New("cache is not set")
 		}
@@ -151,14 +161,14 @@ func (c *compositeClient) Patch(ctx context.Context, obj client.Object, patch cl
 	return c.Client.Patch(ctx, obj, patch, opts...)
 }
 
-func (c *compositeClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+func (c *CompositeClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Group != viewv1a1.GroupVersion.Group {
+	if c.discoveryClient.IsViewKind(gvk) {
 		if c.compositeCache == nil {
 			return errors.New("cache is not set")
 		}
 
-		list := object.NewViewObjectList("view")
+		list := NewViewObjectList("view")
 		if err := c.compositeCache.GetViewCache().List(ctx, list); err != nil {
 			return err
 		}
@@ -170,34 +180,36 @@ func (c *compositeClient) DeleteAllOf(ctx context.Context, obj client.Object, op
 	return c.Client.DeleteAllOf(ctx, obj, opts...)
 }
 
-func (c *compositeClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (c *CompositeClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	return c.compositeCache.Get(ctx, key, obj, opts...)
 }
 
-func (c *compositeClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+func (c *CompositeClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	return c.compositeCache.List(ctx, list, opts...)
 }
 
 // implement StatusClient note that normally this would not be needed since the default view-object
 // client already writes the status if requested, but still needed because native objects' status
 // can only be updated via the status-writer
-func (c *compositeClient) Status() client.SubResourceWriter {
+func (c *CompositeClient) Status() client.SubResourceWriter {
 	return &compositeStatusClient{
 		compositeCache:    c.compositeCache,
 		compositeClient:   c,
+		discoveryClient:   c.discoveryClient,
 		SubResourceWriter: c.Client.Status(),
 	}
 }
 
 type compositeStatusClient struct {
-	compositeCache  *ccache.CompositeCache
-	compositeClient *compositeClient
+	compositeCache  *CompositeCache
+	compositeClient *CompositeClient
+	discoveryClient *ViewDiscovery
 	client.SubResourceWriter
 }
 
 func (c *compositeStatusClient) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
 	gvk := subResource.GetObjectKind().GroupVersionKind()
-	if gvk.Group == viewv1a1.GroupVersion.Group {
+	if c.discoveryClient.IsViewKind(gvk) {
 		return c.updateViewStatus(ctx, obj, subResource)
 	}
 	return c.SubResourceWriter.Create(ctx, obj, subResource, opts...)
@@ -205,7 +217,7 @@ func (c *compositeStatusClient) Create(ctx context.Context, obj client.Object, s
 
 func (c *compositeStatusClient) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Group == viewv1a1.GroupVersion.Group {
+	if c.discoveryClient.IsViewKind(gvk) {
 		return c.updateViewStatus(ctx, obj, obj)
 	}
 	return c.SubResourceWriter.Update(ctx, obj, opts...)
@@ -248,7 +260,7 @@ func (c *compositeStatusClient) updateViewStatus(ctx context.Context, obj client
 
 func (c *compositeStatusClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Group == viewv1a1.GroupVersion.Group {
+	if c.discoveryClient.IsViewKind(gvk) {
 		// fallback to the composite-cache patch implementation
 		return c.compositeClient.Patch(ctx, obj, patch)
 	}

@@ -36,7 +36,9 @@ var _ = Describe("APIServerUnitTest", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		port = rand.IntN(5000) + (32768)
-		server, err = NewAPIServer(mgr, "127.0.0.1", port)
+		config, err := NewDefaultConfig("", port, true)
+		Expect(err).NotTo(HaveOccurred())
+		server, err = NewAPIServer(mgr, config)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -46,13 +48,13 @@ var _ = Describe("APIServerUnitTest", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should faild for native GVK", func() {
+		It("should register native GVK", func() {
 			err := server.RegisterGVK(schema.GroupVersionKind{
 				Group:   "",
 				Version: "v1",
 				Kind:    "Pod",
 			})
-			Expect(err).To(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should silently handle duplicate GVK registration", func() {
@@ -96,9 +98,8 @@ var _ = Describe("APIServerUnitTest", func() {
 	})
 
 	Describe("Lifecycle Management", func() {
-		FIt("should start and shutdown gracefully", func() {
+		It("should start and shutdown gracefully", func() {
 			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
 
 			// Register a GVK first
 			err := server.RegisterGVK(viewGVK)
@@ -115,7 +116,7 @@ var _ = Describe("APIServerUnitTest", func() {
 			time.Sleep(20 * time.Millisecond)
 
 			// Shutdown
-			server.Shutdown()
+			cancel()
 
 			// Wait for start to return
 			Eventually(errChan).Should(Receive(BeNil()))
@@ -185,7 +186,9 @@ var _ = Describe("APIServerUnitTest", func() {
 			}
 
 			for _, tc := range testCases {
-				s, err := NewAPIServer(mgr, tc.addr, 8080)
+				config, err := NewDefaultConfig(tc.addr, 8080, true)
+				Expect(err).NotTo(HaveOccurred())
+				s, err := NewAPIServer(mgr, config)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s).NotTo(BeNil())
 			}

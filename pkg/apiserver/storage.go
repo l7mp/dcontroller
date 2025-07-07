@@ -13,18 +13,41 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/duration"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/apiserver/pkg/endpoints/request"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/generic"
 	"k8s.io/apiserver/pkg/registry/rest"
+	"k8s.io/apiserver/pkg/storage/storagebackend"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Verify interface compliance
+// Verify storage interface compliance
 var _ rest.StandardStorage = &ClientDelegatedStorage{}
 var _ rest.Scoper = &ClientDelegatedStorage{}
 var _ rest.TableConvertor = &ClientDelegatedStorage{}
 
-// ClientDelegatedStorage implements REST storage by delegating all operations
+// Verify the options getter interface compliance
+var _ generic.RESTOptionsGetter = &RESTOptionsGetter{}
+
+// RESTOptionsGetter provides basic REST options for custom storage
+type RESTOptionsGetter struct{}
+
+func (r *RESTOptionsGetter) GetRESTOptions(resource schema.GroupResource, example runtime.Object) (generic.RESTOptions, error) {
+	return generic.RESTOptions{
+		StorageConfig: &storagebackend.ConfigForResource{
+			// We don't actually use etcd storage, but we need to provide config
+			Config:        storagebackend.Config{Type: "memory"}, // or whatever makes sense
+			GroupResource: resource,
+		},
+		Decorator:               generic.UndecoratedStorage,
+		DeleteCollectionWorkers: 1,
+		EnableGarbageCollection: false,
+		ResourcePrefix:          resource.String(),
+		CountMetricPollPeriod:   0, // Disable metrics polling
+	}, nil
+}
+
+// Clientdelegatedstorage implements REST storage by delegating all operations
 // to a controller-runtime client
 type ClientDelegatedStorage struct {
 	delegatingClient      client.Client
@@ -37,18 +60,21 @@ type ClientDelegatedStorage struct {
 // NewClientDelegatedStorage creates a new storage provider that delegates to controller-runtime client
 func NewClientDelegatedStorage(client client.Client, resource *Resource, log logr.Logger) StorageProvider {
 	return func(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (rest.Storage, error) {
+		gvr := schema.GroupVersionResource{
+			Group:    resource.APIResource.Group,
+			Version:  resource.APIResource.Version,
+			Resource: resource.APIResource.Name,
+		}
 		storage := &ClientDelegatedStorage{
 			delegatingClient: client,
 			gvk:              resource.GVK,
-			gvr: schema.GroupVersionResource{
-				Group:    resource.APIResource.Group,
-				Version:  resource.APIResource.Version,
-				Resource: resource.APIResource.Name,
-			},
-			namespaced: resource.APIResource.Namespaced,
-			hasStatus:  resource.HasStatus,
-			log:        log,
+			gvr:              gvr,
+			namespaced:       resource.APIResource.Namespaced,
+			hasStatus:        resource.HasStatus,
+			log:              log,
 		}
+
+		log.V(2).Info("delegated storage created", "GVK", resource.GVK.String(), "GVR", gvr.String())
 
 		return storage, nil
 	}
@@ -121,7 +147,13 @@ func (s *ClientDelegatedStorage) Get(ctx context.Context, name string, options *
 
 // List retrieves a list of objects
 func (s *ClientDelegatedStorage) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
-	s.log.V(4).Info("LIST", "GVR", s.gvr.String())
+	if ri, ok := request.RequestInfoFrom(ctx); ok {
+		s.log.V(2).Info("LIST", "GVR", s.gvr.String(), "verb", ri.Verb, "resource", ri.Resource,
+			"namespace", ri.Namespace, "label-selector", ri.LabelSelector,
+			"field-selector", ri.FieldSelector)
+	} else {
+		s.log.V(2).Info("LIST", "GVR", s.gvr.String())
+	}
 
 	list := &unstructured.UnstructuredList{}
 	list.SetGroupVersionKind(schema.GroupVersionKind{
@@ -145,27 +177,16 @@ func (s *ClientDelegatedStorage) List(ctx context.Context, options *metainternal
 		listOpts = append(listOpts, client.MatchingLabelsSelector{Selector: options.LabelSelector})
 	}
 
-	// Handle field selector (limited support)
+	// Handle field selector
 	if options != nil && options.FieldSelector != nil {
-		// Field selectors are more complex - we'll do basic name filtering here
-		// Full field selector support would require more sophisticated mapping
-		if nameReq, found := options.FieldSelector.RequiresExactMatch("metadata.name"); found {
-			// If filtering by name, use Get instead of List for efficiency
-			obj, err := s.Get(ctx, nameReq, &metav1.GetOptions{})
-			if err != nil {
-				if errors.IsNotFound(err) {
-					return list, nil // Return empty list
-				}
-				return nil, err
-			}
-			list.Items = []unstructured.Unstructured{*obj.(*unstructured.Unstructured)}
-			return list, nil
-		}
+		listOpts = append(listOpts, client.MatchingFieldsSelector{Selector: options.FieldSelector})
 	}
 
 	if err := s.delegatingClient.List(ctx, list, listOpts...); err != nil {
 		return nil, errors.NewInternalError(fmt.Errorf("failed to list %s: %w", s.gvr.String(), err))
 	}
+
+	fmt.Println("MMMMMMMMMMMMMM1", list)
 
 	return list, nil
 }

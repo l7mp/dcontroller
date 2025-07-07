@@ -1,32 +1,21 @@
-package cache
+package composite
 
 import (
 	"context"
-	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
 var (
-	loglevel = -10
-	logger   = zap.New(zap.UseFlagOptions(&zap.Options{
-		Development:     true,
-		DestWriter:      GinkgoWriter,
-		StacktraceLevel: zapcore.Level(3),
-		TimeEncoder:     zapcore.RFC3339NanoTimeEncoder,
-		Level:           zapcore.Level(loglevel),
-	}))
 	pod  = &unstructured.Unstructured{}
 	podn = &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -39,11 +28,6 @@ var (
 		},
 	}
 )
-
-func TestCache(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Cache")
-}
 
 var _ = Describe("CompositeCache", func() {
 	var (
@@ -59,7 +43,7 @@ var _ = Describe("CompositeCache", func() {
 		// this is needed: for some unknown reason the converter does not work on the GVK
 		pod.GetObjectKind().SetGroupVersionKind(podn.GetObjectKind().GroupVersionKind())
 		fakeCache = NewFakeRuntimeCache(scheme.Scheme)
-		cache, _ = NewCompositeCache(nil, Options{
+		cache, _ = NewCompositeCache(nil, CacheOptions{
 			DefaultCache: fakeCache,
 			Logger:       logger,
 		})
@@ -145,7 +129,7 @@ var _ = Describe("CompositeCache", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 
-			list := object.NewViewObjectList("view")
+			list := NewViewObjectList("view")
 			err := cache.List(ctx, list)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.Items).To(HaveLen(3))

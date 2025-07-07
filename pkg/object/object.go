@@ -84,24 +84,3 @@ func DeepCopy(in Object) Object {
 	DeepCopyInto(in, out)
 	return out
 }
-
-// NewViewObjectList creates an empty object list.
-func NewViewObjectList(view string) ObjectList {
-	list := &unstructured.UnstructuredList{}
-	list.SetGroupVersionKind(viewv1a1.NewGVK(view))
-	return list
-}
-
-// AppendToListItem appends an object to a list.
-func AppendToListItem(list client.ObjectList, obj client.Object) {
-	listu, ok := list.(ObjectList)
-	if !ok {
-		return
-	}
-	u, ok := obj.(Object)
-	if !ok {
-		return
-	}
-
-	listu.Items = append(listu.Items, *DeepCopy(u))
-}

@@ -3,65 +3,65 @@ package apiserver
 import (
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httputil"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	genericapifilters "k8s.io/apiserver/pkg/endpoints/filters"
 	openapiendpoints "k8s.io/apiserver/pkg/endpoints/openapi"
 	apiserverrest "k8s.io/apiserver/pkg/registry/rest"
 	genericapiserver "k8s.io/apiserver/pkg/server"
+	genericfilters "k8s.io/apiserver/pkg/server/filters"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
-	"k8s.io/component-base/compatibility"
-	openapicommon "k8s.io/kube-openapi/pkg/common"
 	"k8s.io/kube-openapi/pkg/validation/spec"
-	generatedopenapi "k8s.io/kubernetes/pkg/generated/openapi"
-
-	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
+	// metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 )
 
-// buildServer creates a new API server instance with the given GVKs using direct k8s.io/apiserver
-func (s *APIServer) buildServer(gvks []schema.GroupVersionKind) (*genericapiserver.GenericAPIServer, error) {
+// buildServer creates a new API server instance with the given GVKs using the provided config
+func (s *APIServer) buildServer(gvks []schema.GroupVersionKind) (*genericapiserver.GenericAPIServer, *runtime.Scheme, error) {
 	// Step 1: Create minimal scheme with unstructured types
 	scheme, codecs, err := s.createSchemeAndCodecs(gvks)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create scheme: %w", err)
+		return nil, nil, fmt.Errorf("failed to create scheme: %w", err)
 	}
 
-	// Step 2: Setup server configuration
+	// Step 2: Apply customizations to the config
 	config, err := s.createServerConfig(gvks, codecs, scheme)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create server config: %w", err)
+		return nil, nil, fmt.Errorf("failed to create server config: %w", err)
 	}
 
 	// Step 3: Create the GenericAPIServer
 	server, err := config.Complete().New("dynamic-apiserver", genericapiserver.NewEmptyDelegate())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create server: %w", err)
+		return nil, nil, fmt.Errorf("failed to create server: %w", err)
 	}
 
 	// Step 4: Register API groups for each GVK
-	if err := s.registerAPIGroups(server, scheme, gvks); err != nil {
-		return nil, fmt.Errorf("failed to register API groups: %w", err)
+	if err := s.registerAPIGroups(server, scheme, codecs, gvks); err != nil {
+		return nil, nil, fmt.Errorf("failed to register API groups: %w", err)
 	}
 
-	s.log.Info("built server successfully", "GVKs", len(gvks))
+	s.log.V(2).Info("server built successfully", "GVKs", len(gvks))
 
-	return server, nil
+	return server, scheme, nil
 }
 
 // createSchemeAndCodecs creates a minimal scheme with unstructured types and codecs
 func (s *APIServer) createSchemeAndCodecs(gvks []schema.GroupVersionKind) (*runtime.Scheme, serializer.CodecFactory, error) {
 	scheme := runtime.NewScheme()
 
-	// Add client-go scheme for core types
-	clientgoscheme.AddToScheme(scheme)
+	// Add client-go scheme for core types and meta types
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		return nil, serializer.CodecFactory{}, fmt.Errorf("failed to add client-go scheme: %w", err)
+	}
 
-	// Add meta types (required for API machinery)
-	metav1.AddToGroupVersion(scheme, schema.GroupVersion{Version: "v1"})
+	// metainternalversion.AddToScheme(scheme)
 
 	// Group GVKs by GroupVersion for registration
 	groupVersions := make(map[schema.GroupVersion][]schema.GroupVersionKind)
@@ -72,11 +72,11 @@ func (s *APIServer) createSchemeAndCodecs(gvks []schema.GroupVersionKind) (*runt
 
 	// Register unstructured types for each GroupVersion
 	for gv, gvkList := range groupVersions {
-		// Add the GroupVersion itself
-		metav1.AddToGroupVersion(scheme, gv)
-
 		// Register unstructured types for each kind in this GroupVersion
 		for _, gvk := range gvkList {
+			// Register meta types
+			metav1.AddToGroupVersion(scheme, gv)
+
 			scheme.AddKnownTypeWithName(gvk, &unstructured.Unstructured{})
 			scheme.AddKnownTypeWithName(listGVK(gvk), &unstructured.UnstructuredList{})
 			s.log.V(4).Info("registered unstructured types in scheme", "GVK", gvk.String(),
@@ -97,92 +97,75 @@ func (s *APIServer) createSchemeAndCodecs(gvks []schema.GroupVersionKind) (*runt
 	return scheme, codecs, nil
 }
 
-// getOpenAPIDefinitions generates an OpenAPI definitions for the registered GVKs.
-func (s *APIServer) getOpenAPIDefinitions(gvks []schema.GroupVersionKind) openapicommon.GetOpenAPIDefinitions {
-	return func(ref openapicommon.ReferenceCallback) map[string]openapicommon.OpenAPIDefinition {
-		// Add base definitions from Kubernetes for common types like ObjectMeta, ListMeta
-		// and common APIs from core/v1 annd apps/v1
-		defs := generatedopenapi.GetOpenAPIDefinitions(ref)
-
-		unstructuredDefName := "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.Unstructured"
-		defs[unstructuredDefName] = s.genOpenAPIUnstructDef(ref)
-
-		unstructuredListDefName := "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.UnstructuredList"
-		defs[unstructuredListDefName] = s.genOpenAPIUnstructListDef(ref, unstructuredDefName)
-
-		for _, gvk := range gvks {
-			if gvk.Group != viewv1a1.GroupVersion.Group {
-				continue
-			}
-
-			// resource e.g., "view.dcontroller.io.v1alpha1.MyView"
-			defName := fmt.Sprintf("%s.%s.%s", gvk.Group, gvk.Version, gvk.Kind)
-			defs[defName] = s.genOpenAPIDef(gvk, ref)
-
-			// resourcelist
-			listDefName := fmt.Sprintf("%s/%s.%s", gvk.Group, gvk.Version, listGVK(gvk).Kind)
-			defs[listDefName] = s.genOpenAPIListDef(gvk, ref, defName)
-		}
-
-		return defs
-	}
-}
-
-// createServerConfig creates the server configuration
+// createServerConfig applies our customizations to the provided config and sets defaults
 func (s *APIServer) createServerConfig(gvks []schema.GroupVersionKind, codecs serializer.CodecFactory, scheme *runtime.Scheme) (*genericapiserver.RecommendedConfig, error) {
-	config := genericapiserver.NewConfig(codecs)
+	config := s.config
 
-	// Use SecureServingOptions to create the listener
+	// Apply secure serving options
 	secureServingOptions := &genericoptions.SecureServingOptions{
-		BindAddress: s.bindAddress,
-		BindPort:    s.bindPort,
+		BindAddress: config.Addr.IP,
+		BindPort:    config.Addr.Port,
 		ServerCert: genericoptions.GeneratableKeyCert{
-			// CertDirectory: "/tmp", // For self-signed cert generation
 			PairName: "apiserver",
+			// CertKey:  genericoptions.CertKey{},
 		},
 	}
 
-	// Apply secure serving options
 	if err := secureServingOptions.ApplyTo(&config.SecureServing); err != nil {
 		return nil, fmt.Errorf("failed to apply secure serving: %w", err)
 	}
 
-	// Now create loopback config manually based on the secure serving info
-	addr := config.SecureServing.Listener.Addr().(*net.TCPAddr)
-	config.LoopbackClientConfig = &rest.Config{
-		Host: fmt.Sprintf("https://%s:%d", addr.IP.String(), addr.Port),
-		TLSClientConfig: rest.TLSClientConfig{
-			Insecure: true, // Skip TLS verification for self-signed certs
-		},
+	// Create the HTTP middleware for the inecure HTTP server
+	config.Config.BuildHandlerChainFunc = func(apiHandler http.Handler, c *genericapiserver.Config) http.Handler {
+		handler := genericfilters.WithWaitGroup(apiHandler, c.LongRunningFunc, c.NonLongRunningRequestWaitGroup)
+		middleware := genericapifilters.WithRequestInfo(handler, c.RequestInfoResolver)
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			dump, err := httputil.DumpRequest(r, true) // true = include body
+			if err != nil {
+				dump = []byte{}
+			}
+			s.log.Info("HTTP Request", "method", r.Method, "path", r.URL.Path, "content", string(dump))
+			middleware.ServeHTTP(w, r)
+		})
+		return handler
 	}
 
-	// Set other required fields
-	config.EffectiveVersion = compatibility.NewEffectiveVersionFromString("1.33", "", "")
+	// Ensure secure serving is configured
+	if config.UseHTTP {
+		insecureAddr := &net.TCPAddr{
+			IP:   config.Addr.IP,
+			Port: config.Addr.Port + 1,
+		}
+		listener, err := net.Listen("tcp", insecureAddr.String())
+		if err != nil {
+			return nil, fmt.Errorf("failed to open insecure server socket: %w", err)
+		}
+		s.insecureListener = listener
+	}
 
-	// The openAPINamer uses the scheme to generate definition names.
+	// Override/set required fields for our dynamic server
+	config.Config.Serializer = codecs
+
+	// Update OpenAPI configuration
 	openAPINamer := openapiendpoints.NewDefinitionNamer(scheme)
-
-	// Replace `GetOpenAPIDefinitions` with your actual function if it's in a different package/name
 	openAPIConfig := genericapiserver.DefaultOpenAPIConfig(s.getOpenAPIDefinitions(gvks), openAPINamer)
 	openAPIConfig.Info = &spec.Info{
 		InfoProps: spec.InfoProps{
 			Title:   "Dynamic API Server for dcontroller",
 			Version: "v1.0.0",
-			Contact: &spec.ContactInfo{ /* ... */ },
-			License: &spec.License{ /* ... */ },
 		},
 	}
-	config.OpenAPIConfig = openAPIConfig
+	config.Config.OpenAPIConfig = openAPIConfig
 
 	openAPIV3Config := genericapiserver.DefaultOpenAPIV3Config(s.getOpenAPIDefinitions(gvks), openAPINamer)
 	openAPIV3Config.Info = openAPIConfig.Info // Reuse info
-	config.OpenAPIV3Config = openAPIV3Config
+	config.Config.OpenAPIV3Config = openAPIV3Config
 
-	return &genericapiserver.RecommendedConfig{Config: *config}, nil
+	return config.RecommendedConfig, nil
 }
 
 // registerAPIGroups registers API groups and resources with the server
-func (s *APIServer) registerAPIGroups(server *genericapiserver.GenericAPIServer, scheme *runtime.Scheme, gvks []schema.GroupVersionKind) error {
+func (s *APIServer) registerAPIGroups(server *genericapiserver.GenericAPIServer, scheme *runtime.Scheme, codecs serializer.CodecFactory, gvks []schema.GroupVersionKind) error {
 	// Group GVKs by Group for API group registration
 	groupedGVKs := make(map[string][]schema.GroupVersionKind)
 	for _, gvk := range gvks {
@@ -191,7 +174,7 @@ func (s *APIServer) registerAPIGroups(server *genericapiserver.GenericAPIServer,
 
 	// Register each API group
 	for group, gvkList := range groupedGVKs {
-		if err := s.registerAPIGroup(server, scheme, group, gvkList); err != nil {
+		if err := s.registerAPIGroup(server, scheme, codecs, group, gvkList); err != nil {
 			return fmt.Errorf("failed to register API group %s: %w", group, err)
 		}
 	}
@@ -200,7 +183,7 @@ func (s *APIServer) registerAPIGroups(server *genericapiserver.GenericAPIServer,
 }
 
 // registerAPIGroup registers a single API group with its resources
-func (s *APIServer) registerAPIGroup(server *genericapiserver.GenericAPIServer, scheme *runtime.Scheme, group string, gvks []schema.GroupVersionKind) error {
+func (s *APIServer) registerAPIGroup(server *genericapiserver.GenericAPIServer, scheme *runtime.Scheme, codecs serializer.CodecFactory, group string, gvks []schema.GroupVersionKind) error {
 	// Group by version within this group
 	versionedGVKs := make(map[string][]schema.GroupVersionKind)
 	for _, gvk := range gvks {
@@ -222,8 +205,9 @@ func (s *APIServer) registerAPIGroup(server *genericapiserver.GenericAPIServer, 
 			resourceName := resource.APIResource.Name
 
 			// Create storage for this specific GVK
+			restOptionsGetter := &RESTOptionsGetter{}
 			storageProvider := NewClientDelegatedStorage(s.delegatingClient, resource, s.log)
-			storage, err := storageProvider(scheme, nil) // No RESTOptionsGetter needed for our custom storage
+			storage, err := storageProvider(scheme, restOptionsGetter)
 			if err != nil {
 				return fmt.Errorf("failed to create delegaing storage for %s: %w", gvk.String(), err)
 			}
@@ -247,7 +231,7 @@ func (s *APIServer) registerAPIGroup(server *genericapiserver.GenericAPIServer, 
 		OptionsExternalVersion:       &schema.GroupVersion{Version: "v1"},
 		Scheme:                       scheme,
 		ParameterCodec:               runtime.NewParameterCodec(scheme),
-		NegotiatedSerializer:         serializer.NewCodecFactory(scheme),
+		NegotiatedSerializer:         codecs,
 	}
 
 	// Install the API group
@@ -255,7 +239,7 @@ func (s *APIServer) registerAPIGroup(server *genericapiserver.GenericAPIServer, 
 		return fmt.Errorf("failed to install API group %s: %w", group, err)
 	}
 
-	s.log.V(1).Info("successfully registered API group", "group", group, "versions", groupVersions)
+	s.log.V(1).Info("API group registered successfully", "group", group, "versions", groupVersions)
 
 	return nil
 }

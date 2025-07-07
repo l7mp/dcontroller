@@ -4,16 +4,17 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/l7mp/dcontroller/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/dbsp"
 	"github.com/l7mp/dcontroller/pkg/object"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func (p *Pipeline) ConvertDeltaToZSet(delta cache.Delta) (*dbsp.DocumentZSet, error) {
+func (p *Pipeline) ConvertDeltaToZSet(delta object.Delta) (*dbsp.DocumentZSet, error) {
 	gvk := delta.Object.GetObjectKind().GroupVersionKind()
 	if _, ok := p.sourceCache[gvk]; !ok {
-		p.sourceCache[gvk] = cache.NewStore()
+		p.sourceCache[gvk] = composite.NewStore()
 	}
 
 	var old object.Object
@@ -23,7 +24,7 @@ func (p *Pipeline) ConvertDeltaToZSet(delta cache.Delta) (*dbsp.DocumentZSet, er
 
 	zset := dbsp.NewDocumentZSet()
 	switch delta.Type {
-	case cache.Added:
+	case object.Added:
 		if err := zset.AddDocumentMutate(delta.Object.UnstructuredContent(), 1); err != nil {
 			return nil, NewPipelineError(
 				fmt.Errorf("processing event %q: could not add object %s to zset: %w",
@@ -35,7 +36,7 @@ func (p *Pipeline) ConvertDeltaToZSet(delta cache.Delta) (*dbsp.DocumentZSet, er
 				delta.Type, ObjectKey(delta.Object), err)
 		}
 
-	case cache.Updated, cache.Replaced, cache.Upserted:
+	case object.Updated, object.Replaced, object.Upserted:
 		// delete followed by an add
 		if old != nil {
 			if err := zset.AddDocumentMutate(old.UnstructuredContent(), -1); err != nil {
@@ -56,7 +57,7 @@ func (p *Pipeline) ConvertDeltaToZSet(delta cache.Delta) (*dbsp.DocumentZSet, er
 				delta.Type, ObjectKey(delta.Object), err)
 		}
 
-	case cache.Deleted:
+	case object.Deleted:
 		if old == nil {
 			return nil, NewPipelineError(
 				fmt.Errorf("processing event %q: got delete for a nonexistent object %s",
@@ -82,8 +83,8 @@ func (p *Pipeline) ConvertDeltaToZSet(delta cache.Delta) (*dbsp.DocumentZSet, er
 	return zset, nil
 }
 
-func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, view string) ([]cache.Delta, error) {
-	ds := []cache.Delta{}
+func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, view string) ([]object.Delta, error) {
+	ds := []object.Delta{}
 
 	docEntries, err := zset.List()
 	if err != nil {
@@ -93,12 +94,12 @@ func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, view string) ([]c
 	// for _, entry := range collapseDeltas(docEntries) {
 	for _, entry := range docEntries {
 		doc := entry.Document
-		var deltaType cache.DeltaType
+		var deltaType object.DeltaType
 		switch {
 		case entry.Multiplicity > 0:
-			deltaType = cache.Added // collapse multi-objects into a single instance
+			deltaType = object.Added // collapse multi-objects into a single instance
 		case entry.Multiplicity < 0:
-			deltaType = cache.Deleted
+			deltaType = object.Deleted
 		default:
 			continue // ignore
 		}
@@ -147,7 +148,7 @@ func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, view string) ([]c
 		obj.SetName(nameStr)
 		obj.SetNamespace(namespaceStr)
 
-		ds = append(ds, cache.Delta{Object: obj, Type: deltaType})
+		ds = append(ds, object.Delta{Object: obj, Type: deltaType})
 	}
 
 	return ds, nil
@@ -170,23 +171,23 @@ func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, view string) ([]c
 // current entry doc' from the cache and check if doc==doc'. If there is no entry in the cache for
 // the key or the latest state equals the doc to be deleted, we add the delete to the cache and the
 // result delta, otherwise we drop the delete event and move on.
-func (p *Pipeline) Reconcile(ds []cache.Delta) ([]cache.Delta, error) {
-	deltaCache := map[string]cache.Delta{}
+func (p *Pipeline) Reconcile(ds []object.Delta) ([]object.Delta, error) {
+	deltaCache := map[string]object.Delta{}
 
 	for _, d := range ds {
 		key := client.ObjectKeyFromObject(d.Object).String()
 
 		switch d.Type {
-		case cache.Added:
+		case object.Added:
 			// Addition: Always upsert, may overwrite previous delta
 			if err := p.targetCache.Add(d.Object); err != nil {
 				return nil, err
 			}
 
-			d.Type = cache.Upserted
+			d.Type = object.Upserted
 			deltaCache[key] = d
 
-		case cache.Deleted:
+		case object.Deleted:
 			// Deletion: Delete, but only if there is no entry in the target cache for
 			// that object or the previous entry was for the exact same document
 			obj, exists, err := p.targetCache.Get(d.Object)
@@ -204,7 +205,7 @@ func (p *Pipeline) Reconcile(ds []cache.Delta) ([]cache.Delta, error) {
 			}
 
 			if !exists || same {
-				d.Type = cache.Deleted
+				d.Type = object.Deleted
 				deltaCache[key] = d
 			}
 
@@ -214,14 +215,14 @@ func (p *Pipeline) Reconcile(ds []cache.Delta) ([]cache.Delta, error) {
 	}
 
 	// convert delta cache back to delta: first the delete ops, then the upserts
-	res := []cache.Delta{}
+	res := []object.Delta{}
 	for _, d := range deltaCache {
-		if d.Type == cache.Deleted {
+		if d.Type == object.Deleted {
 			res = append(res, d)
 		}
 	}
 	for _, d := range deltaCache {
-		if d.Type == cache.Upserted {
+		if d.Type == object.Upserted {
 			res = append(res, d)
 		}
 	}

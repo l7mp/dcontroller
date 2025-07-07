@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/pipeline"
 	"github.com/l7mp/dcontroller/pkg/reconciler"
@@ -41,7 +41,7 @@ type Controller struct {
 	name, kind  string
 	config      opv1a1.Controller
 	sources     []reconciler.Source
-	cache       map[schema.GroupVersionKind]*cache.Store // needed to recover deleted objects
+	cache       map[schema.GroupVersionKind]*composite.Store // needed to recover deleted objects
 	target      reconciler.Target
 	mgr         runtimeManager.Manager
 	watcher     chan reconciler.Request
@@ -62,7 +62,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 	c := &Controller{
 		mgr:           mgr,
 		sources:       []reconciler.Source{},
-		cache:         make(map[schema.GroupVersionKind]*cache.Store),
+		cache:         make(map[schema.GroupVersionKind]*composite.Store),
 		config:        config,
 		watcher:       make(chan reconciler.Request, WatcherBufferSize),
 		errorReporter: NewErrorReporter(opts.ErrorChan),
@@ -119,7 +119,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 		}
 
 		// Init the cache
-		c.cache[gvk] = cache.NewStore()
+		c.cache[gvk] = composite.NewStore()
 
 		// Create the controller
 		ctrl, err := controller.NewTyped(name, mgr, controller.TypedOptions[reconciler.Request]{
@@ -251,7 +251,7 @@ func processRequest(ctx context.Context, c *Controller, req reconciler.Request) 
 	obj.SetName(req.Name)
 
 	switch req.EventType {
-	case cache.Added, cache.Updated, cache.Replaced:
+	case object.Added, object.Updated, object.Replaced:
 		if err := c.mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
 			return fmt.Errorf("object %s/%s disappeared from client for Add/Update event: %w",
 				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
@@ -260,7 +260,7 @@ func processRequest(ctx context.Context, c *Controller, req reconciler.Request) 
 			return fmt.Errorf("failed to add object %s/%s to cache: %w",
 				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
 		}
-	case cache.Deleted:
+	case object.Deleted:
 		d, ok, err := c.cache[req.GVK].Get(obj)
 		if err != nil {
 			return fmt.Errorf("failed to get object %s/%s to cache in Delete event: %w",
@@ -281,7 +281,7 @@ func processRequest(ctx context.Context, c *Controller, req reconciler.Request) 
 		return nil
 	}
 
-	delta := cache.Delta{
+	delta := object.Delta{
 		Type:   req.EventType,
 		Object: obj,
 	}

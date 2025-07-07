@@ -1,7 +1,7 @@
-package cache
+package composite
 
-// composite cache is a cache that serves views from the view cache and the rest from the default
-// Kubernetes cache
+// Composite cache is a cache that serves views from the view cache and the rest from the default
+// Kubernetes cache.
 
 import (
 	"context"
@@ -24,8 +24,8 @@ type CompositeCache struct {
 	logger, log  logr.Logger
 }
 
-// Options are generic caching options
-type Options struct {
+// CacheOptions are generic caching options
+type CacheOptions struct {
 	cache.Options
 	// DefaultCache is the controller-runtime cache used for anything that is not a view.
 	DefaultCache cache.Cache
@@ -33,9 +33,14 @@ type Options struct {
 	Logger logr.Logger
 }
 
-func NewCompositeCache(config *rest.Config, opts Options) (*CompositeCache, error) {
+func NewCompositeCache(config *rest.Config, opts CacheOptions) (*CompositeCache, error) {
+	logger := opts.Logger
+	if logger.GetSink() == nil {
+		logger = logr.Discard()
+	}
+
 	defaultCache := opts.DefaultCache
-	if opts.DefaultCache == nil {
+	if defaultCache == nil && config != nil {
 		dc, err := cache.New(config, opts.Options)
 		if err != nil {
 			return nil, err
@@ -43,16 +48,11 @@ func NewCompositeCache(config *rest.Config, opts Options) (*CompositeCache, erro
 		defaultCache = dc
 	}
 
-	logger := opts.Logger
-	if logger.GetSink() == nil {
-		logger = logr.Discard()
-	}
-
 	return &CompositeCache{
 		defaultCache: defaultCache,
 		viewCache:    NewViewCache(opts),
 		logger:       logger,
-		log:          logger.WithName("compositecache"),
+		log:          logger.WithName("cache"),
 	}, nil
 }
 

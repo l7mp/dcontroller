@@ -1,4 +1,4 @@
-package cache
+package composite
 
 import (
 	"context"
@@ -47,7 +47,7 @@ func NewViewCacheInformer(gvk schema.GroupVersionKind, indexer toolscache.Indexe
 		gvk:      gvk,
 		cache:    indexer,
 		handlers: make(map[int64]handlerEntry),
-		log:      logger.WithName("viewcacheinformer").WithValues("GVK", gvk.String()),
+		log:      logger.WithValues("GVK", gvk.String()),
 	}
 }
 

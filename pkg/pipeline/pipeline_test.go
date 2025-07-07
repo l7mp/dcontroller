@@ -15,7 +15,6 @@ import (
 
 	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/dbsp"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
@@ -132,14 +131,14 @@ var _ = Describe("Pipelines", func() {
 				p, err := newPipeline(jsonData, []string{"pod", "dep"})
 				Expect(err).NotTo(HaveOccurred())
 
-				var deltas []cache.Delta
+				var deltas []object.Delta
 				for _, o := range []object.Object{dep1, dep2} {
-					deltas, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: o})
+					deltas, err = p.Evaluate(object.Delta{Type: object.Upserted, Object: o})
 					Expect(err).NotTo(HaveOccurred())
 					Expect(deltas).To(BeEmpty())
 				}
 
-				deltas, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: pod1})
+				deltas, err = p.Evaluate(object.Delta{Type: object.Upserted, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(HaveLen(1))
 				delta := deltas[0]
@@ -164,7 +163,7 @@ var _ = Describe("Pipelines", func() {
 				p, err := newPipeline(jsonData, []string{"pod"})
 				Expect(err).NotTo(HaveOccurred())
 
-				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: pod1})
+				deltas, err := p.Evaluate(object.Delta{Type: object.Added, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(deltas).To(HaveLen(1))
@@ -191,7 +190,7 @@ var _ = Describe("Pipelines", func() {
 				p, err := newPipeline(jsonData, []string{"pod"})
 				Expect(err).NotTo(HaveOccurred())
 
-				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: pod1})
+				deltas, err := p.Evaluate(object.Delta{Type: object.Added, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(BeEmpty())
 			})
@@ -216,13 +215,13 @@ var _ = Describe("Pipelines", func() {
 				p, err := newPipeline(jsonData, []string{"pod", "dep", "rs"})
 				Expect(err).NotTo(HaveOccurred())
 
-				var deltas []cache.Delta
+				var deltas []object.Delta
 				for _, o := range []object.Object{pod1, pod2, pod3, dep2, rs1, rs2} {
-					_, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: o})
+					_, err = p.Evaluate(object.Delta{Type: object.Upserted, Object: o})
 					Expect(err).NotTo(HaveOccurred())
 				}
 
-				deltas, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: dep1})
+				deltas, err = p.Evaluate(object.Delta{Type: object.Upserted, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(deltas).To(HaveLen(2))
@@ -249,13 +248,13 @@ var _ = Describe("Pipelines", func() {
 				// rewrite pod1 parent
 				// oldpod1 := pod1.DeepCopy()
 				pod1.UnstructuredContent()["spec"].(map[string]any)["parent"] = "dep2"
-				deltas, err = p.Evaluate(cache.Delta{Type: cache.Updated, Object: pod1})
+				deltas, err = p.Evaluate(object.Delta{Type: object.Updated, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(deltas).To(HaveLen(1))
 				delta = deltas[0]
 				Expect(delta.IsUnchanged()).To(BeFalse())
-				Expect(delta.Type).To(Equal(cache.Upserted))
+				Expect(delta.Type).To(Equal(object.Upserted))
 				Expect(delta.Object.GetName()).To(Equal("pod1"))
 				Expect(delta.Object.GetNamespace()).To(Equal("default"))
 				Expect(delta.Object.UnstructuredContent()["replicas"]).To(Equal(int64(1)))
@@ -288,13 +287,13 @@ var _ = Describe("Pipelines", func() {
 				p, err := newPipeline(jsonData, []string{"pod", "dep", "rs"})
 				Expect(err).NotTo(HaveOccurred())
 
-				var deltas []cache.Delta
+				var deltas []object.Delta
 				for _, o := range []object.Object{pod1, pod2, pod3, dep2, rs1, rs2} {
-					_, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: o})
+					_, err = p.Evaluate(object.Delta{Type: object.Upserted, Object: o})
 					Expect(err).NotTo(HaveOccurred())
 				}
 
-				deltas, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: dep1})
+				deltas, err = p.Evaluate(object.Delta{Type: object.Upserted, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(deltas).To(HaveLen(2))
@@ -321,14 +320,14 @@ var _ = Describe("Pipelines", func() {
 				// rewrite pod1 parent
 				// oldpod1 := pod1.DeepCopy()
 				pod1.UnstructuredContent()["spec"].(map[string]any)["parent"] = "dep2"
-				deltas, err = p.Evaluate(cache.Delta{Type: cache.Updated, Object: pod1})
+				deltas, err = p.Evaluate(object.Delta{Type: object.Updated, Object: pod1})
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(deltas).To(HaveLen(2))
 
 				delta = deltas[0]
 				Expect(delta.IsUnchanged()).To(BeFalse())
-				Expect(delta.Type).To(Equal(cache.Deleted))
+				Expect(delta.Type).To(Equal(object.Deleted))
 				Expect(delta.Object.GetName()).To(Equal("dep1--pod1"))
 				Expect(delta.Object.GetNamespace()).To(Equal("default"))
 				Expect(delta.Object.UnstructuredContent()["replicas"]).To(Equal(int64(3)))
@@ -336,7 +335,7 @@ var _ = Describe("Pipelines", func() {
 
 				delta = deltas[1]
 				Expect(delta.IsUnchanged()).To(BeFalse())
-				Expect(delta.Type).To(Equal(cache.Upserted))
+				Expect(delta.Type).To(Equal(object.Upserted))
 				Expect(delta.Object.GetName()).To(Equal("dep2--pod1"))
 				Expect(delta.Object.GetNamespace()).To(Equal("default"))
 				Expect(delta.Object.UnstructuredContent()["replicas"]).To(Equal(int64(1)))
@@ -365,39 +364,39 @@ var _ = Describe("Pipelines", func() {
 				p, err := newPipeline(jsonData, []string{"dep"})
 				Expect(err).NotTo(HaveOccurred())
 
-				deltas, err := p.Evaluate(cache.Delta{Type: cache.Added, Object: dep1})
+				deltas, err := p.Evaluate(object.Delta{Type: object.Added, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(HaveLen(1))
 				Expect(deltas[0].IsUnchanged()).To(BeFalse())
-				Expect(deltas[0].Type).To(Equal(cache.Upserted))
+				Expect(deltas[0].Type).To(Equal(object.Upserted))
 				Expect(deltas[0].Object.GetName()).To(Equal("dep1"))
 				Expect(deltas[0].Object.GetNamespace()).To(Equal("default"))
 
 				// duplicate add -> singleton delta for the doc
-				deltas, err = p.Evaluate(cache.Delta{Type: cache.Added, Object: dep1})
+				deltas, err = p.Evaluate(object.Delta{Type: object.Added, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(HaveLen(1))
 				Expect(deltas[0].IsUnchanged()).To(BeFalse())
-				Expect(deltas[0].Type).To(Equal(cache.Upserted))
+				Expect(deltas[0].Type).To(Equal(object.Upserted))
 				Expect(deltas[0].Object.GetName()).To(Equal("dep1"))
 				Expect(deltas[0].Object.GetNamespace()).To(Equal("default"))
 
 				// duplicate upsert (maps to a delete+add for the same doc) -> no delta!
-				deltas, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: dep1})
+				deltas, err = p.Evaluate(object.Delta{Type: object.Upserted, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(BeEmpty())
 
 				// duplicate update (maps to a delete+add for the same doc) -> no delta!
-				deltas, err = p.Evaluate(cache.Delta{Type: cache.Updated, Object: dep1})
+				deltas, err = p.Evaluate(object.Delta{Type: object.Updated, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(BeEmpty())
 
 				// do not ignore a delete event for the same object
-				deltas, err = p.Evaluate(cache.Delta{Type: cache.Deleted, Object: dep1})
+				deltas, err = p.Evaluate(object.Delta{Type: object.Deleted, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(HaveLen(1))
 				Expect(deltas[0].IsUnchanged()).To(BeFalse())
-				Expect(deltas[0].Type).To(Equal(cache.Deleted))
+				Expect(deltas[0].Type).To(Equal(object.Deleted))
 				Expect(deltas[0].Object.GetName()).To(Equal("dep1"))
 				Expect(deltas[0].Object.GetNamespace()).To(Equal("default"))
 
@@ -413,31 +412,31 @@ var _ = Describe("Pipelines", func() {
 				Expect(err).NotTo(HaveOccurred())
 				q.executor = executor
 
-				deltas, err = q.Evaluate(cache.Delta{Type: cache.Added, Object: dep1})
+				deltas, err = q.Evaluate(object.Delta{Type: object.Added, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(HaveLen(1))
 				Expect(deltas[0].IsUnchanged()).To(BeFalse())
-				Expect(deltas[0].Type).To(Equal(cache.Upserted))
+				Expect(deltas[0].Type).To(Equal(object.Upserted))
 				Expect(deltas[0].Object.GetName()).To(Equal("dep1"))
 				Expect(deltas[0].Object.GetNamespace()).To(Equal("default"))
 
 				// duplicate add -> singleton delta for the doc
-				deltas, err = q.Evaluate(cache.Delta{Type: cache.Added, Object: dep1})
+				deltas, err = q.Evaluate(object.Delta{Type: object.Added, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(BeEmpty())
 
 				// duplicate upsert (maps to a delete+add for the same doc) -> no delta!
-				deltas, err = q.Evaluate(cache.Delta{Type: cache.Upserted, Object: dep1})
+				deltas, err = q.Evaluate(object.Delta{Type: object.Upserted, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(BeEmpty())
 
 				// duplicate update (maps to a delete+add for the same doc) -> no delta!
-				deltas, err = q.Evaluate(cache.Delta{Type: cache.Updated, Object: dep1})
+				deltas, err = q.Evaluate(object.Delta{Type: object.Updated, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(BeEmpty())
 
 				// ignore a delete event: "distinct" eliminates removals
-				deltas, err = q.Evaluate(cache.Delta{Type: cache.Deleted, Object: dep1})
+				deltas, err = q.Evaluate(object.Delta{Type: object.Deleted, Object: dep1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(deltas).To(BeEmpty())
 			})
@@ -689,13 +688,13 @@ var _ = Describe("Pipelines", func() {
 					},
 				}, "spec", "listeners")
 
-			var deltas []cache.Delta
+			var deltas []object.Delta
 			for _, o := range []object.Object{gateway} {
-				_, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: o})
+				_, err = p.Evaluate(object.Delta{Type: object.Upserted, Object: o})
 				Expect(err).NotTo(HaveOccurred())
 			}
 
-			deltas, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: route})
+			deltas, err = p.Evaluate(object.Delta{Type: object.Upserted, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(deltas).To(HaveLen(1))
@@ -704,24 +703,24 @@ var _ = Describe("Pipelines", func() {
 			Expect(delta.Object.GetName()).To(Equal("gateway--route"))
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 
-			deltas, err = p.Evaluate(cache.Delta{Type: cache.Deleted, Object: route})
+			deltas, err = p.Evaluate(object.Delta{Type: object.Deleted, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(deltas).To(HaveLen(1))
 			delta = deltas[0]
 			Expect(delta.IsUnchanged()).To(BeFalse())
-			Expect(delta.Type).To(Equal(cache.Deleted))
+			Expect(delta.Type).To(Equal(object.Deleted))
 			Expect(delta.Object.GetName()).To(Equal("gateway--route"))
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 
 			route.SetNamespace("other")
-			deltas, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: route})
+			deltas, err = p.Evaluate(object.Delta{Type: object.Upserted, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(deltas).To(HaveLen(1))
 			delta = deltas[0]
 			Expect(delta.IsUnchanged()).To(BeFalse())
-			Expect(delta.Type).To(Equal(cache.Upserted))
+			Expect(delta.Type).To(Equal(object.Upserted))
 			Expect(delta.Object.GetName()).To(Equal("gateway--route"))
 			Expect(delta.Object.GetNamespace()).To(Equal("other"))
 		})
@@ -730,14 +729,14 @@ var _ = Describe("Pipelines", func() {
 			p, err := newPipeline(routeArrachmentRule, []string{"gateway", "route"})
 			Expect(err).NotTo(HaveOccurred())
 
-			var deltas []cache.Delta
+			var deltas []object.Delta
 			for _, o := range []object.Object{gateway} {
-				_, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: o})
+				_, err = p.Evaluate(object.Delta{Type: object.Upserted, Object: o})
 				Expect(err).NotTo(HaveOccurred())
 			}
 
 			route.SetNamespace("other")
-			deltas, err = p.Evaluate(cache.Delta{Type: cache.Added, Object: route})
+			deltas, err = p.Evaluate(object.Delta{Type: object.Added, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(BeEmpty())
 		})
@@ -768,29 +767,29 @@ var _ = Describe("Pipelines", func() {
 				},
 				}, "spec", "listeners")
 
-			var deltas []cache.Delta
+			var deltas []object.Delta
 			for _, o := range []object.Object{gateway} {
-				_, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: o})
+				_, err = p.Evaluate(object.Delta{Type: object.Upserted, Object: o})
 				Expect(err).NotTo(HaveOccurred())
 			}
 
 			route.SetLabels(map[string]string{"app": "nginx"})
-			deltas, err = p.Evaluate(cache.Delta{Type: cache.Added, Object: route})
+			deltas, err = p.Evaluate(object.Delta{Type: object.Added, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
 			Expect(delta.IsUnchanged()).To(BeFalse())
-			Expect(delta.Type).To(Equal(cache.Upserted))
+			Expect(delta.Type).To(Equal(object.Upserted))
 			Expect(delta.Object.GetName()).To(Equal("gateway--route"))
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 
 			route.SetLabels(map[string]string{"app": "httpd"})
-			deltas, err = p.Evaluate(cache.Delta{Type: cache.Updated, Object: route})
+			deltas, err = p.Evaluate(object.Delta{Type: object.Updated, Object: route})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deltas).To(HaveLen(1))
 			delta = deltas[0]
 			Expect(delta.IsUnchanged()).To(BeFalse())
-			Expect(delta.Type).To(Equal(cache.Deleted))
+			Expect(delta.Type).To(Equal(object.Deleted))
 			Expect(delta.Object.GetName()).To(Equal("gateway--route"))
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 		})
@@ -825,13 +824,13 @@ var _ = Describe("Pipelines", func() {
 			p, err := newPipeline(jsonData, []string{"Service", "EndpointSlice"})
 			Expect(err).NotTo(HaveOccurred())
 
-			var deltas []cache.Delta
+			var deltas []object.Delta
 			for _, o := range []object.Object{svc1} {
-				_, err = p.Evaluate(cache.Delta{Type: cache.Upserted, Object: o})
+				_, err = p.Evaluate(object.Delta{Type: object.Upserted, Object: o})
 				Expect(err).NotTo(HaveOccurred())
 			}
 
-			deltas, err = p.Evaluate(cache.Delta{Type: cache.Added, Object: es1})
+			deltas, err = p.Evaluate(object.Delta{Type: object.Added, Object: es1})
 			Expect(err).NotTo(HaveOccurred())
 
 			// logger.Info(fmt.Sprintf("%v", deltas))
@@ -840,7 +839,7 @@ var _ = Describe("Pipelines", func() {
 			Expect(deltas).To(HaveLen(1))
 			delta := deltas[0]
 			Expect(delta.IsUnchanged()).To(BeFalse())
-			Expect(delta.Type).To(Equal(cache.Upserted))
+			Expect(delta.Type).To(Equal(object.Upserted))
 			Expect(delta.Object.GetName()).To(Equal("test-endpointslice"))
 			Expect(delta.Object.GetNamespace()).To(Equal("default"))
 

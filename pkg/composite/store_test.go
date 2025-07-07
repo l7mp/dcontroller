@@ -1,4 +1,4 @@
-package cache
+package composite
 
 import (
 	. "github.com/onsi/ginkgo/v2"

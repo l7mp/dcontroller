@@ -15,7 +15,6 @@ import (
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/util"
 )
@@ -23,7 +22,7 @@ import (
 // Target is a generic writer that knows how to create controller runtime objects in a target resource.
 type Target interface {
 	Resource
-	Write(context.Context, cache.Delta) error
+	Write(context.Context, object.Delta) error
 	fmt.Stringer
 }
 
@@ -56,7 +55,7 @@ func (t *target) String() string {
 //   - For Patchers the delta object is applied as a strategic merge patch: for Add and Update
 //     deltas the target is patched with the delta object, while for Delete the delta object
 //     content is removed from the target using a strategic merge patch.
-func (t *target) Write(ctx context.Context, delta cache.Delta) error {
+func (t *target) Write(ctx context.Context, delta object.Delta) error {
 	if delta.Object == nil {
 		return errors.New("write: empty object in delta")
 	}
@@ -83,14 +82,14 @@ func (t *target) Write(ctx context.Context, delta cache.Delta) error {
 	}
 }
 
-func (t *target) update(ctx context.Context, delta cache.Delta) error {
+func (t *target) update(ctx context.Context, delta object.Delta) error {
 	t.log.V(5).Info("updating target", "delta-type", delta.Type, "object", object.Dump(delta.Object))
 
 	c := t.mgr.GetClient()
 
 	//nolint:nolintlint
 	switch delta.Type { //nolint:exhaustive
-	case cache.Added, cache.Upserted, cache.Updated, cache.Replaced:
+	case object.Added, object.Upserted, object.Updated, object.Replaced:
 		t.log.V(2).Info("add/upsert", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
 
 		gvk, err := t.GetGVK()
@@ -149,7 +148,7 @@ func (t *target) update(ctx context.Context, delta cache.Delta) error {
 
 		return nil
 
-	case cache.Deleted:
+	case object.Deleted:
 		t.log.V(2).Info("delete", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
 
 		return c.Delete(ctx, delta.Object)
@@ -161,14 +160,14 @@ func (t *target) update(ctx context.Context, delta cache.Delta) error {
 	}
 }
 
-func (t *target) patch(ctx context.Context, delta cache.Delta) error {
+func (t *target) patch(ctx context.Context, delta object.Delta) error {
 	t.log.V(5).Info("patching target", "delta-type", delta.Type, "object", object.Dump(delta.Object))
 
 	c := t.mgr.GetClient()
 
 	//nolint:nolintlint
 	switch delta.Type { //nolint:exhaustive
-	case cache.Added, cache.Updated, cache.Upserted, cache.Replaced:
+	case object.Added, object.Updated, object.Upserted, object.Replaced:
 		t.log.V(4).Info("update-patch", "event-type", delta.Type,
 			"key", client.ObjectKeyFromObject(delta.Object).String())
 
@@ -208,7 +207,7 @@ func (t *target) patch(ctx context.Context, delta cache.Delta) error {
 
 		return nil
 
-	case cache.Deleted:
+	case object.Deleted:
 		// apply the patch locally so that we fully control the behavior
 		patch := removeNestedMap(delta.Object.UnstructuredContent())
 

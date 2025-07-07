@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/composite"
 )
 
 // Options provides various settings to custimize the manager. Most options come verbatim from the
@@ -46,7 +46,7 @@ func New(config *rest.Config, opts Options) (*Manager, error) {
 	// manager.
 	if opts.NewCache == nil {
 		opts.NewCache = func(config *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
-			return cache.NewCompositeCache(config, cache.Options{
+			return composite.NewCompositeCache(config, composite.CacheOptions{
 				Options: opts,
 				Logger:  logger,
 			})
@@ -63,7 +63,9 @@ func New(config *rest.Config, opts Options) (*Manager, error) {
 			},
 		}
 		// This, apparently, only affects the Writer of the split client!
-		opts.NewClient = NewCompositeClient
+		opts.NewClient = func(config *rest.Config, options client.Options) (client.Client, error) {
+			return composite.NewCompositeClient(config, options) // returns *CompositeClient
+		}
 	}
 
 	mgr, err := manager.New(config, opts.Options)
@@ -72,11 +74,11 @@ func New(config *rest.Config, opts Options) (*Manager, error) {
 	}
 
 	// pass the composite cache in to the client
-	c, ok := mgr.GetClient().(*compositeClient)
+	c, ok := mgr.GetClient().(*composite.CompositeClient)
 	if !ok {
 		return nil, errors.New("cache must be a composite client")
 	}
-	c.setCache(mgr.GetCache()) //nolint:errcheck
+	c.SetCache(mgr.GetCache()) //nolint:errcheck
 
 	return &Manager{Manager: mgr}, nil
 }
