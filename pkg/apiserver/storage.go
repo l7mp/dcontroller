@@ -186,8 +186,6 @@ func (s *ClientDelegatedStorage) List(ctx context.Context, options *metainternal
 		return nil, errors.NewInternalError(fmt.Errorf("failed to list %s: %w", s.gvr.String(), err))
 	}
 
-	fmt.Println("MMMMMMMMMMMMMM1", list)
-
 	return list, nil
 }
 

@@ -18,15 +18,23 @@ import (
 
 var _ = Describe("APIServerUnitTest", func() {
 	var (
-		mgr     runtimeManager.Manager
-		server  *APIServer
-		viewGVK schema.GroupVersionKind
-		port    int
+		mgr                       runtimeManager.Manager
+		server                    *APIServer
+		testGroup, testGroup2     string
+		testViewGVK, test2ViewGVK schema.GroupVersionKind
+		port                      int
 	)
 
 	BeforeEach(func() {
-		viewGVK = schema.GroupVersionKind{
-			Group:   viewv1a1.GroupVersion.Group,
+		testGroup = "test." + viewv1a1.GroupVersion.Group
+		testViewGVK = schema.GroupVersionKind{
+			Group:   testGroup,
+			Version: viewv1a1.GroupVersion.Version,
+			Kind:    "TestView",
+		}
+		testGroup2 = "test2." + viewv1a1.GroupVersion.Group
+		test2ViewGVK = schema.GroupVersionKind{
+			Group:   testGroup2,
 			Version: viewv1a1.GroupVersion.Version,
 			Kind:    "TestView",
 		}
@@ -43,57 +51,90 @@ var _ = Describe("APIServerUnitTest", func() {
 	})
 
 	Describe("GVK Registration", func() {
-		It("should register a new view GVK", func() {
-			err := server.RegisterGVK(viewGVK)
+		It("should register a view group", func() {
+			err := server.RegisterAPIGroup(testGroup, []schema.GroupVersionKind{testViewGVK})
 			Expect(err).NotTo(HaveOccurred())
+
+			groupGVKs, ok := server.groupGVKs[testGroup]
+			Expect(ok).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(testViewGVK))
+			Expect(groupGVKs[testViewGVK]).To(BeTrue())
+
+			_, ok = server.groupGVKs[testGroup2]
+			Expect(ok).To(BeFalse())
 		})
 
-		It("should register native GVK", func() {
-			err := server.RegisterGVK(schema.GroupVersionKind{
+		It("should register a native group", func() {
+			pod := schema.GroupVersionKind{
 				Group:   "",
 				Version: "v1",
 				Kind:    "Pod",
-			})
+			}
+			err := server.RegisterAPIGroup(testGroup, []schema.GroupVersionKind{pod})
 			Expect(err).NotTo(HaveOccurred())
+
+			groupGVKs, ok := server.groupGVKs[testGroup]
+			Expect(ok).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(pod))
+			Expect(groupGVKs[pod]).To(BeTrue())
 		})
 
-		It("should silently handle duplicate GVK registration", func() {
-			err := server.RegisterGVK(viewGVK)
+		It("should err for duplicate group-GVK registration", func() {
+			err := server.RegisterAPIGroup(testGroup, []schema.GroupVersionKind{testViewGVK})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Register again - should not error
-			err = server.RegisterGVK(viewGVK)
-			Expect(err).NotTo(HaveOccurred())
+			// Register again - should err
+			err = server.RegisterAPIGroup(testGroup, []schema.GroupVersionKind{testViewGVK})
+			Expect(err).To(HaveOccurred())
 		})
 
 		It("should unregister a GVK", func() {
-			err := server.RegisterGVK(viewGVK)
+			err := server.RegisterAPIGroup(testGroup, []schema.GroupVersionKind{testViewGVK})
 			Expect(err).NotTo(HaveOccurred())
 
-			err = server.UnregisterGVK(viewGVK)
+			groupGVKs, ok := server.groupGVKs[testGroup]
+			Expect(ok).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(testViewGVK))
+			Expect(groupGVKs[testViewGVK]).To(BeTrue())
+
+			err = server.UnregisterAPIGroup(testGroup)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, ok = server.groupGVKs[testGroup]
+			Expect(ok).To(BeFalse())
+
+			err = server.UnregisterAPIGroup(testGroup)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should silently handle unregistering non-existent GVK", func() {
-			err := server.UnregisterGVK(viewGVK)
+		It("should silently handle unregistering non-existent group", func() {
+			err := server.UnregisterAPIGroup("dummy")
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should handle multiple GVK registrations", func() {
-			gvks := []schema.GroupVersionKind{
-				{Group: viewGVK.Group, Version: viewGVK.Version, Kind: "view1"},
-				{Group: viewGVK.Group, Version: viewGVK.Version, Kind: "view2"},
-				{Group: viewGVK.Group, Version: viewGVK.Version, Kind: "view3"},
-			}
-
-			for _, gvk := range gvks {
-				err := server.RegisterGVK(gvk)
-				Expect(err).NotTo(HaveOccurred())
-			}
-
-			// Unregister one
-			err := server.UnregisterGVK(gvks[1])
+			view1 := schema.GroupVersionKind{Group: testViewGVK.Group, Version: testViewGVK.Version, Kind: "view1"}
+			view2 := schema.GroupVersionKind{Group: testViewGVK.Group, Version: testViewGVK.Version, Kind: "view2"}
+			view3 := schema.GroupVersionKind{Group: testViewGVK.Group, Version: testViewGVK.Version, Kind: "view3"}
+			gvks := []schema.GroupVersionKind{view1, view2, view3}
+			err := server.RegisterAPIGroup(testGroup, gvks)
 			Expect(err).NotTo(HaveOccurred())
+
+			groupGVKs, ok := server.groupGVKs[testGroup]
+			Expect(ok).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(view1))
+			Expect(groupGVKs[view1]).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(view2))
+			Expect(groupGVKs[view2]).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(view3))
+			Expect(groupGVKs[view3]).To(BeTrue())
+
+			// Unregister
+			err = server.UnregisterAPIGroup(testGroup)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, ok = server.groupGVKs[testGroup]
+			Expect(ok).To(BeFalse())
 		})
 	})
 
@@ -102,7 +143,7 @@ var _ = Describe("APIServerUnitTest", func() {
 			ctx, cancel := context.WithCancel(context.Background())
 
 			// Register a GVK first
-			err := server.RegisterGVK(viewGVK)
+			err := server.RegisterAPIGroup(testGroup, []schema.GroupVersionKind{testViewGVK})
 			Expect(err).NotTo(HaveOccurred())
 
 			// Start server in goroutine
@@ -115,6 +156,19 @@ var _ = Describe("APIServerUnitTest", func() {
 			// Give server a moment to start
 			time.Sleep(20 * time.Millisecond)
 
+			err = server.RegisterAPIGroup(testGroup2, []schema.GroupVersionKind{test2ViewGVK})
+			Expect(err).NotTo(HaveOccurred())
+
+			groupGVKs, ok := server.groupGVKs[testGroup]
+			Expect(ok).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(testViewGVK))
+			Expect(groupGVKs[testViewGVK]).To(BeTrue())
+
+			groupGVKs, ok = server.groupGVKs[testGroup2]
+			Expect(ok).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(test2ViewGVK))
+			Expect(groupGVKs[test2ViewGVK]).To(BeTrue())
+
 			// Shutdown
 			cancel()
 
@@ -126,10 +180,7 @@ var _ = Describe("APIServerUnitTest", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			err := server.RegisterGVK(viewGVK)
-			Expect(err).NotTo(HaveOccurred())
-
-			err = server.Start(ctx)
+			err := server.Start(ctx)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -137,8 +188,13 @@ var _ = Describe("APIServerUnitTest", func() {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			err := server.RegisterGVK(viewGVK)
+			err := server.RegisterAPIGroup(testGroup, []schema.GroupVersionKind{testViewGVK})
 			Expect(err).NotTo(HaveOccurred())
+
+			groupGVKs, ok := server.groupGVKs[testGroup]
+			Expect(ok).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(testViewGVK))
+			Expect(groupGVKs[testViewGVK]).To(BeTrue())
 
 			// Start first time
 			errChan1 := make(chan error, 1)
@@ -155,6 +211,11 @@ var _ = Describe("APIServerUnitTest", func() {
 			}()
 
 			time.Sleep(50 * time.Millisecond)
+
+			groupGVKs, ok = server.groupGVKs[testGroup]
+			Expect(ok).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(testViewGVK))
+			Expect(groupGVKs[testViewGVK]).To(BeTrue())
 
 			// Cancel context to stop
 			cancel()

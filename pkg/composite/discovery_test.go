@@ -62,7 +62,7 @@ var _ = Describe("CompositeDiscoveryClient", func() {
 		It("should create a composite discovery client", func() {
 			Expect(compositeClient).NotTo(BeNil())
 			Expect(compositeClient.nativeDiscovery).To(Equal(fakeNativeDiscovery))
-			Expect(compositeClient.viewDiscovery).NotTo(BeNil())
+			Expect(compositeClient.ViewDiscoveryInterface).NotTo(BeNil())
 		})
 
 		It("should support view groups detection", func() {
@@ -196,7 +196,7 @@ var _ = Describe("CompositeDiscoveryClient", func() {
 			// Should be a CompositeDiscoveryClient
 			legacyComposite, ok := legacyClient.(*CompositeDiscoveryClient)
 			Expect(ok).To(BeTrue())
-			Expect(legacyComposite.viewDiscovery).NotTo(BeNil())
+			Expect(legacyComposite.ViewDiscoveryInterface).NotTo(BeNil())
 		})
 
 		It("should return self when native discovery is nil", func() {
@@ -233,12 +233,6 @@ var _ = Describe("CompositeDiscoveryClient", func() {
 	})
 
 	Describe("View-specific extensions", func() {
-		It("should provide access to view discovery", func() {
-			viewDiscovery := compositeClient.ViewDiscovery()
-			Expect(viewDiscovery).NotTo(BeNil())
-			Expect(viewDiscovery).To(Equal(compositeClient.viewDiscovery))
-		})
-
 		It("should support view GVK registration", func() {
 			newGVK := schema.GroupVersionKind{
 				Group:   viewGroup,

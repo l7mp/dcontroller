@@ -13,19 +13,20 @@ import (
 )
 
 var _ discovery.DiscoveryInterface = &CompositeDiscoveryClient{}
+var _ ViewDiscoveryInterface = &CompositeDiscoveryClient{}
 
 // CompositeDiscoveryClient implements discovery.DiscoveryInterface by routing
 // view groups to ViewDiscovery and native groups to native discovery
 type CompositeDiscoveryClient struct {
-	viewDiscovery   ViewDiscoveryInterface
+	ViewDiscoveryInterface
 	nativeDiscovery discovery.DiscoveryInterface
 }
 
 // NewCompositeDiscoveryClient creates a new composite discovery client
 func NewCompositeDiscoveryClient(nativeDiscovery discovery.DiscoveryInterface) *CompositeDiscoveryClient {
 	return &CompositeDiscoveryClient{
-		viewDiscovery:   NewViewDiscovery(),
-		nativeDiscovery: nativeDiscovery,
+		ViewDiscoveryInterface: NewViewDiscovery(),
+		nativeDiscovery:        nativeDiscovery,
 	}
 }
 
@@ -44,8 +45,8 @@ func (c *CompositeDiscoveryClient) ServerResourcesForGroupVersion(groupVersion s
 		return nil, fmt.Errorf("invalid group version %s: %w", groupVersion, err)
 	}
 
-	if c.viewDiscovery.IsViewGroup(gv.Group) {
-		return c.viewDiscovery.ServerResourcesForGroupVersion(groupVersion)
+	if c.IsViewGroup(gv.Group) {
+		return c.ViewDiscoveryInterface.ServerResourcesForGroupVersion(groupVersion)
 	}
 
 	if c.nativeDiscovery == nil {
@@ -60,7 +61,7 @@ func (c *CompositeDiscoveryClient) ServerGroups() (*metav1.APIGroupList, error) 
 	var groups []metav1.APIGroup
 
 	// Add view groups
-	viewGroups, err := c.viewDiscovery.ServerGroups()
+	viewGroups, err := c.ViewDiscoveryInterface.ServerGroups()
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +85,7 @@ func (c *CompositeDiscoveryClient) ServerGroupsAndResources() ([]*metav1.APIGrou
 	var allResources []*metav1.APIResourceList
 
 	// Add view groups and resources
-	viewGroups, viewResources, err := c.viewDiscovery.ServerGroupsAndResources()
+	viewGroups, viewResources, err := c.ViewDiscoveryInterface.ServerGroupsAndResources()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -109,7 +110,7 @@ func (c *CompositeDiscoveryClient) ServerPreferredResources() ([]*metav1.APIReso
 	var allResources []*metav1.APIResourceList
 
 	// Add view preferred resources
-	viewResources, err := c.viewDiscovery.ServerPreferredResources()
+	viewResources, err := c.ViewDiscoveryInterface.ServerPreferredResources()
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +133,7 @@ func (c *CompositeDiscoveryClient) ServerPreferredNamespacedResources() ([]*meta
 	var allResources []*metav1.APIResourceList
 
 	// Add view namespaced resources (all views are namespaced)
-	viewResources, err := c.viewDiscovery.ServerPreferredResources()
+	viewResources, err := c.ViewDiscoveryInterface.ServerPreferredResources()
 	if err != nil {
 		return nil, err
 	}
@@ -187,24 +188,4 @@ func (c *CompositeDiscoveryClient) WithLegacy() discovery.DiscoveryInterface {
 	}
 	// If no native discovery, return self (views don't have legacy concerns)
 	return c
-}
-
-// View-specific extensions (non-standard but essential for view Kind/List mapping)
-func (c *CompositeDiscoveryClient) ViewDiscovery() ViewDiscoveryInterface {
-	return c.viewDiscovery
-}
-
-// RegisterViewGVK registers a new view GVK for discovery
-func (c *CompositeDiscoveryClient) RegisterViewGVK(gvk schema.GroupVersionKind) error {
-	return c.viewDiscovery.RegisterViewGVK(gvk)
-}
-
-// IsViewGroup returns true if the group is a view group
-func (c *CompositeDiscoveryClient) IsViewGroup(group string) bool {
-	return c.viewDiscovery.IsViewGroup(group)
-}
-
-// IsViewKind returns true if this is a view object kind (not a list)
-func (c *CompositeDiscoveryClient) IsViewKind(gvk schema.GroupVersionKind) bool {
-	return c.viewDiscovery.IsViewKind(gvk)
 }

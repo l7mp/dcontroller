@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -13,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	genericapifilters "k8s.io/apiserver/pkg/endpoints/filters"
 	openapiendpoints "k8s.io/apiserver/pkg/endpoints/openapi"
-	apiserverrest "k8s.io/apiserver/pkg/registry/rest"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericfilters "k8s.io/apiserver/pkg/server/filters"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
@@ -23,37 +23,40 @@ import (
 )
 
 // buildServer creates a new API server instance with the given GVKs using the provided config
-func (s *APIServer) buildServer(gvks []schema.GroupVersionKind) (*genericapiserver.GenericAPIServer, *runtime.Scheme, error) {
+func (s *APIServer) buildServer(gvks []schema.GroupVersionKind) error {
 	// Step 1: Create minimal scheme with unstructured types
 	scheme, codecs, err := s.createSchemeAndCodecs(gvks)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create scheme: %w", err)
+		return fmt.Errorf("failed to create scheme: %w", err)
 	}
+	s.scheme = scheme
+	s.codecs = codecs
 
 	// Step 2: Apply customizations to the config
-	config, err := s.createServerConfig(gvks, codecs, scheme)
+	config, err := s.createServerConfig(gvks)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create server config: %w", err)
+		return fmt.Errorf("failed to create server config: %w", err)
 	}
 
 	// Step 3: Create the GenericAPIServer
 	server, err := config.Complete().New("dynamic-apiserver", genericapiserver.NewEmptyDelegate())
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create server: %w", err)
+		return fmt.Errorf("failed to create server: %w", err)
 	}
+	s.server = server
 
-	// Step 4: Register API groups for each GVK
-	if err := s.registerAPIGroups(server, scheme, codecs, gvks); err != nil {
-		return nil, nil, fmt.Errorf("failed to register API groups: %w", err)
+	// Step 4: Register API groups for native Kubernetes resources
+	if err := s.registerAPIGroups(gvks); err != nil {
+		return fmt.Errorf("failed to register API groups: %w", err)
 	}
 
 	s.log.V(2).Info("server built successfully", "GVKs", len(gvks))
 
-	return server, scheme, nil
+	return nil
 }
 
 // createSchemeAndCodecs creates a minimal scheme with unstructured types and codecs
-func (s *APIServer) createSchemeAndCodecs(gvks []schema.GroupVersionKind) (*runtime.Scheme, serializer.CodecFactory, error) {
+func (s *APIServer) createSchemeAndCodecs(gvks []schema.GroupVersionKind) (*runtime.Scheme, runtime.NegotiatedSerializer, error) {
 	scheme := runtime.NewScheme()
 
 	// Add client-go scheme for core types and meta types
@@ -92,19 +95,26 @@ func (s *APIServer) createSchemeAndCodecs(gvks []schema.GroupVersionKind) (*runt
 	}
 
 	// Create codecs
-	codecs := serializer.NewCodecFactory(scheme)
+	codecs := NewCompositeCodecFactory(serializer.NewCodecFactory(scheme), scheme, s.discoveryClient)
 
 	return scheme, codecs, nil
 }
 
 // createServerConfig applies our customizations to the provided config and sets defaults
-func (s *APIServer) createServerConfig(gvks []schema.GroupVersionKind, codecs serializer.CodecFactory, scheme *runtime.Scheme) (*genericapiserver.RecommendedConfig, error) {
+func (s *APIServer) createServerConfig(gvks []schema.GroupVersionKind) (*genericapiserver.RecommendedConfig, error) {
 	config := s.config
 
 	// Apply secure serving options
+	secureAddr := config.Addr.IP
+	securePort := config.Addr.Port
+	if config.UseHTTP {
+		secureAddr = net.ParseIP("127.0.0.1")
+		// use a random port for the mandatory TLS server
+		securePort = rand.IntN(15000) + 32768
+	}
 	secureServingOptions := &genericoptions.SecureServingOptions{
-		BindAddress: config.Addr.IP,
-		BindPort:    config.Addr.Port,
+		BindAddress: secureAddr,
+		BindPort:    securePort,
 		ServerCert: genericoptions.GeneratableKeyCert{
 			PairName: "apiserver",
 			// CertKey:  genericoptions.CertKey{},
@@ -134,7 +144,7 @@ func (s *APIServer) createServerConfig(gvks []schema.GroupVersionKind, codecs se
 	if config.UseHTTP {
 		insecureAddr := &net.TCPAddr{
 			IP:   config.Addr.IP,
-			Port: config.Addr.Port + 1,
+			Port: config.Addr.Port,
 		}
 		listener, err := net.Listen("tcp", insecureAddr.String())
 		if err != nil {
@@ -144,10 +154,10 @@ func (s *APIServer) createServerConfig(gvks []schema.GroupVersionKind, codecs se
 	}
 
 	// Override/set required fields for our dynamic server
-	config.Config.Serializer = codecs
+	config.Config.Serializer = s.codecs
 
 	// Update OpenAPI configuration
-	openAPINamer := openapiendpoints.NewDefinitionNamer(scheme)
+	openAPINamer := openapiendpoints.NewDefinitionNamer(s.scheme)
 	openAPIConfig := genericapiserver.DefaultOpenAPIConfig(s.getOpenAPIDefinitions(gvks), openAPINamer)
 	openAPIConfig.Info = &spec.Info{
 		InfoProps: spec.InfoProps{
@@ -162,84 +172,4 @@ func (s *APIServer) createServerConfig(gvks []schema.GroupVersionKind, codecs se
 	config.Config.OpenAPIV3Config = openAPIV3Config
 
 	return config.RecommendedConfig, nil
-}
-
-// registerAPIGroups registers API groups and resources with the server
-func (s *APIServer) registerAPIGroups(server *genericapiserver.GenericAPIServer, scheme *runtime.Scheme, codecs serializer.CodecFactory, gvks []schema.GroupVersionKind) error {
-	// Group GVKs by Group for API group registration
-	groupedGVKs := make(map[string][]schema.GroupVersionKind)
-	for _, gvk := range gvks {
-		groupedGVKs[gvk.Group] = append(groupedGVKs[gvk.Group], gvk)
-	}
-
-	// Register each API group
-	for group, gvkList := range groupedGVKs {
-		if err := s.registerAPIGroup(server, scheme, codecs, group, gvkList); err != nil {
-			return fmt.Errorf("failed to register API group %s: %w", group, err)
-		}
-	}
-
-	return nil
-}
-
-// registerAPIGroup registers a single API group with its resources
-func (s *APIServer) registerAPIGroup(server *genericapiserver.GenericAPIServer, scheme *runtime.Scheme, codecs serializer.CodecFactory, group string, gvks []schema.GroupVersionKind) error {
-	// Group by version within this group
-	versionedGVKs := make(map[string][]schema.GroupVersionKind)
-	for _, gvk := range gvks {
-		versionedGVKs[gvk.Version] = append(versionedGVKs[gvk.Version], gvk)
-	}
-
-	// Create storage map for all versions in this group
-	versionedResourcesStorageMap := make(map[string]map[string]apiserverrest.Storage)
-
-	for version, versionGVKs := range versionedGVKs {
-		resourceStorage := make(map[string]apiserverrest.Storage)
-
-		for _, gvk := range versionGVKs {
-			// Convert GVK to GVR
-			resource, err := s.findAPIResource(gvk)
-			if err != nil {
-				return fmt.Errorf("failed to complete API discovery for GVK %s: %w", gvk.String(), err)
-			}
-			resourceName := resource.APIResource.Name
-
-			// Create storage for this specific GVK
-			restOptionsGetter := &RESTOptionsGetter{}
-			storageProvider := NewClientDelegatedStorage(s.delegatingClient, resource, s.log)
-			storage, err := storageProvider(scheme, restOptionsGetter)
-			if err != nil {
-				return fmt.Errorf("failed to create delegaing storage for %s: %w", gvk.String(), err)
-			}
-
-			resourceStorage[resourceName] = storage
-			s.log.V(4).Info("registered storage", "GVK", gvk.String(), "resource", resourceName)
-		}
-
-		versionedResourcesStorageMap[version] = resourceStorage
-	}
-
-	// Create APIGroupInfo
-	groupVersions := make([]schema.GroupVersion, 0, len(versionedGVKs))
-	for version := range versionedGVKs {
-		groupVersions = append(groupVersions, schema.GroupVersion{Group: group, Version: version})
-	}
-
-	apiGroupInfo := &genericapiserver.APIGroupInfo{
-		PrioritizedVersions:          groupVersions,
-		VersionedResourcesStorageMap: versionedResourcesStorageMap,
-		OptionsExternalVersion:       &schema.GroupVersion{Version: "v1"},
-		Scheme:                       scheme,
-		ParameterCodec:               runtime.NewParameterCodec(scheme),
-		NegotiatedSerializer:         codecs,
-	}
-
-	// Install the API group
-	if err := server.InstallAPIGroup(apiGroupInfo); err != nil {
-		return fmt.Errorf("failed to install API group %s: %w", group, err)
-	}
-
-	s.log.V(1).Info("API group registered successfully", "group", group, "versions", groupVersions)
-
-	return nil
 }

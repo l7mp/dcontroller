@@ -59,7 +59,7 @@ var (
 	}
 )
 
-func TestManager(t *testing.T) {
+func TestAPIServer(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "APIServer")
 }
@@ -103,9 +103,7 @@ var _ = Describe("APIServer Integration", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Create fake discovery client for testing with native resources
-		fakeDiscovery := &fakediscovery.FakeDiscovery{
-			Fake: &fakeclient.Fake{},
-		}
+		fakeDiscovery := &fakediscovery.FakeDiscovery{Fake: &fakeclient.Fake{}}
 		fakeDiscovery.Resources = []*metav1.APIResourceList{
 			{
 				GroupVersion: "v1",
@@ -115,6 +113,7 @@ var _ = Describe("APIServer Integration", func() {
 				},
 			},
 		}
+		fakeViewDiscovery := composite.NewCompositeDiscoveryClient(fakeDiscovery)
 
 		// Add a view object and a native resource to the manaegr cache
 		fakeCache, ok := mgr.GetCache().(*composite.CompositeCache)
@@ -136,25 +135,22 @@ var _ = Describe("APIServer Integration", func() {
 
 		// Create API server at random port
 		serverAddr = "localhost"
-		port = rand.IntN(5000) + (32768)
+		port = rand.IntN(15000) + 32768
 		config, err := NewDefaultConfig(serverAddr, port, true)
-		config.DiscoveryClient = fakeDiscovery
+		config.DiscoveryClient = fakeViewDiscovery
 		Expect(err).NotTo(HaveOccurred())
 		apiServer, err = NewAPIServer(mgr, config)
 		Expect(err).NotTo(HaveOccurred())
 
-		err = apiServer.RegisterGVK(schema.GroupVersionKind{
+		err = apiServer.RegisterAPIGroup(viewv1a1.GroupVersion.Group, []schema.GroupVersionKind{{
 			Group:   viewv1a1.GroupVersion.Group,
 			Version: viewv1a1.GroupVersion.Version,
 			Kind:    "TestView2",
-		})
-		Expect(err).NotTo(HaveOccurred())
-
-		err = apiServer.RegisterGVK(schema.GroupVersionKind{
+		}, {
 			Group:   viewv1a1.GroupVersion.Group,
 			Version: viewv1a1.GroupVersion.Version,
 			Kind:    "TestView",
-		})
+		}})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Start the server
@@ -166,7 +162,7 @@ var _ = Describe("APIServer Integration", func() {
 
 		// Create dynamic client
 		dynamicClient, err = dynamic.NewForConfig(&rest.Config{
-			Host: fmt.Sprintf("http://%s:%d", serverAddr, port+1),
+			Host: fmt.Sprintf("http://%s:%d", serverAddr, port),
 		})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -207,8 +203,7 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(data).To(Equal("x"))
 		})
 
-		FIt("should handle LIST operations", func() {
-			// List ConfigMaps
+		It("should handle LIST operations", func() {
 			list, err := dynamicClient.Resource(viewGVR).
 				Namespace("default").
 				List(context.TODO(), metav1.ListOptions{})
@@ -281,9 +276,6 @@ var _ = Describe("APIServer Integration", func() {
 				Namespace("default").
 				List(context.TODO(), metav1.ListOptions{})
 			Expect(err).NotTo(HaveOccurred())
-			fmt.Println("VVVVVVVVVVVVVVVVVVV1", viewGVR)
-			fmt.Println("LLLLLLLLLLLLLL1", list)
-
 			Expect(list.GetKind()).To(Equal("TestViewList"))
 			Expect(len(list.Items)).To(Equal(2))
 
@@ -388,7 +380,6 @@ var _ = Describe("APIServer Integration", func() {
 		})
 
 		It("should handle DELETE operations", func() {
-			// Delete the ConfigMap
 			err := dynamicClient.Resource(viewGVR).
 				Namespace("default").
 				Delete(context.TODO(), "test-view", metav1.DeleteOptions{})
@@ -415,7 +406,6 @@ var _ = Describe("APIServer Integration", func() {
 		})
 
 		It("should handle 404 for non-existent view resources", func() {
-			// Try to get non-existent ConfigMap
 			_, err := dynamicClient.Resource(viewGVR).
 				Namespace("default").
 				Get(context.TODO(), "non-existent", metav1.GetOptions{})

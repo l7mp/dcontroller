@@ -11,72 +11,14 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/rest"
-	"k8s.io/component-base/compatibility"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/util"
 )
-
-const DefaultAPIServerPort = 18443
-
-type Config struct {
-	*genericapiserver.RecommendedConfig
-
-	// Addr is the server address
-	Addr *net.TCPAddr
-
-	// UseHTTP switches the API server to insecure serving mode.
-	UseHTTP bool
-
-	// DiscoveryClient allows to inject a REST discovery client into the API server. Used
-	// mostly for testing,
-	DiscoveryClient discovery.DiscoveryInterface
-}
-
-// NewDefaultConfig creates a RecommendedConfig with sensible defaults, either using secure serving
-// (HTTPS) and insecure serving (HTTP) that can be used for testing.
-func NewDefaultConfig(addr string, port int, insecure bool) (Config, error) {
-	if addr == "" {
-		addr = "localhost"
-	}
-	if port == 0 {
-		port = DefaultAPIServerPort
-	}
-
-	bindAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", addr, port))
-	if err != nil {
-		return Config{}, fmt.Errorf("failed to resolve server address: %w", err)
-	}
-
-	// Create base config
-	scheme := runtime.NewScheme()
-	codecs := serializer.NewCodecFactory(scheme)
-	config := genericapiserver.NewConfig(codecs)
-
-	// Create loopback config
-	config.LoopbackClientConfig = &rest.Config{}
-	if insecure {
-		config.LoopbackClientConfig.Host = fmt.Sprintf("http://%s", bindAddr.String())
-	} else {
-		config.LoopbackClientConfig.Host = fmt.Sprintf("https://%s", bindAddr.String())
-		config.LoopbackClientConfig.TLSClientConfig = rest.TLSClientConfig{Insecure: insecure}
-	}
-
-	// Set other required fields
-	config.EffectiveVersion = compatibility.NewEffectiveVersionFromString("1.33", "", "")
-
-	return Config{
-		RecommendedConfig: &genericapiserver.RecommendedConfig{Config: *config},
-		Addr:              bindAddr,
-		UseHTTP:           insecure,
-	}, nil
-}
 
 // APIServer manages a Kubernetes API server with dynamic GVK registration.
 type APIServer struct {
@@ -86,12 +28,13 @@ type APIServer struct {
 	insecureListener net.Listener
 	insecureServer   *http.Server
 	delegatingClient client.Client
-	discoveryClient  discovery.DiscoveryInterface
+	discoveryClient  composite.ViewDiscoveryInterface
 	scheme           *runtime.Scheme
+	codecs           runtime.NegotiatedSerializer
 
 	// State management
-	mu   sync.RWMutex
-	gvks map[schema.GroupVersionKind]bool
+	mu        sync.RWMutex
+	groupGVKs GroupGVKs
 
 	// Lifecycle management
 	running    bool
@@ -130,7 +73,7 @@ func NewAPIServer(mgr manager.Manager, config Config) (*APIServer, error) {
 		config:           config,
 		delegatingClient: mgr.GetClient(),
 		discoveryClient:  discoveryClient,
-		gvks:             make(map[schema.GroupVersionKind]bool),
+		groupGVKs:        make(GroupGVKs),
 		log:              log,
 	}, nil
 }
@@ -146,38 +89,6 @@ func (s *APIServer) GetServerAddress() string {
 // GetScheme returns the scheme used by the API server.
 func (s *APIServer) GetScheme() *runtime.Scheme {
 	return s.scheme
-}
-
-// RegisterGVK adds a new GVK to the server (silently ignores if already registered)
-func (s *APIServer) RegisterGVK(gvk schema.GroupVersionKind) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.gvks[gvk] {
-		// Already registered, silently return
-		return nil
-	}
-
-	s.log.V(1).Info("registering GVK", "GVK", gvk.String())
-	s.gvks[gvk] = true
-
-	return nil
-}
-
-// UnregisterGVK removes a GVK from the server (silently ignores if not registered)
-func (s *APIServer) UnregisterGVK(gvk schema.GroupVersionKind) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if !s.gvks[gvk] {
-		// Not registered, silently return
-		return nil
-	}
-
-	s.log.V(1).Info("unregistering GVK", "GVK", gvk.String())
-	delete(s.gvks, gvk)
-
-	return nil
 }
 
 // Start begins the API server lifecycle with automatic restart capability. It blocks.
@@ -199,23 +110,20 @@ func (s *APIServer) Start(ctx context.Context) error {
 func (s *APIServer) runServerInstance(ctx context.Context) error {
 	// Get current GVK snapshot
 	s.mu.Lock()
-	currentGVKs := make([]schema.GroupVersionKind, 0, len(s.gvks))
-	gvks := make([]string, 0, len(s.gvks))
-	for gvk := range s.gvks {
-		currentGVKs = append(currentGVKs, gvk)
-		gvks = append(gvks, gvk.String())
+	currentGVKs := make([]schema.GroupVersionKind, 0, len(s.groupGVKs))
+	for _, groupGVKs := range s.groupGVKs {
+		for gvk, _ := range groupGVKs {
+			currentGVKs = append(currentGVKs, gvk)
+		}
 	}
 	s.mu.Unlock()
 
 	// Build and run the server
-	server, scheme, err := s.buildServer(currentGVKs)
-	if err != nil {
+	if err := s.buildServer(currentGVKs); err != nil {
 		return fmt.Errorf("failed to build server: %w", err)
 	}
-	s.server = server
-	s.scheme = scheme
 
-	s.log.Info("starting API server", "addr", s.GetServerAddress(), "GVKs", util.Stringify(gvks))
+	s.log.Info("starting API server", "addr", s.GetServerAddress(), "GVKs", util.Stringify(currentGVKs))
 
 	s.mu.Lock()
 	s.running = true
@@ -229,8 +137,7 @@ func (s *APIServer) runServerInstance(ctx context.Context) error {
 	if s.config.UseHTTP {
 		s.log.V(2).Info("starting insecure API server", "addr", s.insecureListener.Addr())
 
-		// s.insecureServer = &http.Server{Handler: server.UnprotectedHandler()}
-		s.insecureServer = &http.Server{Handler: server.Handler}
+		s.insecureServer = &http.Server{Handler: s.server.Handler}
 		go func() {
 			if err := s.insecureServer.Serve(s.insecureListener); err != nil && err != http.ErrServerClosed {
 				s.log.Error(err, "HTTP server error")
@@ -245,6 +152,6 @@ func (s *APIServer) runServerInstance(ctx context.Context) error {
 		}()
 	}
 
-	prepared := server.PrepareRun()
+	prepared := s.server.PrepareRun()
 	return prepared.RunWithContext(ctx)
 }
