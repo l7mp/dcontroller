@@ -95,9 +95,12 @@ func (op *Operator) GetController(name string) *dcontroller.Controller {
 
 // AddController adds a new controller to the operator.
 func (op *Operator) AddController(config opv1a1.Controller) error {
-	c, err := dcontroller.New(op.mgr, config, dcontroller.Options{
+	c, err := dcontroller.New(op.mgr, op.name, config, dcontroller.Options{
 		ErrorChan: op.errorChan,
 	})
+	if err != nil {
+		op.log.Error(err, "failed to create controller", "name", config.Name)
+	}
 
 	// the controller returned is always valid: this makes sure we will receive the
 	// status update triggers to show the controller errors to the user
@@ -108,7 +111,7 @@ func (op *Operator) AddController(config opv1a1.Controller) error {
 
 // Start starts the operator. It blocks
 func (op *Operator) Start(ctx context.Context) error {
-	op.log.Info("starting")
+	op.log.Info("starting up")
 	op.ctx = ctx
 
 	// // close the error channel

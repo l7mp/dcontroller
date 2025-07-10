@@ -70,7 +70,7 @@ var _ = Describe("Controller test:", Ordered, func() {
 			go func() {
 				defer GinkgoRecover()
 				err := mgr.Start(ctrlCtx)
-				Expect(err).ToNot(HaveOccurred(), "failed to run manager")
+				Expect(err).NotTo(HaveOccurred(), "failed to run manager")
 			}()
 		})
 
@@ -97,7 +97,7 @@ target:
 			var config opv1a1.Controller
 			Expect(yaml.Unmarshal([]byte(yamlData), &config)).NotTo(HaveOccurred())
 
-			c, err := controller.New(mgr, config, controller.Options{})
+			c, err := controller.New(mgr, "service-type-op", config, controller.Options{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.GetName()).To(Equal("svc-annotator"))
 		})

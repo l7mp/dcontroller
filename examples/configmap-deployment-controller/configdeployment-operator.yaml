@@ -1,10 +1,10 @@
 apiVersion: dcontroller.io/v1alpha1
 kind: Operator
 metadata:
-  name: configmap-deployment-operator
+  name: configdep-operator
 spec:
   controllers:
-    - name: configmap-deployment-controller
+    - name: configmap-controller
       sources: 
         - apiGroup: ""
           kind: ConfigMap

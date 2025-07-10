@@ -38,22 +38,22 @@ var _ runtimeManager.Runnable = &Controller{}
 // Controller is a dcontroller reconciler.
 type Controller struct {
 	*errorReporter
-	name, kind  string
-	config      opv1a1.Controller
-	sources     []reconciler.Source
-	cache       map[schema.GroupVersionKind]*composite.Store // needed to recover deleted objects
-	target      reconciler.Target
-	mgr         runtimeManager.Manager
-	watcher     chan reconciler.Request
-	pipeline    pipeline.Evaluator
-	processor   ProcessorFunc
-	logger, log logr.Logger
+	name, kind, op string
+	config         opv1a1.Controller
+	sources        []reconciler.Source
+	cache          map[schema.GroupVersionKind]*composite.Store // needed to recover deleted objects
+	target         reconciler.Target
+	mgr            runtimeManager.Manager
+	watcher        chan reconciler.Request
+	pipeline       pipeline.Evaluator
+	processor      ProcessorFunc
+	logger, log    logr.Logger
 }
 
-// New registers a new controller given by the source resource(s) the controller watches, a target
-// resource the controller sends its output, and a processing pipeline to process the base
-// resources into target resources.
-func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*Controller, error) {
+// New registers a new controller for an operator, given by the source resource(s) the controller
+// watches, a target resource the controller sends its output, and a processing pipeline to process
+// the base resources into target resources.
+func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, opts Options) (*Controller, error) {
 	logger := mgr.GetLogger()
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -61,6 +61,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 
 	c := &Controller{
 		mgr:           mgr,
+		op:            operator,
 		sources:       []reconciler.Source{},
 		cache:         make(map[schema.GroupVersionKind]*composite.Store),
 		config:        config,
@@ -95,7 +96,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 
 	// Create the target
 	c.kind = config.Target.Kind // the kind of the target
-	c.target = reconciler.NewTarget(mgr, config.Target)
+	c.target = reconciler.NewTarget(mgr, c.op, config.Target)
 
 	// Create the reconciler
 	controllerReconciler := NewControllerReconciler(mgr, c)
@@ -103,7 +104,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 	// Create the sources and the cache
 	srcs := []string{}
 	for _, s := range config.Sources {
-		source := reconciler.NewSource(mgr, s)
+		source := reconciler.NewSource(mgr, c.op, s)
 		c.sources = append(c.sources, source)
 		srcs = append(srcs, source.String())
 	}
@@ -149,7 +150,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 	}
 
 	// Create the pipeline
-	pipeline, err := pipeline.NewPipeline(c.kind, baseviews, c.config.Pipeline,
+	pipeline, err := pipeline.NewPipeline(c.op, c.kind, baseviews, c.config.Pipeline,
 		logger.WithName("pipeline").WithValues("controller", c.name, "target-kind", c.kind))
 	if err != nil {
 		return c, c.PushCriticalError(fmt.Errorf("failed to create pipleline for controller %s: %w",

@@ -77,7 +77,7 @@ func NewController(config *rest.Config, options runtimeManager.Options) (Control
 		options:   options,
 		operators: make(map[types.NamespacedName]*opEntry),
 		logger:    logger,
-		log:       logger.WithName("opcontroller"),
+		log:       logger.WithName("op-ctrl"),
 	}
 
 	// Create a controller to watch and reconcile the Operator CRD.
@@ -263,7 +263,7 @@ func (c *controller) updateStatus(ctx context.Context, op *Operator) {
 
 		spec.Status = op.GetStatus(spec.GetGeneration())
 
-		c.log.V(4).Info("updating status", "attempt", attempt, "status", util.Stringify(spec.Status))
+		c.log.V(2).Info("updating status", "attempt", attempt, "status", util.Stringify(spec.Status))
 
 		if err := client.Status().Update(ctx, &spec); err != nil {
 			c.log.Error(err, "failed to update status", "attempt", attempt)
