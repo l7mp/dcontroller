@@ -20,7 +20,7 @@ var _ = Describe("Aggregations", func() {
 	var objs []object.Object
 
 	BeforeEach(func() {
-		objs = []object.Object{object.NewViewObject("view"), object.NewViewObject("view")}
+		objs = []object.Object{object.NewViewObject("test", "view"), object.NewViewObject("test", "view")}
 		object.SetContent(objs[0], map[string]any{
 			"spec": map[string]any{
 				"a": int64(1),
@@ -132,7 +132,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(res[0].Type).To(Equal(object.Upserted))
 			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
 					"metadata": map[string]any{
 						"name": "name",
@@ -243,7 +243,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(obj.GetName()).To(Equal("name"))
 			Expect(obj).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
 					"metadata": map[string]any{
 						"namespace": "default",
@@ -274,7 +274,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(obj.GetName()).To(Equal("name"))
 			Expect(obj).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
 					"metadata": map[string]any{
 						"namespace": "default",
@@ -307,7 +307,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(obj.GetName()).To(Equal("name2"))
 			Expect(obj).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
 					"metadata": map[string]any{
 						"namespace": "default2",
@@ -337,7 +337,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name": "fixed",
@@ -355,7 +355,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name": "fixed",
@@ -401,7 +401,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(res[0].Type).To(Equal(object.Upserted))
 			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
 					"metadata": map[string]any{
 						"namespace": "test-ns",
@@ -427,7 +427,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].IsUnchanged()).To(BeFalse())
-			resObj := object.NewViewObject("view")
+			resObj := object.NewViewObject("test", "view")
 			object.SetContent(resObj, obj.UnstructuredContent())
 			object.SetName(resObj, "test-ns", "test-name")
 			Expect(res[0]).To(Equal(object.Delta{Type: object.Upserted, Object: resObj}))
@@ -452,7 +452,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].IsUnchanged()).To(BeFalse())
-			resObj = object.NewViewObject("view")
+			resObj = object.NewViewObject("test", "view")
 			object.SetContent(resObj, oldObj.UnstructuredContent())
 			object.SetName(resObj, "test-ns", "test-name")
 			Expect(res[0]).To(Equal(object.Delta{Type: object.Deleted, Object: resObj}))
@@ -472,7 +472,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(res).To(HaveLen(1))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res[0].IsUnchanged()).To(BeFalse())
-			resObj = object.NewViewObject("view")
+			resObj = object.NewViewObject("test", "view")
 			object.SetContent(resObj, obj.UnstructuredContent())
 			object.SetName(resObj, "test-ns", "test-name")
 			Expect(res[0]).To(Equal(object.Delta{Type: object.Upserted, Object: resObj}))
@@ -493,7 +493,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].IsUnchanged()).To(BeFalse())
-			resObj = object.NewViewObject("view")
+			resObj = object.NewViewObject("test", "view")
 			object.SetContent(resObj, obj2.UnstructuredContent())
 			object.SetName(resObj, "test-ns", "test-name-2")
 			Expect(res[0]).To(Equal(object.Delta{Type: object.Upserted, Object: resObj}))
@@ -513,7 +513,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0].IsUnchanged()).To(BeFalse())
-			resObj = object.NewViewObject("view")
+			resObj = object.NewViewObject("test", "view")
 			object.SetContent(resObj, obj.UnstructuredContent())
 			object.SetName(resObj, "test-ns", "test-name")
 			Expect(res[0]).To(Equal(object.Delta{Type: object.Deleted, Object: resObj}))
@@ -531,7 +531,7 @@ var _ = Describe("Aggregations", func() {
 
 	Describe("Evaluating demultiplexer/unwind aggregations", func() {
 		It("should evaluate a simple demux expression", func() {
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			// must have a valid name
 			object.SetContent(obj, map[string]any{
 				"spec": map[string]any{
@@ -553,7 +553,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name":      "name-0",
@@ -571,7 +571,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name":      "name-1",
@@ -589,7 +589,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name":      "name-2",
@@ -604,7 +604,7 @@ var _ = Describe("Aggregations", func() {
 		})
 
 		It("should evaluate a nested demux expression", func() {
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			// must have a valid name
 			object.SetContent(obj, map[string]any{
 				"spec": map[string]any{
@@ -629,7 +629,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name":      "name-0-0",
@@ -647,7 +647,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name":      "name-0-1",
@@ -665,7 +665,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name":      "name-0-2",
@@ -683,7 +683,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name":      "name-1-0",
@@ -701,7 +701,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name":      "name-1-1",
@@ -716,7 +716,7 @@ var _ = Describe("Aggregations", func() {
 		})
 
 		It("a demux expression pointing to a nonexistent key should return a nil delta", func() {
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			// must have a valid name
 			object.SetContent(obj, map[string]any{
 				"spec": map[string]any{},
@@ -733,7 +733,7 @@ var _ = Describe("Aggregations", func() {
 		})
 
 		It("should evaluate a demux expression with an empty list to a nil delta", func() {
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			// must have a valid name
 			object.SetContent(obj, map[string]any{
 				"spec": map[string]any{
@@ -752,7 +752,7 @@ var _ = Describe("Aggregations", func() {
 		})
 
 		It("should evaluate an update with demux expressions that set the object name", func() {
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			// must have a valid name
 			object.SetContent(obj, map[string]any{
 				"spec": map[string]any{
@@ -774,7 +774,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name": "a",
@@ -788,7 +788,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name": "b",
@@ -802,7 +802,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name": "c",
@@ -828,7 +828,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Deleted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name": "a",
@@ -842,7 +842,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Deleted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name": "b",
@@ -856,7 +856,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name": "d",
@@ -882,7 +882,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name":      "name",
@@ -912,7 +912,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name":      "name",
@@ -945,7 +945,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name":      "name",
@@ -969,7 +969,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Upserted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name":      "name",
@@ -993,7 +993,7 @@ var _ = Describe("Aggregations", func() {
 					Type: object.Deleted,
 					Object: &unstructured.Unstructured{
 						Object: map[string]any{
-							"apiVersion": "view.dcontroller.io/v1alpha1",
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
 								"name":      "name",
@@ -1031,7 +1031,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(res[0].Type).To(Equal(object.Upserted))
 			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
 					"metadata": map[string]any{
 						"name":      "gathered",
@@ -1050,7 +1050,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(res[0].Type).To(Equal(object.Upserted))
 			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
 					"metadata": map[string]any{
 						"name":      "gathered",
@@ -1069,7 +1069,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(res[0].Type).To(Equal(object.Upserted))
 			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
 					"metadata": map[string]any{
 						"name":      "gathered",
@@ -1088,7 +1088,7 @@ var _ = Describe("Aggregations", func() {
 			Expect(res[0].Type).To(Equal(object.Deleted))
 			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
 					"metadata": map[string]any{
 						"name":      "gathered",
@@ -1136,7 +1136,7 @@ var _ = Describe("Aggregations", func() {
 				"spec", "list")).NotTo(HaveOccurred())
 			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
 					"metadata": map[string]any{
 						"name":      "gathered",
@@ -1160,7 +1160,7 @@ var _ = Describe("Aggregations", func() {
 				"spec", "list")).NotTo(HaveOccurred())
 			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
 					"metadata": map[string]any{
 						"name":      "gathered",
@@ -1209,7 +1209,7 @@ func newAggregation(data string) (Evaluator, error) {
 	if err != nil {
 		return nil, err
 	}
-	p, err := NewPipeline(gvk.Kind, []schema.GroupVersionKind{gvk}, opv1a1.Pipeline{Aggregation: &a}, logger)
+	p, err := NewPipeline("test", gvk.Kind, []schema.GroupVersionKind{gvk}, opv1a1.Pipeline{Aggregation: &a}, logger)
 	if err != nil {
 		return nil, err
 	}

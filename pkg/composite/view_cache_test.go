@@ -38,14 +38,14 @@ var _ = Describe("ViewCache", func() {
 
 	Describe("Registering views", func() {
 		It("should allow a view to be registered", func() {
-			err := cache.RegisterCacheForKind(viewv1a1.NewGVK("view"))
+			err := cache.RegisterCacheForKind(viewv1a1.GroupVersionKind("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 
 	Describe("Get operation", func() {
 		It("should retrieve an added object", func() {
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"a": int64(1)})
 			object.SetName(obj, "ns", "test-1")
 
@@ -59,7 +59,7 @@ var _ = Describe("ViewCache", func() {
 		})
 
 		It("should return an error for non-existent object", func() {
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetName(obj, "", "non-existent")
 
 			err := cache.Get(ctx, client.ObjectKeyFromObject(obj), obj)
@@ -69,7 +69,7 @@ var _ = Describe("ViewCache", func() {
 
 	Describe("List operation", func() {
 		It("should list all added objects", func() {
-			objects := []object.Object{object.NewViewObject("view"), object.NewViewObject("view"), object.NewViewObject("view")}
+			objects := []object.Object{object.NewViewObject("test", "view"), object.NewViewObject("test", "view"), object.NewViewObject("test", "view")}
 			object.SetName(objects[0], "ns1", "test-1")
 			object.SetName(objects[1], "ns2", "test-2")
 			object.SetName(objects[2], "ns3", "test-3")
@@ -82,7 +82,7 @@ var _ = Describe("ViewCache", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 
-			list := NewViewObjectList("view")
+			list := NewViewObjectList("test", "view")
 			err := cache.List(ctx, list)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.Items).To(HaveLen(3))
@@ -92,7 +92,7 @@ var _ = Describe("ViewCache", func() {
 		})
 
 		It("should list objects using a label-selector", func() {
-			objects := []object.Object{object.NewViewObject("view"), object.NewViewObject("view")}
+			objects := []object.Object{object.NewViewObject("test", "view"), object.NewViewObject("test", "view")}
 			object.SetName(objects[0], "ns1", "test-1")
 			object.SetName(objects[1], "ns2", "test-2")
 			object.SetContent(objects[0], map[string]any{"a": int64(1)})
@@ -104,7 +104,7 @@ var _ = Describe("ViewCache", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 
-			list := NewViewObjectList("view")
+			list := NewViewObjectList("test", "view")
 			listOpts := []client.ListOption{}
 			listOpts = append(listOpts, client.MatchingLabelsSelector{
 				Selector: labels.SelectorFromSet(labels.Set(map[string]string{"app": "test"})),
@@ -117,7 +117,7 @@ var _ = Describe("ViewCache", func() {
 		})
 
 		It("should list objects using a field-selector", func() {
-			objects := []object.Object{object.NewViewObject("view"), object.NewViewObject("view")}
+			objects := []object.Object{object.NewViewObject("test", "view"), object.NewViewObject("test", "view")}
 			object.SetName(objects[0], "ns1", "test-1")
 			object.SetName(objects[1], "ns2", "test-2")
 			object.SetContent(objects[0], map[string]any{"a": int64(1)})
@@ -128,7 +128,7 @@ var _ = Describe("ViewCache", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 
-			list := NewViewObjectList("view")
+			list := NewViewObjectList("test", "view")
 			listOpts := []client.ListOption{}
 			selector, err := fields.ParseSelector("metadata.name=test-1")
 			Expect(err).NotTo(HaveOccurred())
@@ -141,7 +141,7 @@ var _ = Describe("ViewCache", func() {
 		})
 
 		It("should return an empty list when cache is empty", func() {
-			list := NewViewObjectList("view")
+			list := NewViewObjectList("test", "view")
 			err := cache.List(ctx, list)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.Items).To(BeEmpty())
@@ -150,12 +150,12 @@ var _ = Describe("ViewCache", func() {
 
 	Describe("Watch operation", func() {
 		It("should notify of existing objects", func() {
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"data": "watch-data"})
 			object.SetName(obj, "ns", "test-watch")
 			cache.Add(obj)
 
-			watcher, err := cache.Watch(ctx, NewViewObjectList("view"))
+			watcher, err := cache.Watch(ctx, NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok := tryWatch(watcher, interval)
@@ -165,10 +165,10 @@ var _ = Describe("ViewCache", func() {
 		})
 
 		It("should notify of added objects", func() {
-			watcher, err := cache.Watch(ctx, NewViewObjectList("view"))
+			watcher, err := cache.Watch(ctx, NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"data": "watch-data"})
 			object.SetName(obj, "ns", "test-watch")
 			go func() {
@@ -183,15 +183,15 @@ var _ = Describe("ViewCache", func() {
 		})
 
 		It("should notify of updated objects", func() {
-			watcher, err := cache.Watch(ctx, NewViewObjectList("view"))
+			watcher, err := cache.Watch(ctx, NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"data": "original data"})
 			object.SetName(obj, "ns", "test-update")
 			cache.Add(obj)
 
-			updatedObj := object.NewViewObject("view")
+			updatedObj := object.NewViewObject("test", "view")
 			object.SetContent(updatedObj, map[string]any{"data": "updated data"})
 			object.SetName(updatedObj, "ns", "test-update")
 			go func() {
@@ -213,10 +213,10 @@ var _ = Describe("ViewCache", func() {
 		})
 
 		It("should notify of deleted objects", func() {
-			watcher, err := cache.Watch(ctx, NewViewObjectList("view"))
+			watcher, err := cache.Watch(ctx, NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"data": "original data"})
 			object.SetName(obj, "ns", "test-delete")
 			cache.Add(obj)

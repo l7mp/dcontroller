@@ -11,10 +11,10 @@ import (
 )
 
 // NewViewObjectList creates an empty object list.
-func NewViewObjectList(view string) object.ObjectList {
+func NewViewObjectList(operator, view string) object.ObjectList {
 	list := &unstructured.UnstructuredList{}
 	discovery := NewViewDiscovery()
-	objGVK := viewv1a1.NewGVK(view)
+	objGVK := viewv1a1.GroupVersionKind(operator, view)
 	listGVK := discovery.ListGVKFromObjectGVK(objGVK)
 	list.SetGroupVersionKind(listGVK)
 	return list

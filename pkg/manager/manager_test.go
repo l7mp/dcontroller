@@ -138,7 +138,7 @@ var _ = Describe("Startup", func() {
 			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
 			ccache := cache.(*composite.CompositeCache)
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetName(obj, "test-ns", "test-obj")
 			object.SetContent(obj, map[string]any{"x": "y"})
 
@@ -185,7 +185,7 @@ var _ = Describe("Startup", func() {
 
 			go mgr.Start(ctx)
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"a": int64(1)})
 			object.SetName(obj, "ns", "test-1")
 
@@ -199,7 +199,7 @@ var _ = Describe("Startup", func() {
 			c := mgr.GetClient()
 			Expect(c).NotTo(BeNil())
 
-			retrieved := object.NewViewObject("view")
+			retrieved := object.NewViewObject("test", "view")
 			object.SetName(retrieved, "ns", "test-1")
 
 			err = c.Get(ctx, client.ObjectKeyFromObject(retrieved), retrieved)
@@ -213,7 +213,7 @@ var _ = Describe("Startup", func() {
 
 			go mgr.Start(ctx)
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"a": int64(1)})
 			object.SetName(obj, "ns", "test-1")
 
@@ -227,7 +227,7 @@ var _ = Describe("Startup", func() {
 			c := mgr.GetClient()
 			Expect(c).NotTo(BeNil())
 
-			retrieved := object.NewViewObject("view")
+			retrieved := object.NewViewObject("test", "view")
 			object.SetContent(retrieved, map[string]any{"a": int64(2)})
 			object.SetName(retrieved, "ns", "test-1")
 
@@ -235,7 +235,7 @@ var _ = Describe("Startup", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// reset obj
-			obj = object.NewViewObject("view")
+			obj = object.NewViewObject("test", "view")
 			object.SetName(obj, "ns", "test-1")
 			err = c.Patch(ctx, obj, client.RawPatch(types.MergePatchType, patch))
 			Expect(err).NotTo(HaveOccurred())
@@ -403,7 +403,7 @@ var _ = Describe("Startup", func() {
 
 			go mgr.Start(ctx)
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"a": int64(1), "b": int64(2)})
 			object.SetName(obj, "ns", "test-1")
 
@@ -422,7 +422,7 @@ var _ = Describe("Startup", func() {
 				map[string]any{"ready": "true"}, "status")).NotTo(HaveOccurred())
 
 			// reset obj
-			obj = object.NewViewObject("view")
+			obj = object.NewViewObject("test", "view")
 			object.SetName(obj, "ns", "test-1")
 
 			// create sub-resource obj
@@ -442,7 +442,7 @@ var _ = Describe("Startup", func() {
 
 			go mgr.Start(ctx)
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"a": int64(1), "b": int64(2)})
 			object.SetName(obj, "ns", "test-1")
 
@@ -474,7 +474,7 @@ var _ = Describe("Startup", func() {
 
 			go mgr.Start(ctx)
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"a": int64(1), "b": int64(2),
 				"status": map[string]any{
 					"a": map[string]any{
@@ -502,7 +502,7 @@ var _ = Describe("Startup", func() {
 			Expect(c).NotTo(BeNil())
 
 			// reset obj
-			obj = object.NewViewObject("view")
+			obj = object.NewViewObject("test", "view")
 			object.SetName(obj, "ns", "test-1")
 			err = c.Status().Patch(ctx, obj, client.RawPatch(types.MergePatchType, patch))
 			Expect(err).NotTo(HaveOccurred())

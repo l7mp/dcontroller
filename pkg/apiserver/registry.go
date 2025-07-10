@@ -2,8 +2,9 @@ package apiserver
 
 import (
 	"fmt"
-	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apiserverrest "k8s.io/apiserver/pkg/registry/rest"
@@ -13,79 +14,114 @@ import (
 
 type GroupGVKs = map[string]map[schema.GroupVersionKind]bool
 
+// RegisterGVKs registers a set of GVks with the API server. First divides the GVKs per group,
+// checks if none of the groups have already been registered, and then registers each group and the
+// corresponding GVKs.
+func (s *APIServer) RegisterGVKs(gvks []schema.GroupVersionKind) error {
+	// Group GVKs by Group for API group registration
+	groupGVKs := make(map[string][]schema.GroupVersionKind)
+	for _, gvk := range gvks {
+		groupGVKs[gvk.Group] = append(groupGVKs[gvk.Group], gvk)
+	}
+
+	return s.registerGroupGVKs(groupGVKs)
+}
+
+// UnRegisterGVKs unregisters a set of GVks.
+func (s *APIServer) UnRegisterGVKs(gvks []schema.GroupVersionKind) {
+	// Group GVKs by Group for API group registration
+	groups := make(map[string]bool)
+	for _, gvk := range gvks {
+		groups[gvk.Group] = true
+	}
+
+	for group, _ := range groups {
+		s.UnregisterAPIGroup(group)
+	}
+}
+
 // RegisterAPIGroup installs an API group with all its registered GVKs to the API server.
 func (s *APIServer) RegisterAPIGroup(group string, gvks []schema.GroupVersionKind) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Err if group is already registered
 	if _, ok := s.groupGVKs[group]; ok {
-		return fmt.Errorf("API group %s already registered with different GVKs", group)
+		return fmt.Errorf("API group %s already registered", group)
 	}
 
-	if err := validateGVKsForGroup(group, gvks); err != nil {
-		return err
+	// Add new types to scheme
+	if err := s.addTypesToScheme(gvks); err != nil {
+		return fmt.Errorf("failed to add types to scheme: %w", err)
 	}
 
+	// Register the new group in the API server
 	if err := s.registerAPIGroup(group, gvks); err != nil {
 		return err
 	}
 
+	// Update the GVK cache
 	groupedGVKs := make(map[schema.GroupVersionKind]bool)
 	for _, gvk := range gvks {
 		groupedGVKs[gvk] = true
 	}
 	s.groupGVKs[group] = groupedGVKs
 
-	s.log.V(1).Info("API group registered", "group", group, "GVKs", gvks)
+	// Get all regitered GVKs
+	allGVKs := []schema.GroupVersionKind{}
+	for _, gvks := range s.groupGVKs {
+		for gvk := range gvks {
+			allGVKs = append(allGVKs, gvk)
+		}
+	}
+
+	// Invalidate OpenAPI caches
+	s.cachedOpenAPIDefs = nil
+	s.cachedOpenAPIV3Defs = nil
 
 	return nil
 }
 
-// UnregisterGVK removes a GVK from the server (silently ignores if not registered)
-func (s *APIServer) UnregisterAPIGroup(group string) error {
+// UnregisterGVK removes a GVK from the server (silently ignores GVK if not registered)
+func (s *APIServer) UnregisterAPIGroup(group string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if _, ok := s.groupGVKs[group]; !ok {
 		// Not registered, silently return
-		return nil
+		return
 	}
 
 	delete(s.groupGVKs, group)
 
-	s.log.V(1).Info("API group unregistered", "group", group)
-
-	return nil
-}
-
-func (s *APIServer) RegisterBuiltinAPIGroups() error {
-	var gvks []schema.GroupVersionKind
-	for gvk := range s.scheme.AllKnownTypes() {
-		// Skip internal versions and list types
-		if gvk.Version == runtime.APIVersionInternal || strings.HasSuffix(gvk.Kind, "List") {
-			continue
+	// Regenerate OpenAPI specs after unregistering
+	allGVKs := []schema.GroupVersionKind{}
+	for _, gvks := range s.groupGVKs {
+		for gvk := range gvks {
+			allGVKs = append(allGVKs, gvk)
 		}
-		gvks = append(gvks, gvk)
 	}
 
-	if err := s.registerAPIGroups(gvks); err != nil {
-		return fmt.Errorf("failed to register apps group: %w", err)
-	}
+	// Invalidate OpenAPI caches
+	s.cachedOpenAPIDefs = nil
+	s.cachedOpenAPIV3Defs = nil
 
-	// Add other groups as needed
-	return nil
+	s.log.V(1).Info("API group unregistered", "group", group)
 }
 
-// registerAPIGroups registers API groups and resources with the server
-func (s *APIServer) registerAPIGroups(gvks []schema.GroupVersionKind) error {
-	// Group GVKs by Group for API group registration
-	groupedGVKs := make(map[string][]schema.GroupVersionKind)
-	for _, gvk := range gvks {
-		groupedGVKs[gvk.Group] = append(groupedGVKs[gvk.Group], gvk)
+func (s *APIServer) registerGroupGVKs(groupGVKs map[string][]schema.GroupVersionKind) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check if any of the groups have already been registered
+	for group, _ := range groupGVKs {
+		if _, ok := s.groupGVKs[group]; ok {
+			return fmt.Errorf("API group %s already registered", group)
+		}
 	}
 
 	// Register each API group
-	for group, gvkList := range groupedGVKs {
+	for group, gvkList := range groupGVKs {
 		if err := s.registerAPIGroup(group, gvkList); err != nil {
 			return fmt.Errorf("failed to register API group %s: %w", group, err)
 		}
@@ -105,6 +141,7 @@ func (s *APIServer) registerAPIGroup(group string, gvks []schema.GroupVersionKin
 	// Create storage map for all versions in this group
 	versionedResourcesStorageMap := make(map[string]map[string]apiserverrest.Storage)
 
+	failedGVKs := 0
 	for version, versionGVKs := range versionedGVKs {
 		resourceStorage := make(map[string]apiserverrest.Storage)
 
@@ -112,7 +149,12 @@ func (s *APIServer) registerAPIGroup(group string, gvks []schema.GroupVersionKin
 			// Convert GVK to GVR
 			resource, err := s.findAPIResource(gvk)
 			if err != nil {
-				return fmt.Errorf("failed to complete API discovery for GVK %s: %w", gvk.String(), err)
+				// This is not fatal: since no API discovery ius available when
+				// running without a real Kubernetes API server, we just note the
+				// failure and move on
+				// return fmt.Errorf("failed to complete API discovery for GVK %s: %w", gvk.String(), err)
+				failedGVKs++
+				continue
 			}
 			resourceName := resource.APIResource.Name
 
@@ -136,7 +178,6 @@ func (s *APIServer) registerAPIGroup(group string, gvks []schema.GroupVersionKin
 	for version := range versionedGVKs {
 		groupVersions = append(groupVersions, schema.GroupVersion{Group: group, Version: version})
 	}
-
 	apiGroupInfo := &genericapiserver.APIGroupInfo{
 		PrioritizedVersions:          groupVersions,
 		VersionedResourcesStorageMap: versionedResourcesStorageMap,
@@ -151,17 +192,38 @@ func (s *APIServer) registerAPIGroup(group string, gvks []schema.GroupVersionKin
 		return fmt.Errorf("failed to install API group %s: %w", group, err)
 	}
 
-	s.log.V(1).Info("API group registered successfully", "group", group, "versions", groupVersions)
+	s.log.V(1).Info("API group registered", "group", group, "versions", groupVersions,
+		"failed-GVKs", failedGVKs)
 
 	return nil
 }
 
-func validateGVKsForGroup(group string, gvks []schema.GroupVersionKind) error {
+func (s *APIServer) addTypesToScheme(gvks []schema.GroupVersionKind) error {
+	// Group GVKs by GroupVersion
+	groupVersions := make(map[schema.GroupVersion][]schema.GroupVersionKind)
 	for _, gvk := range gvks {
-		if gvk.Group != group {
-			return fmt.Errorf("refusing to register unknown API group: %s does not belong to group %s",
-				gvk.String(), group)
+		gv := gvk.GroupVersion()
+		groupVersions[gv] = append(groupVersions[gv], gvk)
+	}
+
+	// Add types to existing scheme
+	for gv, gvkList := range groupVersions {
+		for _, gvk := range gvkList {
+			// Add meta types for this group version if not already added
+			metav1.AddToGroupVersion(s.scheme, gv)
+
+			// Register the unstructured types
+			s.scheme.AddKnownTypeWithName(gvk, &unstructured.Unstructured{})
+			s.scheme.AddKnownTypeWithName(listGVK(gvk), &unstructured.UnstructuredList{})
+
+			s.log.V(4).Info("added types to scheme", "GVK", gvk.String())
+		}
+
+		// Update version priority for this group
+		if err := s.scheme.SetVersionPriority(gv); err != nil {
+			return fmt.Errorf("failed to set version priority for %s: %w", gv.String(), err)
 		}
 	}
+
 	return nil
 }

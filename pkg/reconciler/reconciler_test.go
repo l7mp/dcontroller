@@ -87,10 +87,10 @@ var _ = Describe("Reconciler", func() {
 		})
 		object.SetName(pod, "default", "podname")
 
-		oldObj = object.NewViewObject("view")
+		oldObj = object.NewViewObject("test", "view")
 		object.SetName(oldObj, "default", "viewname")
 
-		view = object.NewViewObject("view")
+		view = object.NewViewObject("test", "view")
 		object.SetName(view, "default", "viewname")
 		object.SetContent(view, map[string]any{"a": int64(1)})
 
@@ -135,7 +135,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a source
-			src, err := NewSource(mgr, s).GetSource()
+			src, err := NewSource(mgr, "test", s).GetSource()
 			Expect(err).NotTo(HaveOccurred())
 
 			// Watch the source
@@ -157,8 +157,8 @@ var _ = Describe("Reconciler", func() {
 				Name:      "viewname",
 				EventType: object.Added,
 				GVK: schema.GroupVersionKind{
-					Group:   viewv1a1.GroupVersion.Group,
-					Version: viewv1a1.GroupVersion.Version,
+					Group:   "test." + viewv1a1.GroupSuffix,
+					Version: viewv1a1.Version,
 					Kind:    "view",
 				},
 			}))
@@ -177,8 +177,8 @@ var _ = Describe("Reconciler", func() {
 				Name:      "viewname",
 				EventType: object.Updated,
 				GVK: schema.GroupVersionKind{
-					Group:   viewv1a1.GroupVersion.Group,
-					Version: viewv1a1.GroupVersion.Version,
+					Group:   "test." + viewv1a1.GroupSuffix,
+					Version: viewv1a1.Version,
 					Kind:    "view",
 				},
 			}))
@@ -195,8 +195,8 @@ var _ = Describe("Reconciler", func() {
 				Name:      "viewname",
 				EventType: object.Deleted,
 				GVK: schema.GroupVersionKind{
-					Group:   viewv1a1.GroupVersion.Group,
-					Version: viewv1a1.GroupVersion.Version,
+					Group:   "test." + viewv1a1.GroupSuffix,
+					Version: viewv1a1.Version,
 					Kind:    "view",
 				},
 			}))
@@ -270,7 +270,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a source
-			src, err := NewSource(mgr, s).GetSource()
+			src, err := NewSource(mgr, "test", s).GetSource()
 			Expect(err).NotTo(HaveOccurred())
 
 			// Watch the source
@@ -318,7 +318,7 @@ var _ = Describe("Reconciler", func() {
 			})
 
 			Expect(err).NotTo(HaveOccurred())
-			src, err := NewSource(mgr, s).GetSource()
+			src, err := NewSource(mgr, "test", s).GetSource()
 			Expect(err).NotTo(HaveOccurred())
 			err = c.Watch(src)
 			Expect(err).NotTo(HaveOccurred())
@@ -334,7 +334,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(ok).To(BeFalse())
 
 			// Get the object and check
-			res := object.NewViewObject("view")
+			res := object.NewViewObject("test", "view")
 			Expect(vcache.Get(ctx, client.ObjectKeyFromObject(oldObj), res)).NotTo(HaveOccurred())
 			Expect(res.GetLabels()).To(BeNil())
 
@@ -351,14 +351,14 @@ var _ = Describe("Reconciler", func() {
 				Name:      "viewname",
 				EventType: object.Updated,
 				GVK: schema.GroupVersionKind{
-					Group:   viewv1a1.GroupVersion.Group,
-					Version: viewv1a1.GroupVersion.Version,
+					Group:   "test." + viewv1a1.GroupSuffix,
+					Version: viewv1a1.Version,
 					Kind:    "view",
 				},
 			}))
 
 			// Get the object and check
-			res = object.NewViewObject("view")
+			res = object.NewViewObject("test", "view")
 			Expect(vcache.Get(ctx, client.ObjectKeyFromObject(oldObj), res)).NotTo(HaveOccurred())
 			Expect(res.GetLabels()).To(Equal(map[string]string{"app": "test"}))
 
@@ -373,7 +373,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(ok).To(BeFalse())
 
 			// Get the object and check
-			res = object.NewViewObject("view")
+			res = object.NewViewObject("test", "view")
 			Expect(vcache.Get(ctx, client.ObjectKeyFromObject(oldObj), res)).NotTo(HaveOccurred())
 			Expect(res.GetLabels()).To(Equal(map[string]string{})) // we have just added a zero value
 
@@ -392,14 +392,14 @@ var _ = Describe("Reconciler", func() {
 				Name:      "viewname",
 				EventType: object.Updated,
 				GVK: schema.GroupVersionKind{
-					Group:   viewv1a1.GroupVersion.Group,
-					Version: viewv1a1.GroupVersion.Version,
+					Group:   "test." + viewv1a1.GroupSuffix,
+					Version: viewv1a1.Version,
 					Kind:    "view",
 				},
 			}))
 
 			// Get the object and check
-			res = object.NewViewObject("view")
+			res = object.NewViewObject("test", "view")
 			Expect(vcache.Get(ctx, client.ObjectKeyFromObject(oldObj), res)).NotTo(HaveOccurred())
 			Expect(res.GetLabels()).To(Equal(map[string]string{"app": "test"}))
 
@@ -415,8 +415,8 @@ var _ = Describe("Reconciler", func() {
 				Name:      "viewname",
 				EventType: object.Deleted,
 				GVK: schema.GroupVersionKind{
-					Group:   viewv1a1.GroupVersion.Group,
-					Version: viewv1a1.GroupVersion.Version,
+					Group:   "test." + viewv1a1.GroupSuffix,
+					Version: viewv1a1.Version,
 					Kind:    "view",
 				},
 			}))
@@ -455,7 +455,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a source
-			src, err := NewSource(mgr, s).GetSource()
+			src, err := NewSource(mgr, "test", s).GetSource()
 			Expect(err).NotTo(HaveOccurred())
 
 			// Watch the source
@@ -511,7 +511,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a source
-			src, err := NewSource(mgr, s).GetSource()
+			src, err := NewSource(mgr, "test", s).GetSource()
 			Expect(err).NotTo(HaveOccurred())
 
 			// Watch the source
@@ -535,7 +535,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(mgr).NotTo(BeNil())
 
 			// Register source
-			target := NewTarget(mgr, opv1a1.Target{Resource: opv1a1.Resource{Kind: "view"}})
+			target := NewTarget(mgr, "test", opv1a1.Target{Resource: opv1a1.Resource{Kind: "view"}})
 
 			// Start the manager
 			go func() { mgr.Start(ctx) }()
@@ -548,7 +548,7 @@ var _ = Describe("Reconciler", func() {
 			vcache := mgr.GetCompositeCache().GetViewCache()
 			Expect(vcache).NotTo(BeNil())
 
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("view"))
+			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok := tryWatchWatcher(watcher, interval)
@@ -581,7 +581,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(object.DeepEqual(res, event.Object.(object.Object))).To(BeTrue())
 
 			// Get should fail now
-			res = object.NewViewObject("view")
+			res = object.NewViewObject("test", "view")
 			Expect(vcache.Get(ctx, client.ObjectKeyFromObject(view), res)).To(HaveOccurred())
 		})
 
@@ -592,7 +592,7 @@ var _ = Describe("Reconciler", func() {
 
 			// Register an updater target
 			group, version := "", "v1"
-			target := NewTarget(mgr, opv1a1.Target{
+			target := NewTarget(mgr, "test", opv1a1.Target{
 				Resource: opv1a1.Resource{
 					Group:   &group,
 					Version: &version,
@@ -705,7 +705,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(mgr).NotTo(BeNil())
 
 			// Register target
-			target := NewTarget(mgr, opv1a1.Target{Resource: opv1a1.Resource{Kind: "view"}, Type: "Patcher"})
+			target := NewTarget(mgr, "test", opv1a1.Target{Resource: opv1a1.Resource{Kind: "view"}, Type: "Patcher"})
 
 			// Start the manager
 			go func() { mgr.Start(ctx) }()
@@ -718,7 +718,7 @@ var _ = Describe("Reconciler", func() {
 			err = vcache.Add(view)
 			Expect(err).NotTo(HaveOccurred())
 
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("view"))
+			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok := tryWatchWatcher(watcher, interval)
@@ -776,7 +776,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(event.Object).To(Equal(res))
 
 			// Get should not fail now
-			res2 := object.NewViewObject("view")
+			res2 := object.NewViewObject("test", "view")
 			Expect(vcache.Get(ctx, client.ObjectKeyFromObject(view), res2)).NotTo(HaveOccurred())
 			Expect(*res).To(Equal(*res2))
 		})
@@ -788,7 +788,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(mgr).NotTo(BeNil())
 
 			// Register target
-			target := NewTarget(mgr, opv1a1.Target{Resource: opv1a1.Resource{Kind: "view"}, Type: "Patcher"})
+			target := NewTarget(mgr, "test", opv1a1.Target{Resource: opv1a1.Resource{Kind: "view"}, Type: "Patcher"})
 
 			// Start the manager
 			go func() { mgr.Start(ctx) }()
@@ -801,7 +801,7 @@ var _ = Describe("Reconciler", func() {
 			err = vcache.Add(view)
 			Expect(err).NotTo(HaveOccurred())
 
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("view"))
+			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok := tryWatchWatcher(watcher, interval)
@@ -828,7 +828,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(event.Object).To(Equal(retrieved))
 
 			// Push a delete to the target
-			view3 := object.NewViewObject("view")
+			view3 := object.NewViewObject("test", "view")
 			Expect(unstructured.SetNestedField(view3.UnstructuredContent(), "", "status")).NotTo(HaveOccurred())
 			object.SetName(view3, "default", "viewname")
 			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: view3})
@@ -843,7 +843,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(event.Object).To(Equal(retrieved))
 
 			// Get should not fail now
-			res2 := object.NewViewObject("view")
+			res2 := object.NewViewObject("test", "view")
 			Expect(vcache.Get(ctx, client.ObjectKeyFromObject(view), res2)).NotTo(HaveOccurred())
 			Expect(*retrieved).To(Equal(*res2))
 		})
@@ -855,7 +855,7 @@ var _ = Describe("Reconciler", func() {
 
 			// Register target
 			group, version := "", "v1"
-			target := NewTarget(mgr, opv1a1.Target{
+			target := NewTarget(mgr, "test", opv1a1.Target{
 				Resource: opv1a1.Resource{
 					Group:   &group,
 					Version: &version,

@@ -103,10 +103,6 @@ func (d *ViewDiscovery) ServerGroups() (*metav1.APIGroupList, error) {
 	var groups metav1.APIGroupList
 	for group, versions := range groupVersions {
 		apiGroup := metav1.APIGroup{
-			// TypeMeta: metav1.TypeMeta{
-			// 	Kind:       "APIGroup",
-			// 	APIVersion: "v1",
-			// },
 			Name:     group,
 			Versions: versions,
 		}
@@ -115,7 +111,7 @@ func (d *ViewDiscovery) ServerGroups() (*metav1.APIGroupList, error) {
 		if len(versions) > 0 {
 			apiGroup.PreferredVersion = versions[0]
 			for _, v := range versions {
-				if v.Version == viewv1a1.GroupVersion.Version {
+				if v.Version == viewv1a1.Version {
 					apiGroup.PreferredVersion = v
 					break
 				}
@@ -179,17 +175,17 @@ func (d *ViewDiscovery) ServerPreferredNamespacedResources() ([]*metav1.APIResou
 
 // IsViewGroup returns true if the group is a view group
 func (d *ViewDiscovery) IsViewGroup(group string) bool {
-	return group == viewv1a1.GroupVersion.Group
+	return viewv1a1.IsViewGroup(group)
 }
 
 // IsViewKind returns true if this is a view object kind (not a list)
 func (d *ViewDiscovery) IsViewKind(gvk schema.GroupVersionKind) bool {
-	return d.IsViewGroup(gvk.Group) && !strings.HasSuffix(gvk.Kind, "List")
+	return viewv1a1.IsViewKind(gvk) && !strings.HasSuffix(gvk.Kind, "List")
 }
 
 // IsViewListKind returns true if this is a view list kind
 func (d *ViewDiscovery) IsViewListKind(gvk schema.GroupVersionKind) bool {
-	return d.IsViewGroup(gvk.Group) && strings.HasSuffix(gvk.Kind, "List")
+	return viewv1a1.IsViewKind(gvk) && strings.HasSuffix(gvk.Kind, "List")
 }
 
 // ObjectGVKFromListGVK converts a list GVK to its object GVK

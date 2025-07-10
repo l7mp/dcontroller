@@ -13,6 +13,7 @@ import (
 	cache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
@@ -105,7 +106,7 @@ func (c *CompositeClient) Update(ctx context.Context, obj client.Object, opts ..
 		}
 
 		// get the old object
-		oldObj := object.NewViewObject(newObj.GetKind())
+		oldObj := object.NewViewObject(object.GetOperator(newObj), newObj.GetKind())
 		if err := c.compositeCache.GetViewCache().Get(ctx, client.ObjectKeyFromObject(newObj), oldObj); err != nil {
 			return fmt.Errorf("cannot update object with key %s: not in cache",
 				client.ObjectKeyFromObject(newObj))
@@ -142,7 +143,7 @@ func (c *CompositeClient) Patch(ctx context.Context, obj client.Object, patch cl
 			return fmt.Errorf("cannot parse JSON patch: %w", err)
 		}
 
-		oldObj := object.NewViewObject(gvk.Kind)
+		oldObj := object.NewViewObject(viewv1a1.GetOperator(gvk), gvk.Kind)
 		if err := c.compositeCache.GetViewCache().Get(ctx, client.ObjectKeyFromObject(o), oldObj); err != nil {
 			return err
 		}
@@ -168,7 +169,7 @@ func (c *CompositeClient) DeleteAllOf(ctx context.Context, obj client.Object, op
 			return errors.New("cache is not set")
 		}
 
-		list := NewViewObjectList("view")
+		list := NewViewObjectList("test", "view")
 		if err := c.compositeCache.GetViewCache().List(ctx, list); err != nil {
 			return err
 		}

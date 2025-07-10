@@ -89,12 +89,12 @@ var _ = Describe("Object patching", func() {
 
 	Describe("Object patching", func() {
 		It("should patch nil with map", func() {
-			obj := NewViewObject("view")
+			obj := NewViewObject("test", "view")
 			patch := map[string]any{"a": int64(1), "b": map[string]any{"c": int64(2)}}
 			err := Patch(obj, patch)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
-				"apiVersion": "view.dcontroller.io/v1alpha1",
+				"apiVersion": "test.view.dcontroller.io/v1alpha1",
 				"kind":       "view",
 				"a":          int64(1),
 				"b":          map[string]any{"c": int64(2)},
@@ -102,12 +102,12 @@ var _ = Describe("Object patching", func() {
 		})
 
 		It("should patch a literal with map", func() {
-			obj := NewViewObject("view")
+			obj := NewViewObject("test", "view")
 			patch := map[string]any{"a": int64(1), "b": map[string]any{"c": int64(2)}}
 			err := Patch(obj, patch)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
-				"apiVersion": "view.dcontroller.io/v1alpha1",
+				"apiVersion": "test.view.dcontroller.io/v1alpha1",
 				"kind":       "view",
 				"a":          int64(1),
 				"b":          map[string]any{"c": int64(2)},
@@ -115,13 +115,13 @@ var _ = Describe("Object patching", func() {
 		})
 
 		It("should patch a map with map", func() {
-			obj := NewViewObject("view")
+			obj := NewViewObject("test", "view")
 			SetContent(obj, map[string]any{"a": "x", "d": 1.1, "e": []any{int64(10), int64(20)}})
 			patch := map[string]any{"a": []any{int64(10), int64(2), int64(3)}, "b": map[string]any{"c": int64(2), "e": "y"}}
 			err := Patch(obj, patch)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
-				"apiVersion": "view.dcontroller.io/v1alpha1",
+				"apiVersion": "test.view.dcontroller.io/v1alpha1",
 				"kind":       "view",
 				"a":          []any{int64(10), int64(2), int64(3)},
 				"b":          map[string]any{"c": int64(2), "e": "y"},
@@ -131,13 +131,13 @@ var _ = Describe("Object patching", func() {
 		})
 
 		It("should delete a key from a map by setting it to nil", func() {
-			obj := NewViewObject("view")
+			obj := NewViewObject("test", "view")
 			SetContent(obj, map[string]any{"a": "x", "d": 1.1, "e": map[string]any{"q": "x", "r": "y"}})
 			patch := map[string]any{"e": map[string]any{"q": nil}}
 			err := Patch(obj, patch)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj.UnstructuredContent()).To(Equal(map[string]any{
-				"apiVersion": "view.dcontroller.io/v1alpha1",
+				"apiVersion": "test.view.dcontroller.io/v1alpha1",
 				"kind":       "view",
 				"a":          "x",
 				"d":          float64(1.1),

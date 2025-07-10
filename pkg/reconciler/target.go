@@ -33,9 +33,9 @@ type target struct {
 	log    logr.Logger
 }
 
-func NewTarget(mgr runtimeManager.Manager, t opv1a1.Target) Target {
+func NewTarget(mgr runtimeManager.Manager, operator string, t opv1a1.Target) Target {
 	target := &target{
-		Resource: NewResource(mgr, t.Resource),
+		Resource: NewResource(mgr, operator, t.Resource),
 		mgr:      mgr,
 		target:   t,
 	}

@@ -11,7 +11,7 @@ import (
 var _ = Describe("ViewDiscovery", func() {
 	var (
 		viewDiscovery ViewDiscoveryInterface
-		viewGroup     = viewv1a1.GroupVersion.Group
+		viewGroup     = viewv1a1.Group("test")
 		testViewGVK   = schema.GroupVersionKind{
 			Group:   viewGroup,
 			Version: "v1alpha1",
@@ -205,10 +205,10 @@ var _ = Describe("ViewDiscovery", func() {
 		})
 
 		It("should return server resources for group version", func() {
-			resources, err := viewDiscovery.ServerResourcesForGroupVersion(viewv1a1.GroupVersion.String())
+			resources, err := viewDiscovery.ServerResourcesForGroupVersion(viewv1a1.GroupVersion("test").String())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resources).NotTo(BeNil())
-			Expect(resources.GroupVersion).To(Equal(viewv1a1.GroupVersion.String()))
+			Expect(resources.GroupVersion).To(Equal(viewv1a1.GroupVersion("test").String()))
 			Expect(len(resources.APIResources)).To(BeNumerically(">", 0))
 
 			// Should contain our registered view
@@ -238,7 +238,7 @@ var _ = Describe("ViewDiscovery", func() {
 			Expect(len(groups.Groups)).To(Equal(1))
 			Expect(groups.Groups[0].Name).To(Equal(viewGroup))
 			Expect(groups.Groups[0].Versions).To(HaveLen(1))
-			Expect(groups.Groups[0].Versions[0].GroupVersion).To(Equal(viewv1a1.GroupVersion.String()))
+			Expect(groups.Groups[0].Versions[0].GroupVersion).To(Equal(viewv1a1.GroupVersion("test").String()))
 		})
 
 		It("should return server groups and resources", func() {
@@ -251,7 +251,7 @@ var _ = Describe("ViewDiscovery", func() {
 			Expect(len(resources)).To(BeNumerically(">=", 1))
 			var foundViewGroupResources bool
 			for _, resourceList := range resources {
-				if resourceList.GroupVersion == viewv1a1.GroupVersion.String() {
+				if resourceList.GroupVersion == viewv1a1.GroupVersion("test").String() {
 					foundViewGroupResources = true
 					Expect(len(resourceList.APIResources)).To(BeNumerically(">", 0))
 					break
@@ -267,7 +267,7 @@ var _ = Describe("ViewDiscovery", func() {
 
 			var foundViewGroup bool
 			for _, resourceList := range resources {
-				if resourceList.GroupVersion == viewv1a1.GroupVersion.String() {
+				if resourceList.GroupVersion == viewv1a1.GroupVersion("test").String() {
 					foundViewGroup = true
 					Expect(len(resourceList.APIResources)).To(BeNumerically(">", 0))
 					break

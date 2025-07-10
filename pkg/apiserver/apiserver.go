@@ -10,17 +10,18 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	genericapiserver "k8s.io/apiserver/pkg/server"
-	"k8s.io/client-go/discovery"
+	openapicommon "k8s.io/kube-openapi/pkg/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/l7mp/dcontroller/pkg/composite"
-	"github.com/l7mp/dcontroller/pkg/util"
 )
 
-// APIServer manages a Kubernetes API server with dynamic GVK registration.
+// APIServer manages a Kubernetes API server with dynamic GVK registration. Currently all view
+// resources per each running dcontroller operator are available via the API server. Only view
+// resources can be queries, native Kubernetes API groups (e.g., "core/v1" and "apps/v1") must be
+// queried from the default API server.
 type APIServer struct {
 	// Configuration
 	config           Config
@@ -33,13 +34,13 @@ type APIServer struct {
 	codecs           runtime.NegotiatedSerializer
 
 	// State management
-	mu        sync.RWMutex
-	groupGVKs GroupGVKs
+	mu                  sync.RWMutex
+	groupGVKs           GroupGVKs
+	cachedOpenAPIDefs   map[string]openapicommon.OpenAPIDefinition
+	cachedOpenAPIV3Defs map[string]openapicommon.OpenAPIDefinition
 
 	// Lifecycle management
-	running    bool
-	currentCtx context.Context
-	cancelFunc context.CancelFunc
+	running bool
 
 	log logr.Logger
 }
@@ -60,22 +61,24 @@ func NewAPIServer(mgr manager.Manager, config Config) (*APIServer, error) {
 	}
 
 	discoveryClient := config.DiscoveryClient
-	cfg := mgr.GetConfig()
-	if discoveryClient != nil && cfg != nil {
-		client, err := discovery.NewDiscoveryClientForConfig(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create discovery client: %w", err)
-		}
-		discoveryClient = composite.NewCompositeDiscoveryClient(client)
+	if discoveryClient != nil {
+		discoveryClient = composite.NewViewDiscovery()
 	}
 
-	return &APIServer{
+	s := &APIServer{
 		config:           config,
 		delegatingClient: mgr.GetClient(),
 		discoveryClient:  discoveryClient,
 		groupGVKs:        make(GroupGVKs),
 		log:              log,
-	}, nil
+	}
+
+	// Build and run the server
+	if err := s.buildServer(); err != nil {
+		return nil, fmt.Errorf("failed to build server: %w", err)
+	}
+
+	return s, nil
 }
 
 // GetServerAddress returns the address and the port of the running API server.
@@ -102,28 +105,12 @@ func (s *APIServer) Start(ctx context.Context) error {
 	}
 
 	// Create new context for this server instance
-	s.currentCtx, s.cancelFunc = context.WithCancel(ctx)
-	return s.runServerInstance(s.currentCtx)
+	return s.runServerInstance(ctx)
 }
 
 // runServerInstance runs a single instance of the API server
 func (s *APIServer) runServerInstance(ctx context.Context) error {
-	// Get current GVK snapshot
-	s.mu.Lock()
-	currentGVKs := make([]schema.GroupVersionKind, 0, len(s.groupGVKs))
-	for _, groupGVKs := range s.groupGVKs {
-		for gvk, _ := range groupGVKs {
-			currentGVKs = append(currentGVKs, gvk)
-		}
-	}
-	s.mu.Unlock()
-
-	// Build and run the server
-	if err := s.buildServer(currentGVKs); err != nil {
-		return fmt.Errorf("failed to build server: %w", err)
-	}
-
-	s.log.Info("starting API server", "addr", s.GetServerAddress(), "GVKs", util.Stringify(currentGVKs))
+	s.log.Info("starting API server", "addr", s.GetServerAddress())
 
 	s.mu.Lock()
 	s.running = true

@@ -40,7 +40,7 @@ var _ = Describe("Pipelines", func() {
 		var dep1, dep2, pod1, pod2, pod3, rs1, rs2 object.Object
 
 		BeforeEach(func() {
-			pod1 = object.NewViewObject("pod")
+			pod1 = object.NewViewObject("test", "pod")
 			object.SetContent(pod1, map[string]any{
 				"spec": map[string]any{
 					"image":  "image1",
@@ -50,7 +50,7 @@ var _ = Describe("Pipelines", func() {
 			object.SetName(pod1, "default", "pod1")
 			pod1.SetLabels(map[string]string{"app": "app1"})
 
-			pod2 = object.NewViewObject("pod")
+			pod2 = object.NewViewObject("test", "pod")
 			object.SetContent(pod2, map[string]any{
 				"spec": map[string]any{
 					"image":  "image2",
@@ -60,7 +60,7 @@ var _ = Describe("Pipelines", func() {
 			object.SetName(pod2, "other", "pod2")
 			pod2.SetLabels(map[string]string{"app": "app2"})
 
-			pod3 = object.NewViewObject("pod")
+			pod3 = object.NewViewObject("test", "pod")
 			object.SetContent(pod3, map[string]any{
 				"spec": map[string]any{
 					"image":  "image1",
@@ -70,7 +70,7 @@ var _ = Describe("Pipelines", func() {
 			object.SetName(pod3, "default", "pod3")
 			pod3.SetLabels(map[string]string{"app": "app1"})
 
-			dep1 = object.NewViewObject("dep")
+			dep1 = object.NewViewObject("test", "dep")
 			object.SetContent(dep1, map[string]any{
 				"spec": map[string]any{
 					"replicas": int64(3),
@@ -79,7 +79,7 @@ var _ = Describe("Pipelines", func() {
 			object.SetName(dep1, "default", "dep1")
 			dep1.SetLabels(map[string]string{"app": "app1"})
 
-			dep2 = object.NewViewObject("dep")
+			dep2 = object.NewViewObject("test", "dep")
 			object.SetContent(dep2, map[string]any{
 				"spec": map[string]any{
 					"replicas": int64(1),
@@ -88,7 +88,7 @@ var _ = Describe("Pipelines", func() {
 			object.SetName(dep2, "default", "dep2")
 			dep2.SetLabels(map[string]string{"app": "app2"})
 
-			rs1 = object.NewViewObject("rs")
+			rs1 = object.NewViewObject("test", "rs")
 			object.SetContent(rs1, map[string]any{
 				"spec": map[string]any{
 					"dep": "dep1",
@@ -100,7 +100,7 @@ var _ = Describe("Pipelines", func() {
 			object.SetName(rs1, "default", "rs1")
 			rs1.SetLabels(map[string]string{"app": "app1"})
 
-			rs2 = object.NewViewObject("rs")
+			rs2 = object.NewViewObject("test", "rs")
 			object.SetContent(rs2, map[string]any{
 				"spec": map[string]any{
 					"dep": "dep2",
@@ -146,7 +146,7 @@ var _ = Describe("Pipelines", func() {
 				Expect(delta.Object.GetName()).To(Equal("dep1--pod1"))
 				Expect(delta.Object.GetNamespace()).To(Equal("default"))
 				Expect(delta.Object.UnstructuredContent()).To(Equal(map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
 					"metadata": map[string]any{
 						"name":      "dep1--pod1",
@@ -172,7 +172,7 @@ var _ = Describe("Pipelines", func() {
 				Expect(delta.Object.GetName()).To(Equal("pod1"))
 				Expect(delta.Object.GetNamespace()).To(Equal("default"))
 				Expect(delta.Object.UnstructuredContent()).To(Equal(map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
 					"metadata": map[string]any{
 						"name":      "pod1",
@@ -660,11 +660,11 @@ var _ = Describe("Pipelines", func() {
             - $.route.metadata.name`
 
 		BeforeEach(func() {
-			gateway = object.NewViewObject("gateway")
+			gateway = object.NewViewObject("test", "gateway")
 			object.SetName(gateway, "default", "gateway")
 			object.SetContent(gateway, testUDPGateway)
 			gateway = object.DeepCopy(gateway) // so we don't share stuff across tests
-			route = object.NewViewObject("route")
+			route = object.NewViewObject("test", "route")
 			object.SetName(route, "default", "route")
 			object.SetContent(route, testUDPRoute)
 			route = object.DeepCopy(route)
@@ -889,7 +889,7 @@ func newPipeline(data string, srcs []string) (Evaluator, error) {
 	for _, view := range srcs {
 		gvks = append(gvks, opv1a1.GroupVersion.WithKind(view))
 	}
-	p, err := NewPipeline(gvk.Kind, gvks, conf, logger)
+	p, err := NewPipeline("test", gvk.Kind, gvks, conf, logger)
 	if err != nil {
 		return nil, err
 	}

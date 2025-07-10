@@ -8,25 +8,25 @@ import (
 
 var _ = Describe("Object", func() {
 	It("newobjectlist", func() {
-		list := NewViewObjectList("View")
+		list := NewViewObjectList("test", "View")
 		Expect(list.UnstructuredContent()).To(Equal(map[string]any{
-			"apiVersion": "view.dcontroller.io/v1alpha1",
+			"apiVersion": "test.view.dcontroller.io/v1alpha1",
 			"kind":       "ViewList",
 			"items":      []any{},
 		}))
 	})
 
 	It("appendtoobjectlist", func() {
-		list := NewViewObjectList("View")
-		obj := object.NewViewObject("View")
+		list := NewViewObjectList("test", "View")
+		obj := object.NewViewObject("test", "View")
 
 		AppendToListItem(list, obj)
 
 		Expect(list.UnstructuredContent()).To(Equal(map[string]any{
-			"apiVersion": "view.dcontroller.io/v1alpha1",
+			"apiVersion": "test.view.dcontroller.io/v1alpha1",
 			"kind":       "ViewList",
 			"items": []any{map[string]any{
-				"apiVersion": "view.dcontroller.io/v1alpha1",
+				"apiVersion": "test.view.dcontroller.io/v1alpha1",
 				"kind":       "View",
 			}},
 		}))

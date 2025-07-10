@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"net"
 	"testing"
 	"time"
 
@@ -64,6 +65,153 @@ func TestAPIServer(t *testing.T) {
 	RunSpecs(t, "APIServer")
 }
 
+var _ = Describe("APIServerUnitTest", func() {
+	var (
+		mgr                       runtimeManager.Manager
+		server                    *APIServer
+		testGroup, test2Group     string
+		testViewGVK, test2ViewGVK schema.GroupVersionKind
+		port                      int
+	)
+
+	BeforeEach(func() {
+		testGroup = viewv1a1.Group("test")
+		testViewGVK = viewv1a1.GroupVersionKind("test", "TestView")
+		test2Group = viewv1a1.Group("test2")
+		test2ViewGVK = viewv1a1.GroupVersionKind("test2", "TestView")
+
+		var err error
+		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		Expect(err).NotTo(HaveOccurred())
+
+		port = rand.IntN(5000) + (32768)
+		config, err := NewDefaultConfig("", port, true)
+		Expect(err).NotTo(HaveOccurred())
+		server, err = NewAPIServer(mgr, config)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	Describe("Lifecycle Management", func() {
+		It("should start and shutdown gracefully", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+
+			// Register a GVK first
+			err := server.RegisterAPIGroup(testGroup, []schema.GroupVersionKind{testViewGVK})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Start server in goroutine
+			errChan := make(chan error, 1)
+			go func() {
+				defer close(errChan)
+				errChan <- server.Start(ctx)
+			}()
+
+			// Give server a moment to start
+			time.Sleep(20 * time.Millisecond)
+
+			// Add another GVK
+			err = server.RegisterAPIGroup(test2Group, []schema.GroupVersionKind{test2ViewGVK})
+			Expect(err).NotTo(HaveOccurred())
+
+			groupGVKs, ok := server.groupGVKs[testGroup]
+			Expect(ok).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(testViewGVK))
+			Expect(groupGVKs[testViewGVK]).To(BeTrue())
+
+			groupGVKs, ok = server.groupGVKs[test2Group]
+			Expect(ok).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(test2ViewGVK))
+			Expect(groupGVKs[test2ViewGVK]).To(BeTrue())
+
+			// Shutdown
+			cancel()
+
+			// Wait for start to return
+			Eventually(errChan).Should(Receive(BeNil()))
+		})
+
+		It("should handle context cancellation", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+
+			err := server.Start(ctx)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should handle restart when already running", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			err := server.RegisterAPIGroup(testGroup, []schema.GroupVersionKind{testViewGVK})
+			Expect(err).NotTo(HaveOccurred())
+
+			groupGVKs, ok := server.groupGVKs[testGroup]
+			Expect(ok).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(testViewGVK))
+			Expect(groupGVKs[testViewGVK]).To(BeTrue())
+
+			// Start first time
+			errChan1 := make(chan error, 1)
+			go func() {
+				errChan1 <- server.Start(ctx)
+			}()
+
+			time.Sleep(50 * time.Millisecond)
+
+			// Start again (should shutdown first)
+			errChan2 := make(chan error, 1)
+			go func() {
+				errChan2 <- server.Start(ctx)
+			}()
+
+			time.Sleep(50 * time.Millisecond)
+
+			groupGVKs, ok = server.groupGVKs[testGroup]
+			Expect(ok).To(BeTrue())
+			Expect(groupGVKs).To(HaveKey(testViewGVK))
+			Expect(groupGVKs[testViewGVK]).To(BeTrue())
+
+			// Cancel context to stop
+			cancel()
+
+			Eventually(errChan1).Should(Receive())
+			Eventually(errChan2).Should(Receive())
+		})
+	})
+
+	Describe("Server Configuration", func() {
+		It("should handle empty GVK list", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
+
+			// Don't register any GVKs
+			err := server.Start(ctx)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should handle various address formats", func() {
+			testCases := []struct {
+				addr     string
+				expected net.IP
+			}{
+				{"127.0.0.1", net.ParseIP("127.0.0.1")},
+				{"localhost", net.ParseIP("127.0.0.1")}, // Should default
+				{"", net.ParseIP("127.0.0.1")},          // Should default
+				{"0.0.0.0", net.ParseIP("0.0.0.0")},
+			}
+
+			for _, tc := range testCases {
+				port = rand.IntN(15000) + (32768)
+				config, err := NewDefaultConfig(tc.addr, port, true)
+				Expect(err).NotTo(HaveOccurred())
+				s, err := NewAPIServer(mgr, config)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(s).NotTo(BeNil())
+			}
+		})
+	})
+})
+
 var _ = Describe("APIServer Integration", func() {
 	var (
 		apiServer     *APIServer
@@ -76,7 +224,7 @@ var _ = Describe("APIServer Integration", func() {
 		port          int
 		obj           = &unstructured.Unstructured{
 			Object: map[string]any{
-				"apiVersion": "view.dcontroller.io/v1alpha1",
+				"apiVersion": "test.view.dcontroller.io/v1alpha1",
 				"kind":       "TestView",
 				"metadata": map[string]any{
 					"namespace": "default",
@@ -121,7 +269,7 @@ var _ = Describe("APIServer Integration", func() {
 		Expect(fakeCache).NotTo(BeNil())
 		err = fakeCache.GetViewCache().Add(obj)
 		Expect(err).NotTo(HaveOccurred())
-		podObj, err := object.NewViewObjectFromNativeObject("view", pod)
+		podObj, err := object.NewViewObjectFromNativeObject("test", "view", pod)
 		Expect(err).NotTo(HaveOccurred())
 		err = fakeCache.GetViewCache().Add(podObj)
 		Expect(err).NotTo(HaveOccurred())
@@ -142,15 +290,10 @@ var _ = Describe("APIServer Integration", func() {
 		apiServer, err = NewAPIServer(mgr, config)
 		Expect(err).NotTo(HaveOccurred())
 
-		err = apiServer.RegisterAPIGroup(viewv1a1.GroupVersion.Group, []schema.GroupVersionKind{{
-			Group:   viewv1a1.GroupVersion.Group,
-			Version: viewv1a1.GroupVersion.Version,
-			Kind:    "TestView2",
-		}, {
-			Group:   viewv1a1.GroupVersion.Group,
-			Version: viewv1a1.GroupVersion.Version,
-			Kind:    "TestView",
-		}})
+		err = apiServer.RegisterAPIGroup(viewv1a1.Group("test"), []schema.GroupVersionKind{
+			viewv1a1.GroupVersionKind("test", "TestView2"), // use reverse order for testing the codec
+			viewv1a1.GroupVersionKind("test", "TestView"),
+		})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Start the server
@@ -179,11 +322,7 @@ var _ = Describe("APIServer Integration", func() {
 	})
 
 	Describe("REST Operations", func() {
-		var viewGVR = schema.GroupVersionResource{
-			Group:    viewv1a1.GroupVersion.Group,
-			Version:  viewv1a1.GroupVersion.Version,
-			Resource: "testview", // lowercase
-		}
+		var viewGVR = viewv1a1.GroupVersion("test").WithResource("testview")
 
 		It("should handle GET operations", func() {
 			// Get existing view object
@@ -224,7 +363,7 @@ var _ = Describe("APIServer Integration", func() {
 			// Create
 			newView := &unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "TestView",
 					"metadata": map[string]any{
 						"name":      "new-view",
@@ -239,7 +378,6 @@ var _ = Describe("APIServer Integration", func() {
 			created, err := dynamicClient.Resource(viewGVR).
 				Namespace("default").
 				Create(context.TODO(), newView, metav1.CreateOptions{})
-
 			Expect(err).NotTo(HaveOccurred())
 			Expect(created.GetName()).To(Equal("new-view"))
 			data, found, err := unstructured.NestedFieldNoCopy(created.Object, "data", "newkey")
@@ -248,7 +386,7 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(data).To(Equal("newvalue"))
 
 			// Verify it was created in the fake client
-			createdView := object.NewViewObject("TestView")
+			createdView := object.NewViewObject("test", "TestView")
 			Eventually(func() bool {
 				err = cacheClient.Get(context.TODO(), client.ObjectKey{
 					Name:      "new-view",
@@ -329,7 +467,7 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(data["newkey"]).To(Equal("another-value"))
 
 			// Wait until the update has been safely applied
-			updatedView := object.NewViewObject("TestView")
+			updatedView := object.NewViewObject("test", "TestView")
 			Eventually(func() bool {
 				err = cacheClient.Get(context.TODO(), client.ObjectKey{
 					Name:      "test-view",
@@ -387,7 +525,7 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify it was deleted from the fake client
-			deletedView := object.NewViewObject("TestView")
+			deletedView := object.NewViewObject("test", "TestView")
 			err = cacheClient.Get(context.TODO(), client.ObjectKey{
 				Name:      "new-view",
 				Namespace: "default",
@@ -434,11 +572,7 @@ var _ = Describe("APIServer Integration", func() {
 
 	Describe("List with Label Selectors", func() {
 		It("should filter by labels", func() {
-			viewGVR := schema.GroupVersionResource{
-				Group:    viewv1a1.GroupVersion.Group,
-				Version:  viewv1a1.GroupVersion.Version,
-				Resource: "testview", // lowercase
-			}
+			viewGVR := viewv1a1.GroupVersion("test").WithResource("testview")
 
 			// List with label selector
 			list, err := dynamicClient.Resource(viewGVR).
@@ -465,15 +599,10 @@ var _ = Describe("APIServer Integration", func() {
 
 	Describe("Multiple Resource Types", func() {
 		It("should handle different resource types", func() {
-			viewGVR2 := schema.GroupVersionResource{
-				Group:    viewv1a1.GroupVersion.Group,
-				Version:  viewv1a1.GroupVersion.Version,
-				Resource: "testview2", // lowercase
-			}
-
+			viewGVR2 := viewv1a1.GroupVersion("test").WithResource("testview2")
 			newView := &unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": "view.dcontroller.io/v1alpha1",
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "TestView2",
 					"metadata": map[string]any{
 						"name":      "new-view2",
@@ -492,7 +621,7 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(created.GetName()).To(Equal("new-view2"))
 
 			// Verify it was created in the fake client and the old one still exists
-			createdView := object.NewViewObject("TestView")
+			createdView := object.NewViewObject("test", "TestView")
 			err = cacheClient.Get(context.TODO(), client.ObjectKey{
 				Name:      "test-view",
 				Namespace: "default",
@@ -503,7 +632,7 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(found).To(BeTrue())
 			Expect(data).To(Equal("x"))
 
-			createdView = object.NewViewObject("TestView2")
+			createdView = object.NewViewObject("test", "TestView2")
 			err = cacheClient.Get(context.TODO(), client.ObjectKey{
 				Name:      "new-view2",
 				Namespace: "default",
@@ -529,16 +658,12 @@ var _ = Describe("APIServer Integration", func() {
 
 	Describe("Custom Resource (View)", func() {
 		It("should handle view resources", func() {
-			viewGVR := schema.GroupVersionResource{
-				Group:    viewv1a1.GroupVersion.Group,
-				Version:  viewv1a1.GroupVersion.Version,
-				Resource: "testview", // lowercase
-			}
+			viewGVR := viewv1a1.GroupVersion("test").WithResource("testview")
 
 			// Create a test view
 			testView := &unstructured.Unstructured{
 				Object: map[string]any{
-					"apiVersion": viewv1a1.GroupVersion.String(),
+					"apiVersion": viewv1a1.GroupVersion("test").String(),
 					"kind":       "TestView",
 					"metadata": map[string]any{
 						"name":      "test-view",

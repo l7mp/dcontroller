@@ -16,7 +16,7 @@ var _ = Describe("CompositeDiscoveryClient", func() {
 	var (
 		fakeNativeDiscovery *fakediscovery.FakeDiscovery
 		compositeClient     *CompositeDiscoveryClient
-		viewGroup           = viewv1a1.GroupVersion.Group
+		viewGroup           = viewv1a1.Group("test")
 		testViewGVK         = schema.GroupVersionKind{
 			Group:   viewGroup,
 			Version: "v1alpha1",
@@ -79,10 +79,10 @@ var _ = Describe("CompositeDiscoveryClient", func() {
 
 	Describe("ServerResourcesForGroupVersion", func() {
 		It("should handle view group versions", func() {
-			resources, err := compositeClient.ServerResourcesForGroupVersion(viewv1a1.GroupVersion.String())
+			resources, err := compositeClient.ServerResourcesForGroupVersion(viewv1a1.GroupVersion("test").String())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resources).NotTo(BeNil())
-			Expect(resources.GroupVersion).To(Equal(viewv1a1.GroupVersion.String()))
+			Expect(resources.GroupVersion).To(Equal(viewv1a1.GroupVersion("test").String()))
 			Expect(len(resources.APIResources)).To(BeNumerically(">", 0))
 		})
 

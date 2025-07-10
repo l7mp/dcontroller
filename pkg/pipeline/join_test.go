@@ -13,7 +13,7 @@ var _ = Describe("Joins", func() {
 	var dep1, dep2, pod1, pod2, pod3, rs1, rs2 object.Object
 
 	BeforeEach(func() {
-		pod1 = object.NewViewObject("pod")
+		pod1 = object.NewViewObject("test", "pod")
 		object.SetContent(pod1, map[string]any{
 			"spec": map[string]any{
 				"image":  "image1",
@@ -23,7 +23,7 @@ var _ = Describe("Joins", func() {
 		object.SetName(pod1, "default", "pod1")
 		pod1.SetLabels(map[string]string{"app": "app1"})
 
-		pod2 = object.NewViewObject("pod")
+		pod2 = object.NewViewObject("test", "pod")
 		object.SetContent(pod2, map[string]any{
 			"spec": map[string]any{
 				"image":  "image2",
@@ -33,7 +33,7 @@ var _ = Describe("Joins", func() {
 		object.SetName(pod2, "other", "pod2")
 		pod2.SetLabels(map[string]string{"app": "app2"})
 
-		pod3 = object.NewViewObject("pod")
+		pod3 = object.NewViewObject("test", "pod")
 		object.SetContent(pod3, map[string]any{
 			"spec": map[string]any{
 				"image":  "image1",
@@ -43,7 +43,7 @@ var _ = Describe("Joins", func() {
 		object.SetName(pod3, "default", "pod3")
 		pod3.SetLabels(map[string]string{"app": "app1"})
 
-		dep1 = object.NewViewObject("dep")
+		dep1 = object.NewViewObject("test", "dep")
 		object.SetContent(dep1, map[string]any{
 			"spec": map[string]any{
 				"replicas": int64(3),
@@ -52,7 +52,7 @@ var _ = Describe("Joins", func() {
 		object.SetName(dep1, "default", "dep1")
 		dep1.SetLabels(map[string]string{"app": "app1"})
 
-		dep2 = object.NewViewObject("dep")
+		dep2 = object.NewViewObject("test", "dep")
 		object.SetContent(dep2, map[string]any{
 			"spec": map[string]any{
 				"replicas": int64(1),
@@ -61,7 +61,7 @@ var _ = Describe("Joins", func() {
 		object.SetName(dep2, "default", "dep2")
 		dep2.SetLabels(map[string]string{"app": "app2"})
 
-		rs1 = object.NewViewObject("rs")
+		rs1 = object.NewViewObject("test", "rs")
 		object.SetContent(rs1, map[string]any{
 			"spec": map[string]any{
 				"dep": "dep1",
@@ -70,7 +70,7 @@ var _ = Describe("Joins", func() {
 		object.SetName(rs1, "default", "rs1")
 		rs1.SetLabels(map[string]string{"app": "app1"})
 
-		rs2 = object.NewViewObject("rs")
+		rs2 = object.NewViewObject("test", "rs")
 		object.SetContent(rs2, map[string]any{
 			"spec": map[string]any{
 				"dep": "dep2",

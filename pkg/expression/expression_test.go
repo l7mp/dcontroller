@@ -38,7 +38,7 @@ var _ = Describe("Expressions", func() {
 	var obj1, obj2 object.Object
 
 	BeforeEach(func() {
-		obj1 = object.NewViewObject("testview1")
+		obj1 = object.NewViewObject("test", "testview1")
 		object.SetContent(obj1, unstruct{
 			"spec": unstruct{
 				"a": int64(1),
@@ -48,7 +48,7 @@ var _ = Describe("Expressions", func() {
 		})
 		object.SetName(obj1, "default", "name")
 
-		obj2 = object.NewViewObject("testview2")
+		obj2 = object.NewViewObject("test", "testview2")
 		object.SetContent(obj2, unstruct{
 			"metadata": unstruct{
 				"namespace": "default2",

@@ -142,7 +142,7 @@ func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, view string) ([]o
 		metaMap["name"] = nameStr
 
 		// encapsulate in an object
-		obj := object.NewViewObject(view)
+		obj := object.NewViewObject(p.operator, view)
 		object.SetContent(obj, doc)
 		// still needed
 		obj.SetName(nameStr)
