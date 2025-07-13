@@ -149,5 +149,11 @@ func (s *APIServer) initGVKs() error {
 		}
 	}
 
-	return s.registerGroupGVKs(groupGVKs)
+	for group, gvkList := range groupGVKs {
+		if err := s.RegisterAPIGroup(group, gvkList); err != nil {
+			return fmt.Errorf("failed to register API group %s: %w", group, err)
+		}
+	}
+
+	return nil
 }

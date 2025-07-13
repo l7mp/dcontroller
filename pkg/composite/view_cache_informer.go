@@ -65,12 +65,33 @@ func (c *ViewCacheInformer) AddEventHandler(handler toolscache.ResourceEventHand
 	c.log.V(4).Info("registering event handler: sending initial object list", "handler-id", id,
 		"cache-size", len(c.cache.List()))
 
+	// Send initial events to the newly registered handler
 	for _, item := range c.cache.List() {
 		obj, ok := item.(object.Object)
 		if !ok {
 			return nil, apierrors.NewInternalError(errors.New("cache must store object.Objects only"))
 		}
-		c.TriggerEvent(toolscache.Added, nil, obj, true)
+
+		// Apply transform if needed (same logic as TriggerEvent)
+		newObj := obj
+		if c.transform != nil {
+			newObj = object.DeepCopy(newObj)
+			item, err := c.transform(newObj)
+			if err != nil {
+				c.log.Error(err, "Failed to transform object during initial sync")
+				continue
+			}
+
+			var ok bool
+			newObj, ok = item.(object.Object)
+			if !ok {
+				c.log.Info("transform must produce an object.Object during initial sync")
+				continue
+			}
+		}
+
+		// Send to the newly registered handler
+		handler.OnAdd(object.DeepCopy(newObj), true)
 	}
 
 	return &he, nil

@@ -29,6 +29,7 @@ type ProcessorFunc func(ctx context.Context, c *Controller, req reconciler.Reque
 type Options struct {
 	// Processor allows to override the default request processor of the controller.
 	Processor ProcessorFunc
+
 	// ErrorChannel is a channel to receive errors from the controller.
 	ErrorChan chan error
 }
@@ -179,6 +180,25 @@ func (c *Controller) SetPipeline(pipeline pipeline.Evaluator) { c.pipeline = pip
 
 // ReportErrors returns a short report on the error stack of the controller.
 func (c *Controller) ReportErrors() []string { return c.Report() }
+
+// GetGVKs returns the GVKs of the views registered with the controller.
+func (c *Controller) GetGVKs() []schema.GroupVersionKind {
+	gvks := []schema.GroupVersionKind{}
+	if c.target != nil {
+		gvk, err := c.target.GetGVK()
+		if err == nil {
+			gvks = append(gvks, gvk)
+		}
+	}
+	for _, src := range c.sources {
+		gvk, err := src.GetGVK()
+		if err == nil {
+			gvks = append(gvks, gvk)
+		}
+
+	}
+	return gvks
+}
 
 // Start starts running the controller. The Start function blocks until the context is closed or an
 // error occurs, and it will stop running when the context is closed.

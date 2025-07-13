@@ -155,7 +155,7 @@ func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, view string) ([]o
 }
 
 // Reconcile processes a delta set containing only unrdered(!) add/delete ops into a proper
-// ordered(!) upsert/delete delta list.
+// ordered(!) delete/upsert delta list.
 //
 // DBSP outputs onordered zsets so there is no way to know for documents that map to the same
 // primary key whether an add or a delete comes first, and the two orders yield different
@@ -163,13 +163,13 @@ func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, view string) ([]o
 // state of the target view and we take the (doc->+/-1) pairs in any order from the zset result
 // set. The rules are as follows:
 //
-// - for additions (doc->+1), we extract the primary key from doc and immediately upsert doc into
-// the cache with that key and add the upsert delta to our result set, possibly overwriting any
-// previous delta for the same key
+// - for additions (doc->+1), we extract the primary key from doc and immediately upsert the doc
+// into the cache with that key and add the upsert delta to our result set, possibly overwriting
+// any previous delta for the same key
 //
 // - for deletions (doc->-1), we again extract the primary key from doc and first we fetch the
-// current entry doc' from the cache and check if doc==doc'. If there is no entry in the cache for
-// the key or the latest state equals the doc to be deleted, we add the delete to the cache and the
+// current entry from the cache and check if doc==doc. If there is no entry in the cache for the
+// key or the latest state equals the doc to be deleted, we add the delete to the cache and the
 // result delta, otherwise we drop the delete event and move on.
 func (p *Pipeline) Reconcile(ds []object.Delta) ([]object.Delta, error) {
 	deltaCache := map[string]object.Delta{}

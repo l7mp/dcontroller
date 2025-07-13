@@ -9,7 +9,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apiserverrest "k8s.io/apiserver/pkg/registry/rest"
 	genericapiserver "k8s.io/apiserver/pkg/server"
-	// metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
+
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 )
 
 type GroupGVKs = map[string]map[schema.GroupVersionKind]bool
@@ -24,11 +25,17 @@ func (s *APIServer) RegisterGVKs(gvks []schema.GroupVersionKind) error {
 		groupGVKs[gvk.Group] = append(groupGVKs[gvk.Group], gvk)
 	}
 
-	return s.registerGroupGVKs(groupGVKs)
+	for group, gvkList := range groupGVKs {
+		if err := s.RegisterAPIGroup(group, gvkList); err != nil {
+			return fmt.Errorf("failed to register API group %s: %w", group, err)
+		}
+	}
+
+	return nil
 }
 
-// UnRegisterGVKs unregisters a set of GVks.
-func (s *APIServer) UnRegisterGVKs(gvks []schema.GroupVersionKind) {
+// UnregisterGVKs unregisters a set of GVks.
+func (s *APIServer) UnregisterGVKs(gvks []schema.GroupVersionKind) {
 	// Group GVKs by Group for API group registration
 	groups := make(map[string]bool)
 	for _, gvk := range gvks {
@@ -45,12 +52,16 @@ func (s *APIServer) RegisterAPIGroup(group string, gvks []schema.GroupVersionKin
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Ignore native Kubernetes API resources
+	if !viewv1a1.IsViewGroup(group) {
+		return nil
+	}
+
 	// Err if group is already registered
 	if _, ok := s.groupGVKs[group]; ok {
 		return fmt.Errorf("API group %s already registered", group)
 	}
 
-	// Add new types to scheme
 	if err := s.addTypesToScheme(gvks); err != nil {
 		return fmt.Errorf("failed to add types to scheme: %w", err)
 	}
@@ -78,6 +89,8 @@ func (s *APIServer) RegisterAPIGroup(group string, gvks []schema.GroupVersionKin
 	// Invalidate OpenAPI caches
 	s.cachedOpenAPIDefs = nil
 	s.cachedOpenAPIV3Defs = nil
+
+	s.log.V(1).Info("API group registered", "group", group, "GVKs", len(gvks))
 
 	return nil
 }
@@ -107,27 +120,6 @@ func (s *APIServer) UnregisterAPIGroup(group string) {
 	s.cachedOpenAPIV3Defs = nil
 
 	s.log.V(1).Info("API group unregistered", "group", group)
-}
-
-func (s *APIServer) registerGroupGVKs(groupGVKs map[string][]schema.GroupVersionKind) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Check if any of the groups have already been registered
-	for group, _ := range groupGVKs {
-		if _, ok := s.groupGVKs[group]; ok {
-			return fmt.Errorf("API group %s already registered", group)
-		}
-	}
-
-	// Register each API group
-	for group, gvkList := range groupGVKs {
-		if err := s.registerAPIGroup(group, gvkList); err != nil {
-			return fmt.Errorf("failed to register API group %s: %w", group, err)
-		}
-	}
-
-	return nil
 }
 
 // registerAPIGroup registers a single API group with its resources
@@ -160,7 +152,7 @@ func (s *APIServer) registerAPIGroup(group string, gvks []schema.GroupVersionKin
 
 			// Create storage for this specific GVK
 			restOptionsGetter := &RESTOptionsGetter{}
-			storageProvider := NewClientDelegatedStorage(s.delegatingClient, resource, s.log)
+			storageProvider := NewClientDelegatedStorage(s.delegatingClient, s.delegatingCache, resource, s.log)
 			storage, err := storageProvider(s.scheme, restOptionsGetter)
 			if err != nil {
 				return fmt.Errorf("failed to create delegaing storage for %s: %w", gvk.String(), err)

@@ -407,21 +407,55 @@ func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...c
 		return nil, err
 	}
 
+	// Extract selectors from options (same logic as List method)
+	var labelSelector labels.Selector
+	var fieldSelector fields.Selector
+	var namespace string
+
+	for _, opt := range opts {
+		switch o := opt.(type) {
+		case client.MatchingLabelsSelector:
+			labelSelector = o.Selector
+		case client.MatchingLabels:
+			set := (map[string]string)(o)
+			labelSelector = labels.SelectorFromSet(set)
+		case client.MatchingFields:
+			set := (fields.Set)(o)
+			fieldSelector = fields.SelectorFromSet(set)
+		case client.MatchingFieldsSelector:
+			fieldSelector = o.Selector
+		case client.InNamespace:
+			namespace = string(o)
+		}
+	}
+
 	watcher := &ViewCacheWatcher{
-		eventChan: make(chan watch.Event, DefaultWatchChannelBuffer),
-		stopCh:    make(chan struct{}),
-		logger:    c.logger,
+		eventChan:     make(chan watch.Event, DefaultWatchChannelBuffer),
+		stopCh:        make(chan struct{}),
+		labelSelector: labelSelector,
+		fieldSelector: fieldSelector,
+		namespace:     namespace,
+		logger:        c.logger,
 	}
 
 	handler := toolscache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			watcher.sendEvent(watch.Added, obj)
+			if watcher.shouldIncludeObject(obj) {
+				watcher.sendEvent(watch.Added, obj)
+			}
 		},
 		UpdateFunc: func(oldObj, newObj any) {
-			watcher.sendEvent(watch.Modified, newObj)
+			// Check if object matches selectors after update
+			if watcher.shouldIncludeObject(newObj) {
+				watcher.sendEvent(watch.Modified, newObj)
+			}
 		},
 		DeleteFunc: func(obj any) {
-			watcher.sendEvent(watch.Deleted, obj)
+			// For delete events, we should send the event if the object
+			// was previously visible (matched selectors before deletion)
+			if watcher.shouldIncludeObject(obj) {
+				watcher.sendEvent(watch.Deleted, obj)
+			}
 		},
 	}
 
@@ -469,7 +503,58 @@ type ViewCacheWatcher struct {
 	stopCh    chan struct{}
 	mutex     sync.Mutex
 	stopped   bool
-	logger    logr.Logger
+
+	labelSelector labels.Selector
+	fieldSelector fields.Selector
+	namespace     string
+
+	logger logr.Logger
+}
+
+// shouldIncludeObject determines if an object should be included based on selectors
+func (w *ViewCacheWatcher) shouldIncludeObject(o any) bool {
+	obj, ok := o.(object.Object)
+	if !ok {
+		w.logger.V(4).Info("watch: ignoring non-object.Object")
+		return false
+	}
+
+	// Apply namespace filter
+	if w.namespace != "" && obj.GetNamespace() != w.namespace {
+		return false
+	}
+
+	// Apply label selector
+	if w.labelSelector != nil && !w.labelSelector.Matches(labels.Set(obj.GetLabels())) {
+		return false
+	}
+
+	// Apply field selector
+	if w.fieldSelector != nil && !w.matchesFieldSelector(obj, w.fieldSelector) {
+		return false
+	}
+
+	return true
+}
+
+// matchesFieldSelector checks if object matches field selector (reuse logic from List method)
+func (w *ViewCacheWatcher) matchesFieldSelector(obj object.Object, selector fields.Selector) bool {
+	fieldSet := fields.Set{}
+
+	// Always include standard metadata fields
+	fieldSet["metadata.name"] = obj.GetName()
+	fieldSet["metadata.namespace"] = obj.GetNamespace()
+
+	// Add some domain-specific fields
+	if status, found, _ := unstructured.NestedString(obj.Object, "status", "phase"); found {
+		fieldSet["status.phase"] = status
+	}
+
+	if ready, found, _ := unstructured.NestedBool(obj.Object, "status", "ready"); found {
+		fieldSet["status.ready"] = fmt.Sprintf("%t", ready)
+	}
+
+	return selector.Matches(fieldSet)
 }
 
 func (w *ViewCacheWatcher) sendEvent(eventType watch.EventType, o any) {

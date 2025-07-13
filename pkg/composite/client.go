@@ -20,10 +20,10 @@ import (
 var _ client.Client = &CompositeClient{}
 
 type CompositeClient struct {
+	client.Client
 	compositeCache  *CompositeCache // cache client: must be set up after the client has been created!
 	discoveryClient *ViewDiscovery
 	log             logr.Logger
-	client.Client
 }
 
 // NewCompositeClient creates a composite client: views are served through the viewcache, native

@@ -29,6 +29,7 @@ type APIServer struct {
 	insecureListener net.Listener
 	insecureServer   *http.Server
 	delegatingClient client.Client
+	delegatingCache  *composite.ViewCache // for implementing Watch
 	discoveryClient  composite.ViewDiscoveryInterface
 	scheme           *runtime.Scheme
 	codecs           runtime.NegotiatedSerializer
@@ -50,24 +51,30 @@ type APIServer struct {
 // discovery client) that will serve resource requests and the REST config for API discovery (if
 // any). If no address/port is given in the config the API server listens on the localhost:18443.
 func NewAPIServer(mgr manager.Manager, config Config) (*APIServer, error) {
+	if mgr == nil {
+		return nil, errors.New("manager: required argument")
+	}
+
 	log := mgr.GetLogger()
 	if log.GetSink() == nil {
 		log = logr.Discard()
 	}
 	log = log.WithName("apiserver")
 
-	if mgr == nil {
-		return nil, errors.New("manager: required argument")
-	}
-
 	discoveryClient := config.DiscoveryClient
 	if discoveryClient != nil {
 		discoveryClient = composite.NewViewDiscovery()
 	}
 
+	cache, ok := mgr.GetCache().(*composite.CompositeCache)
+	if !ok {
+		return nil, fmt.Errorf("expected a delta-controller manager, got %T", mgr)
+	}
+
 	s := &APIServer{
 		config:           config,
 		delegatingClient: mgr.GetClient(),
+		delegatingCache:  cache.GetViewCache(),
 		discoveryClient:  discoveryClient,
 		groupGVKs:        make(GroupGVKs),
 		log:              log,

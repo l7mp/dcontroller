@@ -17,6 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/discovery"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -102,6 +104,7 @@ var _ = Describe("APIServerUnitTest", func() {
 			// Start server in goroutine
 			errChan := make(chan error, 1)
 			go func() {
+				defer GinkgoRecover()
 				defer close(errChan)
 				errChan <- server.Start(ctx)
 			}()
@@ -543,6 +546,57 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(len(list.Items)).To(Equal(0))
 		})
 
+		It("should allow an API server discovery client to be created and queried", func() {
+			// Create a discovery client
+			discoveryClient, err := discovery.NewDiscoveryClientForConfig(&rest.Config{
+				Host: fmt.Sprintf("http://localhost:%d", port),
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Get OpenAPI V2 spec: wait until the server starts
+			Eventually(func() bool {
+				openAPISchema, err := discoveryClient.OpenAPISchema()
+				return err == nil && openAPISchema != nil
+			}, time.Second).Should(BeTrue())
+
+			// Get all API groups and resources
+			apiGroups, apiResourceLists, err := discoveryClient.ServerGroupsAndResources()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(apiGroups).To(HaveLen(1))
+			Expect(apiGroups[0].Name).To(Equal(viewv1a1.Group("test")))
+			Expect(apiGroups[0].PreferredVersion.Version).To(Equal("v1alpha1"))
+			Expect(apiGroups[0].Versions).To(HaveLen(1))
+
+			Expect(apiResourceLists).To(HaveLen(1))
+			resourceList := apiResourceLists[0]
+			Expect(resourceList.GroupVersion).To(Equal(schema.GroupVersion{
+				Group:   viewv1a1.Group("test"),
+				Version: viewv1a1.Version,
+			}.String()))
+
+			Expect(resourceList.APIResources).To(HaveLen(2))
+
+			resource := resourceList.APIResources[0]
+			if resource.Name != "testview" {
+				resource = resourceList.APIResources[1]
+			}
+			Expect(resource.Kind).To(Equal("TestView"))
+			Expect(resource.Name).To(Equal("testview"))
+			Expect(resource.SingularName).To(Equal("testview"))
+			Expect(resource.Namespaced).To(BeTrue())
+			Expect(resource.Verbs).NotTo(BeEmpty())
+
+			resource = resourceList.APIResources[1]
+			if resource.Name != "testview2" {
+				resource = resourceList.APIResources[0]
+			}
+			Expect(resource.Kind).To(Equal("TestView2"))
+			Expect(resource.Name).To(Equal("testview2"))
+			Expect(resource.SingularName).To(Equal("testview2"))
+			Expect(resource.Namespaced).To(BeTrue())
+			Expect(resource.Verbs).NotTo(BeEmpty())
+		})
+
 		It("should handle 404 for non-existent view resources", func() {
 			_, err := dynamicClient.Resource(viewGVR).
 				Namespace("default").
@@ -567,6 +621,461 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(err).To(HaveOccurred())
 			// Should be a 404 error
 			Expect(err.Error()).To(ContainSubstring("could not find"))
+		})
+
+		// Add these tests to pkg/apiserver/apiserver_test.go
+
+		Describe("Watch Operations", func() {
+			var viewGVR = viewv1a1.GroupVersion("test").WithResource("testview")
+
+			It("should create a watcher successfully", func() {
+				watcher, err := dynamicClient.Resource(viewGVR).
+					Namespace("default").
+					Watch(context.TODO(), metav1.ListOptions{})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(watcher).NotTo(BeNil())
+				defer watcher.Stop()
+
+				// Verify the watcher has a result channel
+				resultChan := watcher.ResultChan()
+				Expect(resultChan).NotTo(BeNil())
+			})
+
+			It("should receive watch events for existing objects", func() {
+				watcher, err := dynamicClient.Resource(viewGVR).
+					Namespace("default").
+					Watch(context.TODO(), metav1.ListOptions{})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(watcher).NotTo(BeNil())
+				defer watcher.Stop()
+
+				// Should get an Added event for the existing object
+				select {
+				case event := <-watcher.ResultChan():
+					Expect(event.Type).To(Equal(watch.Added))
+					Expect(event.Object).NotTo(BeNil())
+
+					obj := event.Object.(*unstructured.Unstructured)
+					Expect(obj.GetName()).To(Equal("test-view"))
+					Expect(obj.GetNamespace()).To(Equal("default"))
+					Expect(obj.GetKind()).To(Equal("TestView"))
+				case <-time.After(time.Second * 2):
+					Fail("Expected to receive watch event within 2 seconds")
+				}
+			})
+
+			It("should receive watch events for created objects", func() {
+				watcher, err := dynamicClient.Resource(viewGVR).
+					Namespace("default").
+					Watch(context.TODO(), metav1.ListOptions{})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(watcher).NotTo(BeNil())
+				defer watcher.Stop()
+
+				// Skip the initial Added event for existing object
+				select {
+				case <-watcher.ResultChan():
+					// Consume the initial event
+				case <-time.After(time.Second):
+					// No initial event, which is also acceptable
+				}
+
+				// Create a new object
+				newView := &unstructured.Unstructured{
+					Object: map[string]any{
+						"apiVersion": viewv1a1.GroupVersion("test").String(),
+						"kind":       "TestView",
+						"metadata": map[string]any{
+							"name":      "new-watch-view",
+							"namespace": "default",
+						},
+						"spec": map[string]any{
+							"data": map[string]any{
+								"watchkey": "watchvalue",
+							},
+						},
+					},
+				}
+
+				// Create the object
+				go func() {
+					time.Sleep(100 * time.Millisecond)
+					_, err := dynamicClient.Resource(viewGVR).
+						Namespace("default").
+						Create(context.TODO(), newView, metav1.CreateOptions{})
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				// Should receive an Added event
+				select {
+				case event := <-watcher.ResultChan():
+					Expect(event.Type).To(Equal(watch.Added))
+					Expect(event.Object).NotTo(BeNil())
+
+					obj := event.Object.(*unstructured.Unstructured)
+					Expect(obj.GetName()).To(Equal("new-watch-view"))
+					Expect(obj.GetNamespace()).To(Equal("default"))
+					Expect(obj.GetKind()).To(Equal("TestView"))
+				case <-time.After(time.Second * 3):
+					Fail("Expected to receive watch event for created object within 3 seconds")
+				}
+			})
+
+			It("should receive watch events for updated objects", func() {
+				// First create an object to update
+				updateView := &unstructured.Unstructured{
+					Object: map[string]any{
+						"apiVersion": viewv1a1.GroupVersion("test").String(),
+						"kind":       "TestView",
+						"metadata": map[string]any{
+							"name":      "update-watch-view",
+							"namespace": "default",
+						},
+						"spec": map[string]any{
+							"data": map[string]any{
+								"originalkey": "originalvalue",
+							},
+						},
+					},
+				}
+
+				created, err := dynamicClient.Resource(viewGVR).
+					Namespace("default").
+					Create(context.TODO(), updateView, metav1.CreateOptions{})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Start watching after object creation
+				watcher, err := dynamicClient.Resource(viewGVR).
+					Namespace("default").
+					Watch(context.TODO(), metav1.ListOptions{})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(watcher).NotTo(BeNil())
+				defer watcher.Stop()
+
+				// Skip any initial events
+				timeout := time.NewTimer(200 * time.Millisecond)
+				done := false
+				for !done {
+					select {
+					case <-watcher.ResultChan():
+						continue // Skip initial events
+					case <-timeout.C:
+						done = true
+					}
+				}
+
+				// Update the object
+				err = unstructured.SetNestedField(created.Object, "updatedvalue", "spec", "data", "originalkey")
+				Expect(err).NotTo(HaveOccurred())
+
+				go func() {
+					time.Sleep(100 * time.Millisecond)
+					_, err := dynamicClient.Resource(viewGVR).
+						Namespace("default").
+						Update(context.TODO(), created, metav1.UpdateOptions{})
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				// Should receive a Modified event
+				select {
+				case event := <-watcher.ResultChan():
+					Expect(event.Type).To(Equal(watch.Modified))
+					Expect(event.Object).NotTo(BeNil())
+
+					obj := event.Object.(*unstructured.Unstructured)
+					Expect(obj.GetName()).To(Equal("update-watch-view"))
+
+					value, found, err := unstructured.NestedString(obj.Object, "spec", "data", "originalkey")
+					Expect(err).NotTo(HaveOccurred())
+					Expect(found).To(BeTrue())
+					Expect(value).To(Equal("updatedvalue"))
+				case <-time.After(time.Second * 3):
+					Fail("Expected to receive watch event for updated object within 3 seconds")
+				}
+			})
+
+			It("should receive watch events for deleted objects", func() {
+				// First create an object to delete
+				deleteView := &unstructured.Unstructured{
+					Object: map[string]any{
+						"apiVersion": viewv1a1.GroupVersion("test").String(),
+						"kind":       "TestView",
+						"metadata": map[string]any{
+							"name":      "delete-watch-view",
+							"namespace": "default",
+						},
+						"spec": map[string]any{
+							"data": map[string]any{
+								"deletekey": "deletevalue",
+							},
+						},
+					},
+				}
+
+				_, err := dynamicClient.Resource(viewGVR).
+					Namespace("default").
+					Create(context.TODO(), deleteView, metav1.CreateOptions{})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Start watching after object creation
+				watcher, err := dynamicClient.Resource(viewGVR).
+					Namespace("default").
+					Watch(context.TODO(), metav1.ListOptions{})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(watcher).NotTo(BeNil())
+				defer watcher.Stop()
+
+				// Skip any initial events
+				timeout := time.NewTimer(500 * time.Millisecond)
+				done := false
+				for !done {
+					select {
+					case <-watcher.ResultChan():
+						continue // Skip initial events
+					case <-timeout.C:
+						done = true
+					}
+				}
+
+				// Delete the object
+				go func() {
+					time.Sleep(100 * time.Millisecond)
+					err := dynamicClient.Resource(viewGVR).
+						Namespace("default").
+						Delete(context.TODO(), "delete-watch-view", metav1.DeleteOptions{})
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				// Should receive a Deleted event
+				select {
+				case event := <-watcher.ResultChan():
+					Expect(event.Type).To(Equal(watch.Deleted))
+					Expect(event.Object).NotTo(BeNil())
+
+					obj := event.Object.(*unstructured.Unstructured)
+					Expect(obj.GetName()).To(Equal("delete-watch-view"))
+				case <-time.After(time.Second * 3):
+					Fail("Expected to receive watch event for deleted object within 3 seconds")
+				}
+			})
+
+			It("should support namespace-scoped watching", func() {
+				// Create objects in different namespaces
+				view1 := &unstructured.Unstructured{
+					Object: map[string]any{
+						"apiVersion": viewv1a1.GroupVersion("test").String(),
+						"kind":       "TestView",
+						"metadata": map[string]any{
+							"name":      "ns-watch-view-1",
+							"namespace": "default",
+						},
+						"spec": map[string]any{"data": "ns1"},
+					},
+				}
+
+				view2 := &unstructured.Unstructured{
+					Object: map[string]any{
+						"apiVersion": viewv1a1.GroupVersion("test").String(),
+						"kind":       "TestView",
+						"metadata": map[string]any{
+							"name":      "ns-watch-view-2",
+							"namespace": "kube-system",
+						},
+						"spec": map[string]any{"data": "ns2"},
+					},
+				}
+
+				// Watch only default namespace
+				watcher, err := dynamicClient.Resource(viewGVR).
+					Namespace("default").
+					Watch(context.TODO(), metav1.ListOptions{})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(watcher).NotTo(BeNil())
+				defer watcher.Stop()
+
+				// Clear any existing events
+				timeout := time.NewTimer(500 * time.Millisecond)
+				done := false
+				for !done {
+					select {
+					case <-watcher.ResultChan():
+						continue
+					case <-timeout.C:
+						done = true
+					}
+				}
+
+				// Create both objects
+				go func() {
+					time.Sleep(100 * time.Millisecond)
+					_, err := dynamicClient.Resource(viewGVR).
+						Namespace("default").
+						Create(context.TODO(), view1, metav1.CreateOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					_, err = dynamicClient.Resource(viewGVR).
+						Namespace("kube-system").
+						Create(context.TODO(), view2, metav1.CreateOptions{})
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				// Should only receive event for the object in the watched namespace
+				receivedEvents := 0
+				eventTimeout := time.After(time.Second * 2)
+
+				done = false
+				for receivedEvents < 1 && !done {
+					select {
+					case event := <-watcher.ResultChan():
+						receivedEvents++
+						Expect(event.Type).To(Equal(watch.Added))
+
+						obj := event.Object.(*unstructured.Unstructured)
+						Expect(obj.GetNamespace()).To(Equal("default"))
+						Expect(obj.GetName()).To(Equal("ns-watch-view-1"))
+					case <-eventTimeout:
+						if receivedEvents == 0 {
+							Fail("Expected at least one watch event")
+						}
+						done = true
+					}
+				}
+
+				// Should not receive events for objects in other namespaces
+				select {
+				case event := <-watcher.ResultChan():
+					obj := event.Object.(*unstructured.Unstructured)
+					Fail(fmt.Sprintf("Unexpected event for object in namespace %s", obj.GetNamespace()))
+				case <-time.After(200 * time.Millisecond):
+					// Good - no unexpected events
+				}
+			})
+
+			It("should support label selector watching", func() {
+				// Create objects with different labels
+				labeledView := &unstructured.Unstructured{
+					Object: map[string]any{
+						"apiVersion": viewv1a1.GroupVersion("test").String(),
+						"kind":       "TestView",
+						"metadata": map[string]any{
+							"name":      "labeled-view",
+							"namespace": "default",
+							"labels": map[string]any{
+								"app":     "test-app",
+								"version": "v1",
+							},
+						},
+						"spec": map[string]any{"data": "labeled"},
+					},
+				}
+
+				unlabeledView := &unstructured.Unstructured{
+					Object: map[string]any{
+						"apiVersion": viewv1a1.GroupVersion("test").String(),
+						"kind":       "TestView",
+						"metadata": map[string]any{
+							"name":      "unlabeled-view",
+							"namespace": "default",
+						},
+						"spec": map[string]any{"data": "unlabeled"},
+					},
+				}
+
+				// Watch with label selector
+				watcher, err := dynamicClient.Resource(viewGVR).
+					Namespace("default").
+					Watch(context.TODO(), metav1.ListOptions{
+						LabelSelector: "app=test-app",
+					})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(watcher).NotTo(BeNil())
+				defer watcher.Stop()
+
+				// Clear any existing events
+				timeout := time.NewTimer(500 * time.Millisecond)
+				done := false
+				for !done {
+					select {
+					case <-watcher.ResultChan():
+						continue
+					case <-timeout.C:
+						done = true
+					}
+				}
+
+				// Create both objects
+				go func() {
+					time.Sleep(100 * time.Millisecond)
+					_, err := dynamicClient.Resource(viewGVR).
+						Namespace("default").
+						Create(context.TODO(), labeledView, metav1.CreateOptions{})
+					Expect(err).NotTo(HaveOccurred())
+
+					_, err = dynamicClient.Resource(viewGVR).
+						Namespace("default").
+						Create(context.TODO(), unlabeledView, metav1.CreateOptions{})
+					Expect(err).NotTo(HaveOccurred())
+				}()
+
+				// Should only receive event for the labeled object
+				select {
+				case event := <-watcher.ResultChan():
+					Expect(event.Type).To(Equal(watch.Added))
+
+					obj := event.Object.(*unstructured.Unstructured)
+					Expect(obj.GetName()).To(Equal("labeled-view"))
+
+					labels := obj.GetLabels()
+					Expect(labels).To(HaveKeyWithValue("app", "test-app"))
+					Expect(labels).To(HaveKeyWithValue("version", "v1"))
+				case <-time.After(time.Second * 2):
+					Fail("Expected to receive watch event for labeled object")
+				}
+
+				// Should not receive events for unlabeled objects
+				select {
+				case event := <-watcher.ResultChan():
+					obj := event.Object.(*unstructured.Unstructured)
+					Fail(fmt.Sprintf("Unexpected event for unlabeled object %s", obj.GetName()))
+				case <-time.After(500 * time.Millisecond):
+					// Good - no unexpected events
+				}
+			})
+
+			It("should handle watch context cancellation gracefully", func() {
+				ctx, cancel := context.WithCancel(context.Background())
+
+				watcher, err := dynamicClient.Resource(viewGVR).
+					Namespace("default").
+					Watch(ctx, metav1.ListOptions{})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(watcher).NotTo(BeNil())
+
+				// Cancel the context
+				cancel()
+
+				// Watcher should be stopped
+				select {
+				case _, ok := <-watcher.ResultChan():
+					if ok {
+						// Channel should be closed when context is cancelled
+						Eventually(func() bool {
+							_, ok := <-watcher.ResultChan()
+							return !ok
+						}, time.Second).Should(BeTrue())
+					}
+				case <-time.After(time.Second):
+					// Acceptable - watcher might not send anything on cancellation
+				}
+			})
 		})
 	})
 

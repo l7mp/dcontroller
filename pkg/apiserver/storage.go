@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,6 +52,7 @@ func (r *RESTOptionsGetter) GetRESTOptions(resource schema.GroupResource, exampl
 // to a controller-runtime client
 type ClientDelegatedStorage struct {
 	delegatingClient      client.Client
+	delegatingCache       *composite.ViewCache
 	gvk                   schema.GroupVersionKind
 	gvr                   schema.GroupVersionResource
 	namespaced, hasStatus bool
@@ -58,7 +60,7 @@ type ClientDelegatedStorage struct {
 }
 
 // NewClientDelegatedStorage creates a new storage provider that delegates to controller-runtime client
-func NewClientDelegatedStorage(client client.Client, resource *Resource, log logr.Logger) StorageProvider {
+func NewClientDelegatedStorage(client client.Client, cache *composite.ViewCache, resource *Resource, log logr.Logger) StorageProvider {
 	return func(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (rest.Storage, error) {
 		gvr := schema.GroupVersionResource{
 			Group:    resource.APIResource.Group,
@@ -67,6 +69,7 @@ func NewClientDelegatedStorage(client client.Client, resource *Resource, log log
 		}
 		storage := &ClientDelegatedStorage{
 			delegatingClient: client,
+			delegatingCache:  cache,
 			gvk:              resource.GVK,
 			gvr:              gvr,
 			namespaced:       resource.APIResource.Namespaced,
@@ -346,10 +349,44 @@ func (s *ClientDelegatedStorage) DeleteCollection(ctx context.Context, deleteVal
 func (s *ClientDelegatedStorage) Watch(ctx context.Context, options *metainternalversion.ListOptions) (watch.Interface, error) {
 	s.log.V(4).Info("WATCH", "GVR", s.gvr.String())
 
-	// This is a complex implementation that would require setting up
-	// controller-runtime watches and converting them to apiserver watch events
-	// For now, return an error indicating watch is not supported
-	return nil, errors.NewMethodNotSupported(s.gvr.GroupResource(), "watch")
+	// Create an empty list object for the watch
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   s.gvk.Group,
+		Version: s.gvk.Version,
+		Kind:    s.gvk.Kind + "List",
+	})
+
+	// Convert list options to client options
+	listOpts := []client.ListOption{}
+
+	// Handle namespace filtering for namespaced resources
+	if s.NamespaceScoped() {
+		if ns, ok := genericapirequest.NamespaceFrom(ctx); ok && ns != metav1.NamespaceAll {
+			listOpts = append(listOpts, client.InNamespace(ns))
+		}
+	}
+
+	// Handle label selector
+	if options != nil && options.LabelSelector != nil {
+		listOpts = append(listOpts, client.MatchingLabelsSelector{Selector: options.LabelSelector})
+	}
+
+	// Handle field selector
+	if options != nil && options.FieldSelector != nil {
+		listOpts = append(listOpts, client.MatchingFieldsSelector{Selector: options.FieldSelector})
+	}
+
+	// Try to get the watch from the delegating client
+	// This assumes the delegating client supports watching
+	watcher, err := s.delegatingCache.Watch(ctx, list, listOpts...)
+	if err != nil {
+		s.log.V(2).Info("failed to create watch", "error", err, "GVR", s.gvr.String())
+		return nil, errors.NewInternalError(fmt.Errorf("failed to create watch for %s: %w", s.gvr.String(), err))
+	}
+
+	s.log.V(2).Info("watch created successfully", "GVR", s.gvr.String())
+	return watcher, nil
 }
 
 // Implement rest.TableConvertor interface
