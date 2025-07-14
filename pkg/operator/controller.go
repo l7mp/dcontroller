@@ -21,6 +21,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/util"
 )
@@ -46,6 +48,7 @@ type controller struct {
 	client.Client
 	mgr         runtimeManager.Manager
 	operators   map[types.NamespacedName]*opEntry
+	clientMpx   composite.ClientMultiplexer
 	mu          sync.Mutex
 	options     runtimeManager.Options
 	ctx         context.Context
@@ -74,6 +77,7 @@ func NewController(config *rest.Config, options runtimeManager.Options) (Control
 	controller := &controller{
 		Client:    mgr.GetClient(),
 		mgr:       mgr,
+		clientMpx: composite.NewClientMultiplexer(),
 		options:   options,
 		operators: make(map[types.NamespacedName]*opEntry),
 		logger:    logger,
@@ -105,6 +109,12 @@ func NewController(config *rest.Config, options runtimeManager.Options) (Control
 }
 
 func (c *controller) GetManager() runtimeManager.Manager { return c.mgr }
+
+// GetClient returns a controller runtime client that multiplexes the all operator clients
+// associated with the operator.
+func (c *controller) GetClient() client.Client {
+	return c.clientMpx
+}
 
 func (c *controller) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	log := c.log.WithValues("operator", req.String())
@@ -177,10 +187,8 @@ func (c *controller) upsertOperator(spec *opv1a1.Operator) (*Operator, error) {
 	key := client.ObjectKeyFromObject(spec)
 	c.log.V(4).Info("upserting operator", "name", key.String())
 
-	e := c.getOperatorEntry(key)
-
 	// if this is a modification event we first remove old operator and create a new one
-	if e != nil {
+	if e := c.getOperatorEntry(key); e != nil {
 		c.deleteOperator(key)
 	}
 
@@ -188,7 +196,8 @@ func (c *controller) upsertOperator(spec *opv1a1.Operator) (*Operator, error) {
 }
 
 func (c *controller) addOperator(spec *opv1a1.Operator) (*Operator, error) {
-	c.log.V(2).Info("adding operator", "name", client.ObjectKeyFromObject(spec).String())
+	name := client.ObjectKeyFromObject(spec).String()
+	c.log.V(2).Info("adding operator", "name", name)
 
 	// disable leader-election, health-check and the metrics server on the embedded manager
 	opts := c.options // shallow copy?
@@ -217,6 +226,11 @@ func (c *controller) addOperator(spec *opv1a1.Operator) (*Operator, error) {
 	c.operators[key] = &opEntry{op: operator, errorChan: errorChan}
 	c.mu.Unlock()
 
+	// register the operator in the client multiplexer
+	if err := c.clientMpx.RegisterClient(viewv1a1.Group(name), operator.mgr.GetClient()); err != nil {
+		c.log.Error(err, "failed to register operator in the multiplex client", "operator", name)
+	}
+
 	// start the new operator if we are already running
 	if c.started {
 		c.startOp(key)
@@ -238,6 +252,11 @@ func (c *controller) deleteOperator(k types.NamespacedName) {
 	}
 
 	delete(c.operators, k)
+
+	// unregister the operator in the client multiplexer
+	if err := c.clientMpx.UnregisterClient(viewv1a1.Group(e.op.name)); err != nil {
+		c.log.Error(err, "failed to unregister operator in the multiplex client", "name", e.op.name)
+	}
 }
 
 func (c *controller) getOperatorEntry(key types.NamespacedName) *opEntry {

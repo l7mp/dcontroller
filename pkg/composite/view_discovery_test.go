@@ -121,7 +121,7 @@ var _ = Describe("ViewDiscovery", func() {
 			Expect(err).To(HaveOccurred())
 
 			// This should still fail
-			kind, err = viewDiscovery.KindFromResource("mycustomviews")
+			_, err = viewDiscovery.KindFromResource("mycustomviews")
 			Expect(err).To(HaveOccurred())
 		})
 	})

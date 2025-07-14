@@ -2,7 +2,6 @@ package apiserver
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -13,9 +12,6 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	openapicommon "k8s.io/kube-openapi/pkg/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-
-	"github.com/l7mp/dcontroller/pkg/composite"
 )
 
 // APIServer manages a Kubernetes API server with dynamic GVK registration. Currently all view
@@ -29,8 +25,6 @@ type APIServer struct {
 	insecureListener net.Listener
 	insecureServer   *http.Server
 	delegatingClient client.Client
-	delegatingCache  *composite.ViewCache // for implementing Watch
-	discoveryClient  composite.ViewDiscoveryInterface
 	scheme           *runtime.Scheme
 	codecs           runtime.NegotiatedSerializer
 
@@ -46,36 +40,17 @@ type APIServer struct {
 	log logr.Logger
 }
 
-// NewAPIServer creates a new API server instance with the provided config. The argument mgr is the
-// controller-runtime manager that is used to obtain the clients (the delegaitng client and the
-// discovery client) that will serve resource requests and the REST config for API discovery (if
-// any). If no address/port is given in the config the API server listens on the localhost:18443.
-func NewAPIServer(mgr manager.Manager, config Config) (*APIServer, error) {
-	if mgr == nil {
-		return nil, errors.New("manager: required argument")
-	}
-
-	log := mgr.GetLogger()
+// NewAPIServer creates a new API server instance with the provided config.
+func NewAPIServer(config Config) (*APIServer, error) {
+	log := config.Logger
 	if log.GetSink() == nil {
 		log = logr.Discard()
 	}
 	log = log.WithName("apiserver")
 
-	discoveryClient := config.DiscoveryClient
-	if discoveryClient != nil {
-		discoveryClient = composite.NewViewDiscovery()
-	}
-
-	cache, ok := mgr.GetCache().(*composite.CompositeCache)
-	if !ok {
-		return nil, fmt.Errorf("expected a delta-controller manager, got %T", mgr)
-	}
-
 	s := &APIServer{
 		config:           config,
-		delegatingClient: mgr.GetClient(),
-		delegatingCache:  cache.GetViewCache(),
-		discoveryClient:  discoveryClient,
+		delegatingClient: config.DelegatingClient,
 		groupGVKs:        make(GroupGVKs),
 		log:              log,
 	}

@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/rest"
 	"k8s.io/component-base/compatibility"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/l7mp/dcontroller/pkg/composite"
 )
@@ -24,14 +26,21 @@ type Config struct {
 	// UseHTTP switches the API server to insecure serving mode.
 	UseHTTP bool
 
+	// DelegatingClient allows to inject a controller runtime client into the API server that
+	// will be used by the server to serve requests.
+	DelegatingClient client.Client
+
 	// DiscoveryClient allows to inject a REST discovery client into the API server. Used
 	// mostly for testing,
 	DiscoveryClient composite.ViewDiscoveryInterface
+
+	// Logger provides a logger for the API server.
+	Logger logr.Logger
 }
 
 // NewDefaultConfig creates a RecommendedConfig with sensible defaults, either using secure serving
 // (HTTPS) and insecure serving (HTTP) that can be used for testing.
-func NewDefaultConfig(addr string, port int, insecure bool) (Config, error) {
+func NewDefaultConfig(addr string, port int, client client.Client, insecure bool, log logr.Logger) (Config, error) {
 	if addr == "" {
 		addr = "localhost"
 	}
@@ -65,5 +74,11 @@ func NewDefaultConfig(addr string, port int, insecure bool) (Config, error) {
 		RecommendedConfig: &genericapiserver.RecommendedConfig{Config: *config},
 		Addr:              bindAddr,
 		UseHTTP:           insecure,
+		DelegatingClient:  client,
+		Logger:            log,
 	}, nil
+}
+
+func (c *Config) String() string {
+	return fmt.Sprintf("{addr:%s:%s,insecure:%t}", c.Addr.Network(), c.Addr.String(), c.UseHTTP)
 }

@@ -133,9 +133,9 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 
 			suite.Log.Info("creating the API server")
 			port = rand.IntN(5000) + (32768) //nolint:gosec
-			config, err := apiserver.NewDefaultConfig("", port, true)
+			config, err := apiserver.NewDefaultConfig("", port, mgr.GetClient(), true, suite.Log)
 			Expect(err).NotTo(HaveOccurred())
-			server, err = apiserver.NewAPIServer(mgr, config)
+			server, err = apiserver.NewAPIServer(config)
 			Expect(err).NotTo(HaveOccurred())
 
 			go func() {

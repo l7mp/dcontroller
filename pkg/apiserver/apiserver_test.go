@@ -19,10 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
-	fakediscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
-	fakeclient "k8s.io/client-go/testing"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/log"
@@ -87,9 +85,9 @@ var _ = Describe("APIServerUnitTest", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		port = rand.IntN(5000) + (32768) //nolint:gosec
-		config, err := NewDefaultConfig("", port, true)
+		config, err := NewDefaultConfig("", port, mgr.GetClient(), true, logger)
 		Expect(err).NotTo(HaveOccurred())
-		server, err = NewAPIServer(mgr, config)
+		server, err = NewAPIServer(config)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -205,9 +203,9 @@ var _ = Describe("APIServerUnitTest", func() {
 
 			for _, tc := range testCases {
 				port = rand.IntN(15000) + (32768) //nolint:gosec
-				config, err := NewDefaultConfig(tc.addr, port, true)
+				config, err := NewDefaultConfig(tc.addr, port, mgr.GetClient(), true, logger)
 				Expect(err).NotTo(HaveOccurred())
-				s, err := NewAPIServer(mgr, config)
+				s, err := NewAPIServer(config)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s).NotTo(BeNil())
 			}
@@ -220,6 +218,7 @@ var _ = Describe("APIServer Integration", func() {
 		apiServer     *APIServer
 		mgr           *manager.FakeManager
 		cacheClient   client.Client
+		clientMpx     composite.ClientMultiplexer
 		serverCtx     context.Context
 		serverCancel  context.CancelFunc
 		serverAddr    string
@@ -253,20 +252,7 @@ var _ = Describe("APIServer Integration", func() {
 		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
-		// Create fake discovery client for testing with native resources
-		fakeDiscovery := &fakediscovery.FakeDiscovery{Fake: &fakeclient.Fake{}}
-		fakeDiscovery.Resources = []*metav1.APIResourceList{
-			{
-				GroupVersion: "v1",
-				APIResources: []metav1.APIResource{
-					{Name: "pods", Namespaced: true, Kind: "Pod"},
-					{Name: "configmaps", Namespaced: true, Kind: "ConfigMap"},
-				},
-			},
-		}
-		fakeViewDiscovery := composite.NewCompositeDiscoveryClient(fakeDiscovery)
-
-		// Add a view object and a native resource to the manaegr cache
+		// Add a view object and a native resource to the manager cache
 		fakeCache, ok := mgr.GetCache().(*composite.CompositeCache)
 		Expect(ok).To(BeTrue())
 		Expect(fakeCache).NotTo(BeNil())
@@ -275,6 +261,11 @@ var _ = Describe("APIServer Integration", func() {
 		podObj, err := object.NewViewObjectFromNativeObject("test", "view", pod)
 		Expect(err).NotTo(HaveOccurred())
 		err = fakeCache.GetViewCache().Add(podObj)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create the client multiplexer
+		clientMpx = composite.NewClientMultiplexer()
+		err = clientMpx.RegisterClient(viewv1a1.Group("test"), mgr.GetClient())
 		Expect(err).NotTo(HaveOccurred())
 
 		// Set API server logger
@@ -287,10 +278,9 @@ var _ = Describe("APIServer Integration", func() {
 		// Create API server at random port
 		serverAddr = "localhost"
 		port = rand.IntN(15000) + 32768 //nolint:gosec
-		config, err := NewDefaultConfig(serverAddr, port, true)
-		config.DiscoveryClient = fakeViewDiscovery
+		config, err := NewDefaultConfig(serverAddr, port, clientMpx, true, logger)
 		Expect(err).NotTo(HaveOccurred())
-		apiServer, err = NewAPIServer(mgr, config)
+		apiServer, err = NewAPIServer(config)
 		Expect(err).NotTo(HaveOccurred())
 
 		err = apiServer.RegisterAPIGroup(viewv1a1.Group("test"), []schema.GroupVersionKind{
@@ -407,10 +397,6 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(data).To(Equal("newvalue"))
-
-			// for gv, tp := range apiServer.GetScheme().AllKnownTypes() {
-			// 	fmt.Println("Registered GVK", "gv", gv, "goType", tp.String())
-			// }
 
 			// List
 			list, err := dynamicClient.Resource(viewGVR).
@@ -632,7 +618,6 @@ var _ = Describe("APIServer Integration", func() {
 				watcher, err := dynamicClient.Resource(viewGVR).
 					Namespace("default").
 					Watch(context.TODO(), metav1.ListOptions{})
-
 				Expect(err).NotTo(HaveOccurred())
 				Expect(watcher).NotTo(BeNil())
 				defer watcher.Stop()

@@ -240,6 +240,9 @@ var _ = Describe("Startup", func() {
 			err = c.Patch(ctx, obj, client.RawPatch(types.MergePatchType, patch))
 			Expect(err).NotTo(HaveOccurred())
 
+			// must Get the new new content (Patch does not update object)
+			err = c.Get(ctx, client.ObjectKeyFromObject(obj), obj)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(obj).To(Equal(retrieved))
 		})
 
@@ -418,6 +421,7 @@ var _ = Describe("Startup", func() {
 			Expect(c).NotTo(BeNil())
 
 			retrieved := object.DeepCopy(obj)
+			object.SetContent(retrieved, map[string]any{"a": int64(1), "b": int64(2)})
 			Expect(unstructured.SetNestedMap(retrieved.UnstructuredContent(),
 				map[string]any{"ready": "true"}, "status")).NotTo(HaveOccurred())
 
@@ -433,6 +437,9 @@ var _ = Describe("Startup", func() {
 			err = c.Status().Create(ctx, obj, sObj)
 			Expect(err).NotTo(HaveOccurred())
 
+			// must Get the new new content (Status client does not update obj)
+			err = c.Get(ctx, client.ObjectKeyFromObject(obj), obj)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(obj).To(Equal(retrieved))
 		})
 
@@ -507,6 +514,9 @@ var _ = Describe("Startup", func() {
 			err = c.Status().Patch(ctx, obj, client.RawPatch(types.MergePatchType, patch))
 			Expect(err).NotTo(HaveOccurred())
 
+			// must Get the new new content (Status client does not update obj)
+			err = c.Get(ctx, client.ObjectKeyFromObject(obj), obj)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(obj).To(Equal(retrieved))
 		})
 	})

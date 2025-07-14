@@ -3,27 +3,24 @@ package composite
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/json"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
-	cache "sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/object"
 )
 
 var _ client.Client = &CompositeClient{}
 
 type CompositeClient struct {
 	client.Client
-	compositeCache  *CompositeCache // cache client: must be set up after the client has been created!
-	discoveryClient *ViewDiscovery
-	log             logr.Logger
+	compositeCache cache.Cache
+	viewClient     *viewClient
+	log            logr.Logger
 }
 
 // NewCompositeClient creates a composite client: views are served through the viewcache, native
@@ -38,9 +35,8 @@ func NewCompositeClient(config *rest.Config, options ClientOptions) (*CompositeC
 		nativeClient = c
 	}
 	return &CompositeClient{
-		Client:          nativeClient,
-		discoveryClient: NewViewDiscovery(),
-		log:             logr.New(nil),
+		Client: nativeClient,
+		log:    logr.New(nil),
 	}, nil
 }
 
@@ -50,11 +46,10 @@ func (c *CompositeClient) SetClient(client client.Client) {
 }
 
 func (c *CompositeClient) SetCache(cache cache.Cache) {
-	ccache, ok := cache.(*CompositeCache)
-	if !ok {
-		return
+	c.compositeCache = cache
+	if viewCache, ok := cache.(*CompositeCache); ok {
+		c.viewClient = viewCache.GetViewCache().GetClient().(*viewClient)
 	}
-	c.compositeCache = ccache
 }
 
 // split client:
@@ -62,125 +57,42 @@ func (c *CompositeClient) SetCache(cache cache.Cache) {
 // client.Writer: views are written to the viewcache, rest handled by the default client
 
 func (c *CompositeClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	if c.discoveryClient.IsViewKind(gvk) {
-		if c.compositeCache == nil {
-			return errors.New("cache is not set")
-		}
-
-		o, ok := obj.(object.Object)
-		if !ok {
-			return errors.New("object must be an object.Object")
-		}
-		return c.compositeCache.GetViewCache().Add(o)
+	if viewv1a1.IsViewKind(obj.GetObjectKind().GroupVersionKind()) {
+		return c.viewClient.Create(ctx, obj, opts...)
 	}
 	return c.Client.Create(ctx, obj, opts...)
 }
 
 func (c *CompositeClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	if c.discoveryClient.IsViewKind(gvk) {
-		if c.compositeCache == nil {
-			return errors.New("cache is not set")
-		}
-
-		o, ok := obj.(object.Object)
-		if !ok {
-			return errors.New("object must be an object.Object")
-		}
-		return c.compositeCache.GetViewCache().Delete(o)
+	if viewv1a1.IsViewKind(obj.GetObjectKind().GroupVersionKind()) {
+		return c.viewClient.Delete(ctx, obj, opts...)
 	}
 	return c.Client.Delete(ctx, obj, opts...)
 }
 
 func (c *CompositeClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	if c.discoveryClient.IsViewKind(gvk) {
-		if c.compositeCache == nil {
-			return errors.New("cache is not set")
-		}
-
-		newObj, ok := obj.(object.Object)
-		if !ok {
-			return errors.New("object must be an object.Object")
-		}
-
-		// get the old object
-		oldObj := object.NewViewObject(object.GetOperator(newObj), newObj.GetKind())
-		if err := c.compositeCache.GetViewCache().Get(ctx, client.ObjectKeyFromObject(newObj), oldObj); err != nil {
-			return fmt.Errorf("cannot update object with key %s: not in cache",
-				client.ObjectKeyFromObject(newObj))
-		}
-
-		return c.compositeCache.GetViewCache().Update(oldObj, newObj)
+	if viewv1a1.IsViewKind(obj.GetObjectKind().GroupVersionKind()) {
+		return c.viewClient.Update(ctx, obj, opts...)
 	}
 	return c.Client.Update(ctx, obj, opts...)
 }
 
 func (c *CompositeClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	if c.discoveryClient.IsViewKind(gvk) {
-		if c.compositeCache == nil {
-			return errors.New("cache is not set")
-		}
-
-		o, ok := obj.(object.Object)
-		if !ok {
-			return errors.New("object must be an object.Object")
-		}
-
-		if patch.Type() != types.JSONPatchType && patch.Type() != types.MergePatchType {
-			c.log.Info("strategic merge patch not supported in views, falling back to a merge-patch")
-		}
-
-		j, err := patch.Data(obj)
-		if err != nil {
-			return fmt.Errorf("cannot decode JSON patch: %w", err)
-		}
-
-		newContent := map[string]any{}
-		if err := json.Unmarshal(j, &newContent); err != nil {
-			return fmt.Errorf("cannot parse JSON patch: %w", err)
-		}
-
-		oldObj := object.NewViewObject(viewv1a1.GetOperator(gvk), gvk.Kind)
-		if err := c.compositeCache.GetViewCache().Get(ctx, client.ObjectKeyFromObject(o), oldObj); err != nil {
-			return err
-		}
-
-		newObj := oldObj.DeepCopy()
-		if err := object.Patch(newObj, newContent); err != nil {
-			return err
-		}
-
-		// copy back into obj so that caller knows the new obj
-		newObj.DeepCopyInto(o)
-
-		return c.compositeCache.GetViewCache().Update(oldObj, newObj)
+	if viewv1a1.IsViewKind(obj.GetObjectKind().GroupVersionKind()) {
+		return c.viewClient.Patch(ctx, obj, patch, opts...)
 	}
 
 	return c.Client.Patch(ctx, obj, patch, opts...)
 }
 
 func (c *CompositeClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	if c.discoveryClient.IsViewKind(gvk) {
-		if c.compositeCache == nil {
-			return errors.New("cache is not set")
-		}
-
-		list := NewViewObjectList("test", "view")
-		if err := c.compositeCache.GetViewCache().List(ctx, list); err != nil {
-			return err
-		}
-
-		for _, vo := range list.Items {
-			return c.compositeCache.GetViewCache().Delete(&vo)
-		}
+	if viewv1a1.IsViewKind(obj.GetObjectKind().GroupVersionKind()) {
+		return c.viewClient.DeleteAllOf(ctx, obj, opts...)
 	}
 	return c.Client.DeleteAllOf(ctx, obj, opts...)
 }
 
+// getters go through the cache
 func (c *CompositeClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	return c.compositeCache.Get(ctx, key, obj, opts...)
 }
@@ -189,82 +101,54 @@ func (c *CompositeClient) List(ctx context.Context, list client.ObjectList, opts
 	return c.compositeCache.List(ctx, list, opts...)
 }
 
+// Watch watches objects of type obj and sends events on the returned channel
+func (c *CompositeClient) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
+	if viewv1a1.IsViewKind(list.GetObjectKind().GroupVersionKind()) {
+		return c.viewClient.Watch(ctx, list, opts...)
+	}
+	return nil, apierrors.NewInternalError(errors.New("native K8s client does not support watch"))
+}
+
 // implement StatusClient note that normally this would not be needed since the default view-object
 // client already writes the status if requested, but still needed because native objects' status
 // can only be updated via the status-writer
 func (c *CompositeClient) Status() client.SubResourceWriter {
-	return &compositeStatusClient{
-		compositeCache:    c.compositeCache,
-		compositeClient:   c,
-		discoveryClient:   c.discoveryClient,
-		SubResourceWriter: c.Client.Status(),
+	return &compositeSubResourceClient{
+		viewSubResourceClient: c.viewClient.SubResource("status"),
+		SubResourceClient:     c.SubResource("status"),
 	}
 }
 
-type compositeStatusClient struct {
-	compositeCache  *CompositeCache
-	compositeClient *CompositeClient
-	discoveryClient *ViewDiscovery
-	client.SubResourceWriter
+type compositeSubResourceClient struct {
+	viewSubResourceClient client.SubResourceClient
+	client.SubResourceClient
 }
 
-func (c *compositeStatusClient) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
-	gvk := subResource.GetObjectKind().GroupVersionKind()
-	if c.discoveryClient.IsViewKind(gvk) {
-		return c.updateViewStatus(ctx, obj, subResource)
+func (c *compositeSubResourceClient) Get(ctx context.Context, obj, subResource client.Object, opts ...client.SubResourceGetOption) error {
+	if viewv1a1.IsViewKind(subResource.GetObjectKind().GroupVersionKind()) {
+		return c.viewSubResourceClient.Get(ctx, obj, subResource, opts...)
 	}
-	return c.SubResourceWriter.Create(ctx, obj, subResource, opts...)
+	return c.SubResourceClient.Get(ctx, obj, subResource, opts...)
 }
 
-func (c *compositeStatusClient) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	if c.discoveryClient.IsViewKind(gvk) {
-		return c.updateViewStatus(ctx, obj, obj)
+func (c *compositeSubResourceClient) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
+	if viewv1a1.IsViewKind(subResource.GetObjectKind().GroupVersionKind()) {
+		return c.viewSubResourceClient.Create(ctx, obj, subResource, opts...)
 	}
-	return c.SubResourceWriter.Update(ctx, obj, opts...)
+	return c.SubResourceClient.Create(ctx, obj, subResource, opts...)
 }
 
-func (c *compositeStatusClient) updateViewStatus(ctx context.Context, obj client.Object, subResource client.Object) error {
-	if c.compositeCache == nil {
-		return errors.New("cache is not set")
+func (c *compositeSubResourceClient) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+	if viewv1a1.IsViewKind(obj.GetObjectKind().GroupVersionKind()) {
+		return c.viewSubResourceClient.Update(ctx, obj, opts...)
 	}
-
-	o, ok := obj.(object.Object)
-	if !ok {
-		return errors.New("object must be an object.Object")
-	}
-	so, ok := subResource.(object.Object)
-	if !ok {
-		return errors.New("sub-resource must be an object.Object")
-	}
-
-	// load status from new object
-	status, ok, err := unstructured.NestedMap(so.UnstructuredContent(), "status")
-	if err != nil {
-		return fmt.Errorf("cannot load status sub-resource in object argument: %w", err)
-	} else if !ok {
-		return errors.New("no status sub-resource in object argument")
-	}
-
-	// get object from cache, overwrite status, and update
-	oldObj := object.DeepCopy(o)
-	if err := c.compositeCache.Get(ctx, client.ObjectKeyFromObject(oldObj), oldObj); err != nil {
-		return err
-	}
-
-	oldObj.DeepCopyInto(o)
-	if err := unstructured.SetNestedMap(o.UnstructuredContent(), status, "status"); err != nil {
-		return fmt.Errorf("failed to set status to sub-resource: %w", err)
-	}
-	return c.compositeCache.GetViewCache().Update(oldObj, o)
+	return c.SubResourceClient.Update(ctx, obj, opts...)
 }
 
-func (c *compositeStatusClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	if c.discoveryClient.IsViewKind(gvk) {
-		// fallback to the composite-cache patch implementation
-		return c.compositeClient.Patch(ctx, obj, patch)
+func (c *compositeSubResourceClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+	if viewv1a1.IsViewKind(obj.GetObjectKind().GroupVersionKind()) {
+		return c.viewSubResourceClient.Patch(ctx, obj, patch, opts...)
 	}
 
-	return c.SubResourceWriter.Patch(ctx, obj, patch, opts...)
+	return c.SubResourceClient.Patch(ctx, obj, patch, opts...)
 }

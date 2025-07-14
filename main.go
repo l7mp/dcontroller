@@ -36,8 +36,11 @@ import (
 
 	"github.com/l7mp/dcontroller/internal/buildinfo"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/apiserver"
 	"github.com/l7mp/dcontroller/pkg/operator"
 )
+
+const APIServerPort = 8443
 
 var (
 	scheme     = runtime.NewScheme()
@@ -52,9 +55,11 @@ func init() {
 }
 
 func main() {
+	var disableAPIServer bool
 	var metricsAddr, probeAddr string
 	var enableLeaderElection bool
 
+	flag.BoolVar(&disableAPIServer, "disable-api-server", false, "Disable the embedded API server.")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -102,6 +107,26 @@ func main() {
 	}
 
 	ctx := ctrl.SetupSignalHandler()
+
+	if !disableAPIServer {
+		config, err := apiserver.NewDefaultConfig("", APIServerPort, mgr.GetClient(), true, logger)
+		if err != nil {
+			setupLog.Error(err, "failed to create the config for the embedded API server")
+			os.Exit(1)
+		}
+		apiServer, err := apiserver.NewAPIServer(config)
+		if err != nil {
+			setupLog.Error(err, "failed to create the embedded API server")
+			os.Exit(1)
+		}
+
+		setupLog.Info("starting embedded API server", "config", config.String())
+		go func() {
+			if err := apiServer.Start(ctx); err != nil {
+				setupLog.Error(err, "embedded API server raised an error")
+			}
+		}()
+	}
 
 	setupLog.Info("starting operator")
 	if err := c.Start(ctx); err != nil {

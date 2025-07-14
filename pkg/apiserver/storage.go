@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"github.com/l7mp/dcontroller/pkg/composite"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,7 +50,7 @@ func (r *RESTOptionsGetter) GetRESTOptions(resource schema.GroupResource, exampl
 // to a controller-runtime client
 type ClientDelegatedStorage struct {
 	delegatingClient      client.Client
-	delegatingCache       *composite.ViewCache
+	delegatingWatcher     client.WithWatch
 	gvk                   schema.GroupVersionKind
 	gvr                   schema.GroupVersionResource
 	namespaced, hasStatus bool
@@ -59,7 +58,12 @@ type ClientDelegatedStorage struct {
 }
 
 // NewClientDelegatedStorage creates a new storage provider that delegates to controller-runtime client
-func NewClientDelegatedStorage(client client.Client, cache *composite.ViewCache, resource *Resource, log logr.Logger) StorageProvider {
+func NewClientDelegatedStorage(delegatingClient client.Client, resource *Resource, log logr.Logger) StorageProvider {
+	delegatingWatcher, ok := delegatingClient.(client.WithWatch)
+	if !ok {
+		log.Info("cannot delegate Watch to backing client: Watch will be unavailable")
+	}
+
 	return func(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (rest.Storage, error) {
 		gvr := schema.GroupVersionResource{
 			Group:    resource.APIResource.Group,
@@ -67,13 +71,13 @@ func NewClientDelegatedStorage(client client.Client, cache *composite.ViewCache,
 			Resource: resource.APIResource.Name,
 		}
 		storage := &ClientDelegatedStorage{
-			delegatingClient: client,
-			delegatingCache:  cache,
-			gvk:              resource.GVK,
-			gvr:              gvr,
-			namespaced:       resource.APIResource.Namespaced,
-			hasStatus:        resource.HasStatus,
-			log:              log,
+			delegatingClient:  delegatingClient,
+			delegatingWatcher: delegatingWatcher,
+			gvk:               resource.GVK,
+			gvr:               gvr,
+			namespaced:        resource.APIResource.Namespaced,
+			hasStatus:         resource.HasStatus,
+			log:               log,
 		}
 
 		log.V(2).Info("delegated storage created", "GVK", resource.GVK.String(), "GVR", gvr.String())
@@ -349,6 +353,10 @@ func (s *ClientDelegatedStorage) DeleteCollection(ctx context.Context, deleteVal
 func (s *ClientDelegatedStorage) Watch(ctx context.Context, options *metainternalversion.ListOptions) (watch.Interface, error) {
 	s.log.V(4).Info("WATCH", "GVR", s.gvr.String())
 
+	if s.delegatingWatcher == nil {
+		return nil, apierrors.NewServiceUnavailable("watch unavailable")
+	}
+
 	// Create an empty list object for the watch
 	list := &unstructured.UnstructuredList{}
 	list.SetGroupVersionKind(schema.GroupVersionKind{
@@ -379,7 +387,7 @@ func (s *ClientDelegatedStorage) Watch(ctx context.Context, options *metainterna
 
 	// Try to get the watch from the delegating client
 	// This assumes the delegating client supports watching
-	watcher, err := s.delegatingCache.Watch(ctx, list, listOpts...)
+	watcher, err := s.delegatingWatcher.Watch(ctx, list, listOpts...)
 	if err != nil {
 		s.log.V(2).Info("failed to create watch", "error", err, "GVR", s.gvr.String())
 		return nil, apierrors.NewInternalError(fmt.Errorf("failed to create watch for %s: %w", s.gvr.String(), err))

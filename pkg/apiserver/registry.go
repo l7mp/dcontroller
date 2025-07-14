@@ -136,7 +136,7 @@ func (s *APIServer) registerAPIGroup(group string, gvks []schema.GroupVersionKin
 
 			// Create storage for this specific GVK
 			restOptionsGetter := &RESTOptionsGetter{}
-			storageProvider := NewClientDelegatedStorage(s.delegatingClient, s.delegatingCache, resource, s.log)
+			storageProvider := NewClientDelegatedStorage(s.delegatingClient, resource, s.log)
 			storage, err := storageProvider(s.scheme, restOptionsGetter)
 			if err != nil {
 				return fmt.Errorf("failed to create delegaing storage for %s: %w", gvk.String(), err)
