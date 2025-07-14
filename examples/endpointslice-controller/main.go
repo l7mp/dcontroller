@@ -23,7 +23,6 @@ import (
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	dmanager "github.com/l7mp/dcontroller/pkg/manager"
-	"github.com/l7mp/dcontroller/pkg/object"
 	dobject "github.com/l7mp/dcontroller/pkg/object"
 	doperator "github.com/l7mp/dcontroller/pkg/operator"
 	dreconciler "github.com/l7mp/dcontroller/pkg/reconciler"
@@ -159,7 +158,7 @@ func (r *endpointSliceController) Reconcile(ctx context.Context, req dreconciler
 	r.log.Info("Reconciling", "request", req.String())
 
 	switch req.EventType {
-	case object.Added, object.Updated, object.Upserted:
+	case dobject.Added, dobject.Updated, dobject.Upserted:
 		obj := dobject.NewViewObject(OperatorName, req.GVK.Kind)
 		if err := r.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, obj); err != nil {
 			r.log.Error(err, "failed to get added/updated object", "delta-type", req.EventType)
@@ -179,7 +178,7 @@ func (r *endpointSliceController) Reconcile(ctx context.Context, req dreconciler
 
 		// handle upsert event
 
-	case object.Deleted:
+	case dobject.Deleted:
 		r.log.Info("Delete EndpointView object", "name", req.Name, "namespace", req.Namespace)
 
 		// handle delete event

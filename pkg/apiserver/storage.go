@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/l7mp/dcontroller/pkg/composite"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/duration"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/apiserver/pkg/endpoints/request"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/generic"
 	"k8s.io/apiserver/pkg/registry/rest"
@@ -132,15 +131,15 @@ func (s *ClientDelegatedStorage) Get(ctx context.Context, name string, options *
 		if ns, ok := genericapirequest.NamespaceFrom(ctx); ok {
 			key.Namespace = ns
 		} else {
-			return nil, errors.NewBadRequest("namespace required for namespaced resource")
+			return nil, apierrors.NewBadRequest("namespace required for namespaced resource")
 		}
 	}
 
 	if err := s.delegatingClient.Get(ctx, key, obj, &client.GetOptions{Raw: options}); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			return nil, errors.NewNotFound(s.gvr.GroupResource(), name)
+			return nil, apierrors.NewNotFound(s.gvr.GroupResource(), name)
 		}
-		return nil, errors.NewInternalError(fmt.Errorf("failed to get %s: %w", name, err))
+		return nil, apierrors.NewInternalError(fmt.Errorf("failed to get %s: %w", name, err))
 	}
 
 	return obj, nil
@@ -150,7 +149,7 @@ func (s *ClientDelegatedStorage) Get(ctx context.Context, name string, options *
 
 // List retrieves a list of objects
 func (s *ClientDelegatedStorage) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
-	if ri, ok := request.RequestInfoFrom(ctx); ok {
+	if ri, ok := genericapirequest.RequestInfoFrom(ctx); ok {
 		s.log.V(2).Info("LIST", "GVR", s.gvr.String(), "verb", ri.Verb, "resource", ri.Resource,
 			"namespace", ri.Namespace, "label-selector", ri.LabelSelector,
 			"field-selector", ri.FieldSelector)
@@ -186,13 +185,14 @@ func (s *ClientDelegatedStorage) List(ctx context.Context, options *metainternal
 	}
 
 	if err := s.delegatingClient.List(ctx, list, listOpts...); err != nil {
-		return nil, errors.NewInternalError(fmt.Errorf("failed to list %s: %w", s.gvr.String(), err))
+		return nil, apierrors.NewInternalError(fmt.Errorf("failed to list %s: %w", s.gvr.String(), err))
 	}
 
 	return list, nil
 }
 
-// Implement rest.Creater interface
+//nolint:misspell
+// Implement "rest.Creater" interface
 
 // Create creates a new object
 func (s *ClientDelegatedStorage) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
@@ -207,7 +207,7 @@ func (s *ClientDelegatedStorage) Create(ctx context.Context, obj runtime.Object,
 
 	unstructuredObj, ok := obj.(*unstructured.Unstructured)
 	if !ok {
-		return nil, errors.NewBadRequest("object is not unstructured")
+		return nil, apierrors.NewBadRequest("object is not unstructured")
 	}
 
 	// Ensure GVK is set correctly
@@ -218,15 +218,15 @@ func (s *ClientDelegatedStorage) Create(ctx context.Context, obj runtime.Object,
 		if ns, ok := genericapirequest.NamespaceFrom(ctx); ok {
 			unstructuredObj.SetNamespace(ns)
 		} else {
-			return nil, errors.NewBadRequest("namespace required for namespaced resource")
+			return nil, apierrors.NewBadRequest("namespace required for namespaced resource")
 		}
 	}
 
 	if err := s.delegatingClient.Create(ctx, unstructuredObj, &client.CreateOptions{Raw: options}); err != nil {
-		if errors.IsAlreadyExists(err) {
-			return nil, errors.NewAlreadyExists(s.gvr.GroupResource(), unstructuredObj.GetName())
+		if apierrors.IsAlreadyExists(err) {
+			return nil, apierrors.NewAlreadyExists(s.gvr.GroupResource(), unstructuredObj.GetName())
 		}
-		return nil, errors.NewInternalError(fmt.Errorf("failed to create %s: %w", unstructuredObj.GetName(), err))
+		return nil, apierrors.NewInternalError(fmt.Errorf("failed to create %s: %w", unstructuredObj.GetName(), err))
 	}
 
 	return unstructuredObj, nil
@@ -241,7 +241,7 @@ func (s *ClientDelegatedStorage) Update(ctx context.Context, name string, objInf
 	// Get current object
 	currentObj, err := s.Get(ctx, name, &metav1.GetOptions{})
 	if err != nil {
-		if errors.IsNotFound(err) && forceAllowCreate {
+		if apierrors.IsNotFound(err) && forceAllowCreate {
 			// Create new object
 			newObj, err := objInfo.UpdatedObject(ctx, nil)
 			if err != nil {
@@ -268,14 +268,14 @@ func (s *ClientDelegatedStorage) Update(ctx context.Context, name string, objInf
 
 	unstructuredObj, ok := updatedObj.(*unstructured.Unstructured)
 	if !ok {
-		return nil, false, errors.NewBadRequest("object is not unstructured")
+		return nil, false, apierrors.NewBadRequest("object is not unstructured")
 	}
 
 	// Ensure GVK is set correctly
 	unstructuredObj.SetGroupVersionKind(s.gvk)
 
 	if err := s.delegatingClient.Update(ctx, unstructuredObj, &client.UpdateOptions{Raw: options}); err != nil {
-		return nil, false, errors.NewInternalError(fmt.Errorf("failed to update %s: %w", name, err))
+		return nil, false, apierrors.NewInternalError(fmt.Errorf("failed to update %s: %w", name, err))
 	}
 
 	return unstructuredObj, false, nil
@@ -303,9 +303,9 @@ func (s *ClientDelegatedStorage) Delete(ctx context.Context, name string, delete
 	unstructuredObj := obj.(*unstructured.Unstructured)
 	if err := s.delegatingClient.Delete(ctx, unstructuredObj, &client.DeleteOptions{Raw: options}); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			return nil, false, errors.NewNotFound(s.gvr.GroupResource(), name)
+			return nil, false, apierrors.NewNotFound(s.gvr.GroupResource(), name)
 		}
-		return nil, false, errors.NewInternalError(fmt.Errorf("failed to delete %s: %w", name, err))
+		return nil, false, apierrors.NewInternalError(fmt.Errorf("failed to delete %s: %w", name, err))
 	}
 
 	// Return the deleted object
@@ -382,7 +382,7 @@ func (s *ClientDelegatedStorage) Watch(ctx context.Context, options *metainterna
 	watcher, err := s.delegatingCache.Watch(ctx, list, listOpts...)
 	if err != nil {
 		s.log.V(2).Info("failed to create watch", "error", err, "GVR", s.gvr.String())
-		return nil, errors.NewInternalError(fmt.Errorf("failed to create watch for %s: %w", s.gvr.String(), err))
+		return nil, apierrors.NewInternalError(fmt.Errorf("failed to create watch for %s: %w", s.gvr.String(), err))
 	}
 
 	s.log.V(2).Info("watch created successfully", "GVR", s.gvr.String())
@@ -445,7 +445,7 @@ func (s *ClientDelegatedStorage) ConvertToTable(ctx context.Context, object runt
 }
 
 // objectToTableRow converts a single unstructured object to a table row
-func (s *ClientDelegatedStorage) objectToTableRow(obj *unstructured.Unstructured) (metav1.TableRow, error) {
+func (s *ClientDelegatedStorage) objectToTableRow(obj *unstructured.Unstructured) (metav1.TableRow, error) { //nolint:unparam
 	name := obj.GetName()
 	creationTime := obj.GetCreationTimestamp()
 

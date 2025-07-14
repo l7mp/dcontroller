@@ -51,7 +51,7 @@ var _ = Describe("APIServerUnitTest", func() {
 
 		// Create API server at random port
 		serverAddr = "localhost"
-		port = rand.IntN(15000) + 32768
+		port = rand.IntN(15000) + 32768 //nolint:gosec
 		config, err := NewDefaultConfig(serverAddr, port, true)
 		Expect(err).NotTo(HaveOccurred())
 		server, err = NewAPIServer(mgr, config)

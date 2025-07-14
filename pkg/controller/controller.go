@@ -195,8 +195,8 @@ func (c *Controller) GetGVKs() []schema.GroupVersionKind {
 		if err == nil {
 			gvks = append(gvks, gvk)
 		}
-
 	}
+
 	return gvks
 }
 

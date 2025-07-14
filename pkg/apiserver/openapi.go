@@ -23,7 +23,7 @@ func (s *APIServer) getOpenAPIv2Handler() openapicommon.GetOpenAPIDefinitions {
 			return cachedOpenAPIDefs
 		}
 
-		defs := s.generateOpenAPIv2Defs(ref)
+		defs := s.generateOpenAPIDefs(ref)
 
 		s.mu.RLock()
 		s.cachedOpenAPIDefs = defs
@@ -33,7 +33,7 @@ func (s *APIServer) getOpenAPIv2Handler() openapicommon.GetOpenAPIDefinitions {
 	}
 }
 
-func (s *APIServer) generateOpenAPIv2Defs(ref openapicommon.ReferenceCallback) map[string]openapicommon.OpenAPIDefinition {
+func (s *APIServer) generateOpenAPIDefs(ref openapicommon.ReferenceCallback) map[string]openapicommon.OpenAPIDefinition {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -83,52 +83,13 @@ func (s *APIServer) getOpenAPIv3Handler() openapicommon.GetOpenAPIDefinitions {
 			return cachedOpenAPIV3Defs
 		}
 
-		defs := s.generateOpenAPIv3Defs(ref)
+		defs := s.generateOpenAPIDefs(ref)
 		s.mu.RLock()
 		s.cachedOpenAPIV3Defs = defs
 		s.mu.RUnlock()
 
 		return defs
 	}
-}
-
-func (s *APIServer) generateOpenAPIv3Defs(ref openapicommon.ReferenceCallback) map[string]openapicommon.OpenAPIDefinition {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	// Rebuild the spec and set cache
-	var gvks []schema.GroupVersionKind
-	for _, groupGVKs := range s.groupGVKs {
-		for gvk := range groupGVKs {
-			gvks = append(gvks, gvk)
-		}
-	}
-
-	// Add base definitions from Kubernetes for common types like ObjectMeta, ListMeta
-	// and common APIs from core/v1 and apps/v1
-	defs := generatedopenapi.GetOpenAPIDefinitions(ref)
-
-	unstructuredDefName := "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.Unstructured"
-	defs[unstructuredDefName] = s.genOpenAPIUnstructDef(ref)
-
-	unstructuredListDefName := "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.UnstructuredList"
-	defs[unstructuredListDefName] = s.genOpenAPIUnstructListDef(ref, unstructuredDefName)
-
-	for _, gvk := range gvks {
-		if !viewv1a1.IsViewKind(gvk) {
-			continue
-		}
-
-		// resource e.g., "view.dcontroller.io.v1alpha1.MyView"
-		defName := fmt.Sprintf("%s.%s.%s", gvk.Group, gvk.Version, gvk.Kind)
-		defs[defName] = s.genOpenAPIDef(gvk, ref) // Same as v2
-
-		// resourcelist
-		listDefName := fmt.Sprintf("%s/%s.%s", gvk.Group, gvk.Version, listGVK(gvk).Kind)
-		defs[listDefName] = s.genOpenAPIListDef(gvk, ref, defName) // Same as v2
-	}
-
-	return defs
 }
 
 // genOpenAPIDef generates an OpenAPI definition for a particular GVK.

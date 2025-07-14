@@ -78,7 +78,7 @@ func New(config *rest.Config, opts Options) (*Manager, error) {
 	if !ok {
 		return nil, errors.New("cache must be a composite client")
 	}
-	c.SetCache(mgr.GetCache()) //nolint:errcheck
+	c.SetCache(mgr.GetCache())
 
 	return &Manager{Manager: mgr}, nil
 }

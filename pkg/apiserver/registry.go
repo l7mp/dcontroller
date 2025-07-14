@@ -42,7 +42,7 @@ func (s *APIServer) UnregisterGVKs(gvks []schema.GroupVersionKind) {
 		groups[gvk.Group] = true
 	}
 
-	for group, _ := range groups {
+	for group := range groups {
 		s.UnregisterAPIGroup(group)
 	}
 }
@@ -78,14 +78,6 @@ func (s *APIServer) RegisterAPIGroup(group string, gvks []schema.GroupVersionKin
 	}
 	s.groupGVKs[group] = groupedGVKs
 
-	// Get all regitered GVKs
-	allGVKs := []schema.GroupVersionKind{}
-	for _, gvks := range s.groupGVKs {
-		for gvk := range gvks {
-			allGVKs = append(allGVKs, gvk)
-		}
-	}
-
 	// Invalidate OpenAPI caches
 	s.cachedOpenAPIDefs = nil
 	s.cachedOpenAPIV3Defs = nil
@@ -106,14 +98,6 @@ func (s *APIServer) UnregisterAPIGroup(group string) {
 	}
 
 	delete(s.groupGVKs, group)
-
-	// Regenerate OpenAPI specs after unregistering
-	allGVKs := []schema.GroupVersionKind{}
-	for _, gvks := range s.groupGVKs {
-		for gvk := range gvks {
-			allGVKs = append(allGVKs, gvk)
-		}
-	}
 
 	// Invalidate OpenAPI caches
 	s.cachedOpenAPIDefs = nil

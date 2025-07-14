@@ -39,7 +39,6 @@ func (s *APIServer) findAPIResource(gvk schema.GroupVersionKind) (*Resource, err
 		},
 		HasStatus: true,
 	}, nil
-
 }
 
 func listGVK(gvk schema.GroupVersionKind) schema.GroupVersionKind {

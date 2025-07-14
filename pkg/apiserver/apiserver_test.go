@@ -86,7 +86,7 @@ var _ = Describe("APIServerUnitTest", func() {
 		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
-		port = rand.IntN(5000) + (32768)
+		port = rand.IntN(5000) + (32768) //nolint:gosec
 		config, err := NewDefaultConfig("", port, true)
 		Expect(err).NotTo(HaveOccurred())
 		server, err = NewAPIServer(mgr, config)
@@ -204,7 +204,7 @@ var _ = Describe("APIServerUnitTest", func() {
 			}
 
 			for _, tc := range testCases {
-				port = rand.IntN(15000) + (32768)
+				port = rand.IntN(15000) + (32768) //nolint:gosec
 				config, err := NewDefaultConfig(tc.addr, port, true)
 				Expect(err).NotTo(HaveOccurred())
 				s, err := NewAPIServer(mgr, config)
@@ -286,7 +286,7 @@ var _ = Describe("APIServer Integration", func() {
 
 		// Create API server at random port
 		serverAddr = "localhost"
-		port = rand.IntN(15000) + 32768
+		port = rand.IntN(15000) + 32768 //nolint:gosec
 		config, err := NewDefaultConfig(serverAddr, port, true)
 		config.DiscoveryClient = fakeViewDiscovery
 		Expect(err).NotTo(HaveOccurred())
@@ -352,7 +352,7 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(list.GetKind()).To(Equal("TestViewList"))
-			Expect(len(list.Items)).To(Equal(1))
+			Expect(list.Items).To(HaveLen(1))
 			Expect(list.Items[0].GetKind()).To(Equal("TestView"))
 			Expect(list.Items[0].GetName()).To(Equal("test-view"))
 
@@ -418,7 +418,7 @@ var _ = Describe("APIServer Integration", func() {
 				List(context.TODO(), metav1.ListOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.GetKind()).To(Equal("TestViewList"))
-			Expect(len(list.Items)).To(Equal(2))
+			Expect(list.Items).To(HaveLen(2))
 
 			item := list.Items[0]
 			if item.GetName() != "test-view" {
@@ -509,7 +509,7 @@ var _ = Describe("APIServer Integration", func() {
 				List(context.TODO(), metav1.ListOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.GetKind()).To(Equal("TestViewList"))
-			Expect(len(list.Items)).To(Equal(1))
+			Expect(list.Items).To(HaveLen(1))
 
 			item := list.Items[0]
 			Expect(item.GetKind()).To(Equal("TestView"))
@@ -534,7 +534,7 @@ var _ = Describe("APIServer Integration", func() {
 				Namespace: "default",
 			}, deletedView)
 			Expect(err).To(HaveOccurred())
-			Expect(client.IgnoreNotFound(err)).To(BeNil())
+			Expect(client.IgnoreNotFound(err)).To(Succeed())
 
 			// List
 			list, err := dynamicClient.Resource(viewGVR).
@@ -543,7 +543,7 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(list.GetKind()).To(Equal("TestViewList"))
-			Expect(len(list.Items)).To(Equal(0))
+			Expect(list.Items).To(BeEmpty())
 		})
 
 		It("should allow an API server discovery client to be created and queried", func() {
@@ -1091,7 +1091,7 @@ var _ = Describe("APIServer Integration", func() {
 				})
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(len(list.Items)).To(Equal(1))
+			Expect(list.Items).To(HaveLen(1))
 			Expect(list.Items[0].GetName()).To(Equal("test-view"))
 
 			// List with non-matching label selector
@@ -1102,7 +1102,7 @@ var _ = Describe("APIServer Integration", func() {
 				})
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(len(list.Items)).To(Equal(0))
+			Expect(list.Items).To(BeEmpty())
 		})
 	})
 

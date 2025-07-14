@@ -27,7 +27,7 @@ func (m *ViewRESTMapper) KindFor(resource schema.GroupVersionResource) (schema.G
 	}
 
 	// Convert resource name to Kind (title case)
-	kind := strings.Title(strings.ToLower(resource.Resource))
+	kind := strings.Title(strings.ToLower(resource.Resource)) //nolint:staticcheck
 
 	return schema.GroupVersionKind{
 		Group:   resource.Group,

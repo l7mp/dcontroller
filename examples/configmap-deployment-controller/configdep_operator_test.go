@@ -33,7 +33,6 @@ import (
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/operator"
-	dreconciler "github.com/l7mp/dcontroller/pkg/reconciler"
 )
 
 const (
@@ -49,9 +48,7 @@ const (
 
 var (
 	suite            *testutils.SuiteContext
-	errorCh          chan error
 	cfg              *rest.Config
-	eventCh          chan dreconciler.Request
 	scheme           = runtime.NewScheme()
 	k8sClient        client.Client
 	logger, setupLog logr.Logger
@@ -126,6 +123,7 @@ var _ = Describe("Configmap-deployment controller test:", Ordered, func() {
 				"configMap":  "test-configmap-2",
 				"deployment": "test-deployment-2",
 			}, "spec")
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	AfterAll(func() {

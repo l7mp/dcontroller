@@ -77,7 +77,7 @@ func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, e
 	if config.UseHTTP {
 		secureAddr = net.ParseIP("127.0.0.1")
 		// use a random port for the mandatory TLS server
-		securePort = rand.IntN(15000) + 32768
+		securePort = rand.IntN(15000) + 32768 //nolint:gosec
 	}
 	secureServingOptions := &genericoptions.SecureServingOptions{
 		BindAddress: secureAddr,
@@ -93,7 +93,7 @@ func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, e
 	}
 
 	// Create the HTTP middleware for the inecure HTTP server
-	config.Config.BuildHandlerChainFunc = func(apiHandler http.Handler, c *genericapiserver.Config) http.Handler {
+	config.BuildHandlerChainFunc = func(apiHandler http.Handler, c *genericapiserver.Config) http.Handler {
 		handler := genericfilters.WithWaitGroup(apiHandler, c.LongRunningFunc, c.NonLongRunningRequestWaitGroup)
 		middleware := genericapifilters.WithRequestInfo(handler, c.RequestInfoResolver)
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +121,7 @@ func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, e
 	}
 
 	// Override/set required fields for our dynamic server
-	config.Config.Serializer = s.codecs
+	config.Serializer = s.codecs
 
 	// Build OpenAPI config specs: inject our dynamic OpenAPI handler
 	namer := openapiendpoints.NewDefinitionNamer(s.scheme)
@@ -132,11 +132,11 @@ func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, e
 			Version: "v1.0.0",
 		},
 	}
-	config.Config.OpenAPIConfig = openAPIConfig
+	config.OpenAPIConfig = openAPIConfig
 
 	openAPIV3Config := genericapiserver.DefaultOpenAPIV3Config(s.getOpenAPIv3Handler(), namer)
 	openAPIV3Config.Info = openAPIConfig.Info // Reuse the same info
-	config.Config.OpenAPIV3Config = openAPIV3Config
+	config.OpenAPIV3Config = openAPIV3Config
 
 	return config.RecommendedConfig, nil
 }

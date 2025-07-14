@@ -53,8 +53,8 @@ func NewCompositeAPIClient(config *rest.Config, opts Options) (*APIClient, error
 
 	// Create composite cache
 	compositeCache, err := NewCompositeCache(config, CacheOptions{
-		Options:      opts.CacheOptions.Options,
-		DefaultCache: opts.CacheOptions.DefaultCache,
+		Options:      opts.Options,
+		DefaultCache: opts.DefaultCache,
 		Logger:       logger,
 	})
 	if err != nil {

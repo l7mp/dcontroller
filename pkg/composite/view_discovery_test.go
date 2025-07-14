@@ -106,18 +106,18 @@ var _ = Describe("ViewDiscovery", func() {
 
 		It("should convert resource to kind", func() {
 			// This fails with "not registered"
-			kind, err := viewDiscovery.KindFromResource("testview")
+			_, err := viewDiscovery.KindFromResource("testview")
 			Expect(err).To(HaveOccurred())
 
 			// After registering it should work
 			err = viewDiscovery.RegisterViewGVK(testViewGVK)
 			Expect(err).NotTo(HaveOccurred())
-			kind, err = viewDiscovery.KindFromResource("testview")
+			kind, err := viewDiscovery.KindFromResource("testview")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(kind).To(Equal("TestView"))
 
 			// Plural still fails
-			kind, err = viewDiscovery.KindFromResource("testviews")
+			_, err = viewDiscovery.KindFromResource("testviews")
 			Expect(err).To(HaveOccurred())
 
 			// This should still fail
@@ -209,7 +209,7 @@ var _ = Describe("ViewDiscovery", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resources).NotTo(BeNil())
 			Expect(resources.GroupVersion).To(Equal(viewv1a1.GroupVersion("test").String()))
-			Expect(len(resources.APIResources)).To(BeNumerically(">", 0))
+			Expect(resources.APIResources).ToNot(BeEmpty())
 
 			// Should contain our registered view
 			var foundTestView bool
@@ -235,7 +235,7 @@ var _ = Describe("ViewDiscovery", func() {
 		It("should return server groups", func() {
 			groups, err := viewDiscovery.ServerGroups()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(len(groups.Groups)).To(Equal(1))
+			Expect(groups.Groups).To(HaveLen(1))
 			Expect(groups.Groups[0].Name).To(Equal(viewGroup))
 			Expect(groups.Groups[0].Versions).To(HaveLen(1))
 			Expect(groups.Groups[0].Versions[0].GroupVersion).To(Equal(viewv1a1.GroupVersion("test").String()))
@@ -245,15 +245,15 @@ var _ = Describe("ViewDiscovery", func() {
 			groups, resources, err := viewDiscovery.ServerGroupsAndResources()
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(len(groups)).To(Equal(1))
+			Expect(groups).To(HaveLen(1))
 			Expect(groups[0].Name).To(Equal(viewGroup))
 
-			Expect(len(resources)).To(BeNumerically(">=", 1))
+			Expect(resources).ToNot(BeEmpty())
 			var foundViewGroupResources bool
 			for _, resourceList := range resources {
 				if resourceList.GroupVersion == viewv1a1.GroupVersion("test").String() {
 					foundViewGroupResources = true
-					Expect(len(resourceList.APIResources)).To(BeNumerically(">", 0))
+					Expect(resourceList.APIResources).ToNot(BeEmpty())
 					break
 				}
 			}
@@ -263,13 +263,13 @@ var _ = Describe("ViewDiscovery", func() {
 		It("should return server preferred resources", func() {
 			resources, err := viewDiscovery.ServerPreferredResources()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(len(resources)).To(BeNumerically(">=", 1))
+			Expect(resources).ToNot(BeEmpty())
 
 			var foundViewGroup bool
 			for _, resourceList := range resources {
 				if resourceList.GroupVersion == viewv1a1.GroupVersion("test").String() {
 					foundViewGroup = true
-					Expect(len(resourceList.APIResources)).To(BeNumerically(">", 0))
+					Expect(resourceList.APIResources).ToNot(BeEmpty())
 					break
 				}
 			}

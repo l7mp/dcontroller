@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -42,14 +41,6 @@ func createLocalTestServerConfig() *rest.Config {
 
 	return &rest.Config{
 		Host: server.URL,
-	}
-}
-
-// A fake config that fails fast
-func createFastTimeoutConfig() *rest.Config {
-	return &rest.Config{
-		Host:    "https://localhost:1", // Invalid port, will fail fast
-		Timeout: time.Millisecond * 1,  // 1ms timeout
 	}
 }
 

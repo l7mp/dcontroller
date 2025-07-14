@@ -83,7 +83,7 @@ var _ = Describe("CompositeDiscoveryClient", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resources).NotTo(BeNil())
 			Expect(resources.GroupVersion).To(Equal(viewv1a1.GroupVersion("test").String()))
-			Expect(len(resources.APIResources)).To(BeNumerically(">", 0))
+			Expect(resources.APIResources).ToNot(BeEmpty())
 		})
 
 		It("should handle native group versions", func() {
@@ -91,7 +91,7 @@ var _ = Describe("CompositeDiscoveryClient", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resources).NotTo(BeNil())
 			Expect(resources.GroupVersion).To(Equal("apps/v1"))
-			Expect(len(resources.APIResources)).To(Equal(1))
+			Expect(resources.APIResources).To(HaveLen(1))
 			Expect(resources.APIResources[0].Kind).To(Equal("Deployment"))
 		})
 
@@ -129,7 +129,7 @@ var _ = Describe("CompositeDiscoveryClient", func() {
 			resources, err := compositeClient.ServerPreferredResources()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resources).NotTo(BeNil())
-			Expect(len(resources)).To(BeNumerically(">=", 1))
+			Expect(resources).ToNot(BeEmpty())
 		})
 	})
 
@@ -138,7 +138,7 @@ var _ = Describe("CompositeDiscoveryClient", func() {
 			resources, err := compositeClient.ServerPreferredNamespacedResources()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resources).NotTo(BeNil())
-			Expect(len(resources)).To(BeNumerically(">=", 1))
+			Expect(resources).ToNot(BeEmpty())
 		})
 	})
 
