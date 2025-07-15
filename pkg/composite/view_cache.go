@@ -1,4 +1,4 @@
-package cache
+package composite
 
 import (
 	"context"
@@ -9,6 +9,9 @@ import (
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	toolscache "k8s.io/client-go/tools/cache"
@@ -26,10 +29,11 @@ type ViewCache struct {
 	mu          sync.RWMutex
 	caches      map[schema.GroupVersionKind]toolscache.Indexer
 	informers   map[schema.GroupVersionKind]*ViewCacheInformer
+	discovery   ViewDiscoveryInterface
 	logger, log logr.Logger
 }
 
-func NewViewCache(opts Options) *ViewCache {
+func NewViewCache(opts CacheOptions) *ViewCache {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -38,8 +42,9 @@ func NewViewCache(opts Options) *ViewCache {
 	c := &ViewCache{
 		caches:    make(map[schema.GroupVersionKind]toolscache.Indexer),
 		informers: make(map[schema.GroupVersionKind]*ViewCacheInformer),
+		discovery: NewViewDiscovery(),
 		logger:    logger,
-		log:       logger.WithName("viewcache"),
+		log:       logger.WithName("cache"),
 	}
 	return c
 }
@@ -102,7 +107,7 @@ func (c *ViewCache) RegisterInformerForKind(gvk schema.GroupVersionKind) error {
 		return nil
 	}
 
-	informer := NewViewCacheInformer(gvk, cache, c.logger)
+	informer := NewViewCacheInformer(gvk, cache, c.log)
 	c.informers[gvk] = informer
 
 	return nil
@@ -294,26 +299,85 @@ func (c *ViewCache) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 }
 
 func (c *ViewCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-	gvk := list.GetObjectKind().GroupVersionKind()
-	cache, err := c.GetCacheForKind(gvk)
+	listGVK := list.GetObjectKind().GroupVersionKind()
+	objGVK := c.discovery.ObjectGVKFromListGVK(listGVK)
+	cache, err := c.GetCacheForKind(objGVK)
 	if err != nil {
 		return apierrors.NewBadRequest("invalid GVK")
 	}
 
-	c.log.V(5).Info("list", "gvk", gvk)
+	c.log.V(5).Info("list", "listGVK", listGVK, "objGVK", objGVK)
+
+	// Extract selectors from options
+	var labelSelector labels.Selector
+	var fieldSelector fields.Selector
+	var namespace string
+
+	for _, opt := range opts {
+		switch o := opt.(type) {
+		case client.MatchingLabelsSelector:
+			labelSelector = o.Selector
+		case client.MatchingLabels:
+			set := (map[string]string)(o)
+			labelSelector = labels.SelectorFromSet(set)
+		case client.MatchingFields:
+			set := (fields.Set)(o)
+			fieldSelector = fields.SelectorFromSet(set)
+		case client.MatchingFieldsSelector:
+			fieldSelector = o.Selector
+		case client.InNamespace:
+			namespace = string(o)
+		}
+	}
 
 	for _, item := range cache.List() {
 		target, ok := item.(object.Object)
 		if !ok {
 			return apierrors.NewConflict(
-				schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind},
+				schema.GroupResource{Group: objGVK.Group, Resource: objGVK.Kind},
 				client.ObjectKeyFromObject(item.(client.Object)).String(),
 				errors.New("cache must store object.Objects only"))
 		}
-		object.AppendToListItem(list, object.DeepCopy(target))
+
+		// Apply namespace filter
+		if namespace != "" && target.GetNamespace() != namespace {
+			continue
+		}
+
+		// Apply label selector
+		if labelSelector != nil && !labelSelector.Matches(labels.Set(target.GetLabels())) {
+			continue
+		}
+
+		// Apply field selector
+		if fieldSelector != nil && !matchesFieldSelector(target, fieldSelector) {
+			continue
+		}
+
+		AppendToListItem(list, object.DeepCopy(target))
 	}
 
 	return nil
+}
+
+// Helper function to match field selectors
+func matchesFieldSelector(obj object.Object, selector fields.Selector) bool {
+	fieldSet := fields.Set{}
+
+	// Always include standard metadata fields
+	fieldSet["metadata.name"] = obj.GetName()
+	fieldSet["metadata.namespace"] = obj.GetNamespace()
+
+	// Add some domain-specific fields
+	if status, found, _ := unstructured.NestedString(obj.Object, "status", "phase"); found {
+		fieldSet["status.phase"] = status
+	}
+
+	if ready, found, _ := unstructured.NestedBool(obj.Object, "status", "ready"); found {
+		fieldSet["status.ready"] = fmt.Sprintf("%t", ready)
+	}
+
+	return selector.Matches(fieldSet)
 }
 
 func (c *ViewCache) Dump(ctx context.Context, gvk schema.GroupVersionKind) []string {
@@ -333,30 +397,65 @@ func (c *ViewCache) Dump(ctx context.Context, gvk schema.GroupVersionKind) []str
 }
 
 func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
-	gvk := list.GetObjectKind().GroupVersionKind()
+	listGVK := list.GetObjectKind().GroupVersionKind()
+	objGVK := c.discovery.ObjectGVKFromListGVK(listGVK)
 
-	c.log.V(5).Info("watch: adding watch", "gvk", gvk)
+	c.log.V(5).Info("watch: adding watch", "listGVK", listGVK, "objGVK", objGVK)
 
-	informer, err := c.GetInformerForKind(ctx, gvk)
+	informer, err := c.GetInformerForKind(ctx, objGVK)
 	if err != nil {
 		return nil, err
 	}
 
+	// Extract selectors from options (same logic as List method)
+	var labelSelector labels.Selector
+	var fieldSelector fields.Selector
+	var namespace string
+
+	for _, opt := range opts {
+		switch o := opt.(type) {
+		case client.MatchingLabelsSelector:
+			labelSelector = o.Selector
+		case client.MatchingLabels:
+			set := (map[string]string)(o)
+			labelSelector = labels.SelectorFromSet(set)
+		case client.MatchingFields:
+			set := (fields.Set)(o)
+			fieldSelector = fields.SelectorFromSet(set)
+		case client.MatchingFieldsSelector:
+			fieldSelector = o.Selector
+		case client.InNamespace:
+			namespace = string(o)
+		}
+	}
+
 	watcher := &ViewCacheWatcher{
-		eventChan: make(chan watch.Event, DefaultWatchChannelBuffer),
-		stopCh:    make(chan struct{}),
-		logger:    c.logger,
+		eventChan:     make(chan watch.Event, DefaultWatchChannelBuffer),
+		stopCh:        make(chan struct{}),
+		labelSelector: labelSelector,
+		fieldSelector: fieldSelector,
+		namespace:     namespace,
+		logger:        c.logger,
 	}
 
 	handler := toolscache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			watcher.sendEvent(watch.Added, obj)
+			if watcher.shouldIncludeObject(obj) {
+				watcher.sendEvent(watch.Added, obj)
+			}
 		},
 		UpdateFunc: func(oldObj, newObj any) {
-			watcher.sendEvent(watch.Modified, newObj)
+			// Check if object matches selectors after update
+			if watcher.shouldIncludeObject(newObj) {
+				watcher.sendEvent(watch.Modified, newObj)
+			}
 		},
 		DeleteFunc: func(obj any) {
-			watcher.sendEvent(watch.Deleted, obj)
+			// For delete events, we should send the event if the object
+			// was previously visible (matched selectors before deletion)
+			if watcher.shouldIncludeObject(obj) {
+				watcher.sendEvent(watch.Deleted, obj)
+			}
 		},
 	}
 
@@ -368,7 +467,7 @@ func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...c
 	go func() {
 		<-ctx.Done()
 
-		c.log.V(5).Info("stopping watcher", "gvk", gvk)
+		c.log.V(5).Info("stopping watcher", "gvk", objGVK.String())
 
 		informer.RemoveEventHandler(handlerReg) //nolint:errcheck
 		watcher.Stop()
@@ -404,7 +503,58 @@ type ViewCacheWatcher struct {
 	stopCh    chan struct{}
 	mutex     sync.Mutex
 	stopped   bool
-	logger    logr.Logger
+
+	labelSelector labels.Selector
+	fieldSelector fields.Selector
+	namespace     string
+
+	logger logr.Logger
+}
+
+// shouldIncludeObject determines if an object should be included based on selectors
+func (w *ViewCacheWatcher) shouldIncludeObject(o any) bool {
+	obj, ok := o.(object.Object)
+	if !ok {
+		w.logger.V(4).Info("watch: ignoring non-object.Object")
+		return false
+	}
+
+	// Apply namespace filter
+	if w.namespace != "" && obj.GetNamespace() != w.namespace {
+		return false
+	}
+
+	// Apply label selector
+	if w.labelSelector != nil && !w.labelSelector.Matches(labels.Set(obj.GetLabels())) {
+		return false
+	}
+
+	// Apply field selector
+	if w.fieldSelector != nil && !w.matchesFieldSelector(obj, w.fieldSelector) {
+		return false
+	}
+
+	return true
+}
+
+// matchesFieldSelector checks if object matches field selector (reuse logic from List method)
+func (w *ViewCacheWatcher) matchesFieldSelector(obj object.Object, selector fields.Selector) bool {
+	fieldSet := fields.Set{}
+
+	// Always include standard metadata fields
+	fieldSet["metadata.name"] = obj.GetName()
+	fieldSet["metadata.namespace"] = obj.GetNamespace()
+
+	// Add some domain-specific fields
+	if status, found, _ := unstructured.NestedString(obj.Object, "status", "phase"); found {
+		fieldSet["status.phase"] = status
+	}
+
+	if ready, found, _ := unstructured.NestedBool(obj.Object, "status", "ready"); found {
+		fieldSet["status.ready"] = fmt.Sprintf("%t", ready)
+	}
+
+	return selector.Matches(fieldSet)
 }
 
 func (w *ViewCacheWatcher) sendEvent(eventType watch.EventType, o any) {

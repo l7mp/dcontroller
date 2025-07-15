@@ -7,10 +7,12 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	runtimeMgr "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/yaml"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/apiserver"
 	dcontroller "github.com/l7mp/dcontroller/pkg/controller"
 )
 
@@ -18,6 +20,10 @@ var _ runtimeMgr.Runnable = &Operator{}
 
 // Options can be used to customize the Operator's behavior.
 type Options struct {
+	// API server is an optional extension server that can be used to interact with the view
+	// objects stored in the operator cacache.
+	APIServer *apiserver.APIServer
+
 	// ErrorChannel is a channel to receive errors from the operator. Note that the error
 	// channel is rate limited to at most 3 errors per every 2 seconds. Use ReportErrors on the
 	// individual controllers to get the errors that might have been supporessed by the rate
@@ -31,9 +37,11 @@ type Options struct {
 type Operator struct {
 	name        string
 	mgr         runtimeMgr.Manager
+	apiServer   *apiserver.APIServer
 	spec        *opv1a1.OperatorSpec
 	controllers []*dcontroller.Controller // maybe nil
 	ctx         context.Context
+	gvks        []schema.GroupVersionKind
 	errorChan   chan error
 	logger, log logr.Logger
 }
@@ -50,6 +58,8 @@ func New(name string, mgr runtimeMgr.Manager, spec *opv1a1.OperatorSpec, opts Op
 		mgr:         mgr,
 		spec:        spec,
 		controllers: []*dcontroller.Controller{},
+		apiServer:   opts.APIServer,
+		gvks:        []schema.GroupVersionKind{},
 		errorChan:   opts.ErrorChannel,
 		logger:      logger,
 		log:         logger.WithName("operator").WithValues("name", name),
@@ -62,6 +72,12 @@ func New(name string, mgr runtimeMgr.Manager, spec *opv1a1.OperatorSpec, opts Op
 			op.log.V(5).Info("failed to create controller", "controller", config.Name,
 				"error", err)
 		}
+	}
+
+	// Update the API server
+	if err := op.RegisterGVKs(); err != nil {
+		// this is not fatal
+		op.log.Error(err, "failed to register GKVs with the API server")
 	}
 
 	return op
@@ -95,9 +111,10 @@ func (op *Operator) GetController(name string) *dcontroller.Controller {
 
 // AddController adds a new controller to the operator.
 func (op *Operator) AddController(config opv1a1.Controller) error {
-	c, err := dcontroller.New(op.mgr, config, dcontroller.Options{
-		ErrorChan: op.errorChan,
-	})
+	c, err := dcontroller.New(op.mgr, op.name, config, dcontroller.Options{ErrorChan: op.errorChan})
+	if err != nil {
+		op.log.Error(err, "failed to create controller", "name", config.Name)
+	}
 
 	// the controller returned is always valid: this makes sure we will receive the
 	// status update triggers to show the controller errors to the user
@@ -108,16 +125,8 @@ func (op *Operator) AddController(config opv1a1.Controller) error {
 
 // Start starts the operator. It blocks
 func (op *Operator) Start(ctx context.Context) error {
-	op.log.Info("starting")
+	op.log.Info("starting up")
 	op.ctx = ctx
-
-	// // close the error channel
-	// if op.errorChan != nil {
-	// 	go func() {
-	// 		defer close(op.errorChan)
-	// 		<-ctx.Done()
-	// 	}()
-	// }
 
 	defer func() {
 		if op.errorChan != nil {
@@ -159,4 +168,33 @@ func (op *Operator) GetStatus(gen int64) opv1a1.OperatorStatus {
 	return opv1a1.OperatorStatus{
 		Controllers: cs,
 	}
+}
+
+// RegisterGVKs registers the view resources associated with the conbtrollers run by operator in
+// the extension API server.
+func (op *Operator) RegisterGVKs() error {
+	if op.apiServer == nil {
+		return nil
+	}
+
+	gvks := []schema.GroupVersionKind{}
+	for _, c := range op.controllers {
+		gvks = append(gvks, c.GetGVKs()...)
+	}
+
+	op.gvks = uniq(gvks)
+	return op.apiServer.RegisterGVKs(op.gvks)
+}
+
+func uniq(gvks []schema.GroupVersionKind) []schema.GroupVersionKind {
+	var ret []schema.GroupVersionKind
+	set := make(map[schema.GroupVersionKind]bool)
+	for _, item := range gvks {
+		if !set[item] {
+			set[item] = true
+			ret = append(ret, item)
+		}
+	}
+
+	return ret
 }

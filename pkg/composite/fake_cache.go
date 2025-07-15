@@ -1,4 +1,4 @@
-package cache
+package composite
 
 // composite cache is a cache that serves views from the view cache and the rest from the default
 // Kubernetes cache
@@ -109,7 +109,7 @@ func (c *FakeRuntimeCache) Get(ctx context.Context, key client.ObjectKey, obj cl
 
 func (c *FakeRuntimeCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	for _, obj := range c.Store.List() {
-		object.AppendToListItem(list, obj)
+		AppendToListItem(list, obj)
 	}
 	return nil
 }

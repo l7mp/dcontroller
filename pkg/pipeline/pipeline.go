@@ -9,8 +9,9 @@ import (
 	toolscache "k8s.io/client-go/tools/cache"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/dbsp"
+	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/util"
 )
 
@@ -21,38 +22,40 @@ var (
 
 // Evaluator is a query that knows how to evaluate itself on a given delta and how to print itself.
 type Evaluator interface {
-	Evaluate(cache.Delta) ([]cache.Delta, error)
+	Evaluate(object.Delta) ([]object.Delta, error)
 	fmt.Stringer
 }
 
 // Pipeline is query that knows how to evaluate itself.
 type Pipeline struct {
+	operator    string
 	config      opv1a1.Pipeline
 	executor    *dbsp.Executor
 	graph       *dbsp.ChainGraph
 	rewriter    *dbsp.LinearChainRewriteEngine
 	sources     []schema.GroupVersionKind
-	sourceCache map[schema.GroupVersionKind]*cache.Store
+	sourceCache map[schema.GroupVersionKind]*composite.Store
 	target      string
-	targetCache *cache.Store
+	targetCache *composite.Store
 	log         logr.Logger
 }
 
 // NewPipeline creates a new pipeline from the set of base objects and a seralized pipeline that writes into a given target.
-func NewPipeline(target string, sources []schema.GroupVersionKind, config opv1a1.Pipeline, log logr.Logger) (Evaluator, error) {
+func NewPipeline(operator string, target string, sources []schema.GroupVersionKind, config opv1a1.Pipeline, log logr.Logger) (Evaluator, error) {
 	if len(sources) > 1 && config.Join == nil {
 		return nil, errors.New("invalid controller configuration: controllers " +
 			"defined on multiple base resources must specify a Join in the pipeline")
 	}
 
 	p := &Pipeline{
+		operator:    operator,
 		config:      config,
 		graph:       dbsp.NewChainGraph(),
 		rewriter:    dbsp.NewLinearChainRewriteEngine(),
 		sources:     sources,
-		sourceCache: make(map[schema.GroupVersionKind]*cache.Store),
+		sourceCache: make(map[schema.GroupVersionKind]*composite.Store),
 		target:      target,
-		targetCache: cache.NewStore(),
+		targetCache: composite.NewStore(),
 		log:         log,
 	}
 
@@ -128,7 +131,7 @@ func (p *Pipeline) String() string {
 }
 
 // Evaluate processes an pipeline expression on the given delta.
-func (p *Pipeline) Evaluate(delta cache.Delta) ([]cache.Delta, error) {
+func (p *Pipeline) Evaluate(delta object.Delta) ([]object.Delta, error) {
 	p.log.V(2).Info("processing event", "event-type", delta.Type, "object", ObjectKey(delta.Object))
 
 	// Init

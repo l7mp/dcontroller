@@ -1,3 +1,6 @@
+// A simpler configmap-deployment operator that does not use CRDs. For a complete example, see
+// examples/configmap-deployment-controller.
+
 package integration
 
 import (
@@ -73,7 +76,7 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 			go func() {
 				defer GinkgoRecover()
 				err := c.Start(ctx)
-				Expect(err).ToNot(HaveOccurred(), "failed to run controller")
+				Expect(err).ToNot(HaveOccurred(), "failed to run operator controller")
 			}()
 		})
 

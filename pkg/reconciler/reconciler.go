@@ -12,13 +12,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/util"
 )
 
 type Request struct {
 	Namespace, Name string
-	EventType       cache.DeltaType
+	EventType       object.DeltaType
 	GVK             schema.GroupVersionKind
 }
 
@@ -34,24 +34,24 @@ type EventHandler[object client.Object] struct{ log logr.Logger }
 
 func (h EventHandler[O]) Create(ctx context.Context, evt event.TypedCreateEvent[O], q workqueue.TypedRateLimitingInterface[Request]) {
 	h.log.Info("handling Create event", "event", util.Stringify(evt))
-	h.enqueue(evt.Object, cache.Added, q)
+	h.enqueue(evt.Object, object.Added, q)
 }
 
 func (h EventHandler[O]) Update(ctx context.Context, evt event.TypedUpdateEvent[O], q workqueue.TypedRateLimitingInterface[Request]) {
 	h.log.Info("handling Update event", "event", util.Stringify(evt))
-	h.enqueue(evt.ObjectNew, cache.Updated, q)
+	h.enqueue(evt.ObjectNew, object.Updated, q)
 }
 
 func (h EventHandler[O]) Delete(ctx context.Context, evt event.TypedDeleteEvent[O], q workqueue.TypedRateLimitingInterface[Request]) {
 	h.log.Info("handling Delete event", "event", util.Stringify(evt))
-	h.enqueue(evt.Object, cache.Deleted, q)
+	h.enqueue(evt.Object, object.Deleted, q)
 }
 
 func (h EventHandler[O]) Generic(ctx context.Context, evt event.TypedGenericEvent[O], q workqueue.TypedRateLimitingInterface[Request]) {
 	h.log.Info("ignoring Generic event", "event", util.Stringify(evt))
 }
 
-func (h EventHandler[O]) enqueue(obj O, eventType cache.DeltaType, q workqueue.TypedRateLimitingInterface[Request]) {
+func (h EventHandler[O]) enqueue(obj O, eventType object.DeltaType, q workqueue.TypedRateLimitingInterface[Request]) {
 	q.Add(Request{
 		Name:      obj.GetName(),
 		Namespace: obj.GetNamespace(),

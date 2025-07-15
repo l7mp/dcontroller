@@ -1,12 +1,10 @@
-package cache
+package object
 
 import (
 	"fmt"
 
 	toolscache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/l7mp/dcontroller/pkg/object"
 )
 
 type DeltaType string
@@ -25,7 +23,7 @@ var NilDelta = Delta{Object: nil}
 
 // Delta registers a change (addition, deletion, etc) on an object. By convention, Object is nil if no change occurs.
 type Delta struct {
-	Object object.Object
+	Object Object
 	Type   DeltaType
 }
 

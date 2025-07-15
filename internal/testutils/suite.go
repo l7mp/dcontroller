@@ -34,7 +34,7 @@ type SuiteContext struct {
 	Log               logr.Logger
 }
 
-func NewSuite(loglevel int) (*SuiteContext, error) {
+func NewSuite(loglevel int, crds ...string) (*SuiteContext, error) {
 	s := &SuiteContext{
 		Timeout:  time.Second * 5,
 		Interval: time.Millisecond * 250,
@@ -70,9 +70,10 @@ func NewSuite(loglevel int) (*SuiteContext, error) {
 
 	By("bootstrapping test environment")
 	s.TestEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{
-			filepath.Join("..", "..", "config", "crd", "resources"),
-		},
+		CRDDirectoryPaths: append(
+			[]string{filepath.Join("..", "..", "config", "crd", "resources")},
+			crds...,
+		),
 		ErrorIfCRDPathMissing:    true,
 		AttachControlPlaneOutput: true,
 	}

@@ -22,7 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/cache"
 	dmanager "github.com/l7mp/dcontroller/pkg/manager"
 	dobject "github.com/l7mp/dcontroller/pkg/object"
 	doperator "github.com/l7mp/dcontroller/pkg/operator"
@@ -30,6 +29,7 @@ import (
 )
 
 const (
+	OperatorName                    = "test-ep-operator"
 	OperatorSpec                    = "examples/endpointslice-controller/endpointslice-controller-spec.yaml"
 	OperatorGatherSpec              = "examples/endpointslice-controller/endpointslice-controller-gather-spec.yaml"
 	EndpointSliceCtrlAnnotationName = "dcontroller.io/endpointslice-controller-enabled"
@@ -84,7 +84,7 @@ func main() {
 	}
 
 	// Load the operator from file
-	if _, err := doperator.NewFromFile("endpointslice-operator", mgr, specFile, opts); err != nil {
+	if _, err := doperator.NewFromFile(OperatorName, mgr, specFile, opts); err != nil {
 		log.Error(err, "unable to create endpointslice operator operator")
 		os.Exit(1)
 	}
@@ -137,7 +137,7 @@ func NewEndpointSliceController(mgr manager.Manager, log logr.Logger) (*endpoint
 		return nil, err
 	}
 
-	src, err := dreconciler.NewSource(mgr, opv1a1.Source{
+	src, err := dreconciler.NewSource(mgr, OperatorName, opv1a1.Source{
 		Resource: opv1a1.Resource{
 			Kind: "EndpointView",
 		},
@@ -158,8 +158,8 @@ func (r *endpointSliceController) Reconcile(ctx context.Context, req dreconciler
 	r.log.Info("Reconciling", "request", req.String())
 
 	switch req.EventType {
-	case cache.Added, cache.Updated, cache.Upserted:
-		obj := dobject.NewViewObject(req.GVK.Kind)
+	case dobject.Added, dobject.Updated, dobject.Upserted:
+		obj := dobject.NewViewObject(OperatorName, req.GVK.Kind)
 		if err := r.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, obj); err != nil {
 			r.log.Error(err, "failed to get added/updated object", "delta-type", req.EventType)
 			return reconcile.Result{}, err
@@ -178,7 +178,7 @@ func (r *endpointSliceController) Reconcile(ctx context.Context, req dreconciler
 
 		// handle upsert event
 
-	case cache.Deleted:
+	case dobject.Deleted:
 		r.log.Info("Delete EndpointView object", "name", req.Name, "namespace", req.Namespace)
 
 		// handle delete event

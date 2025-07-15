@@ -22,15 +22,15 @@ func New() Object {
 }
 
 // NewViewObject initializes an empty object in the given view and sets the GVK.
-func NewViewObject(view string) Object {
+func NewViewObject(operator, view string) Object {
 	obj := New()
 	obj.SetUnstructuredContent(map[string]any{})
-	obj.SetGroupVersionKind(viewv1a1.NewGVK(view))
+	obj.SetGroupVersionKind(viewv1a1.GroupVersionKind(operator, view))
 	return obj
 }
 
 // NewViewObjectFromNativeObject creates a view object from a client.Object.
-func NewViewObjectFromNativeObject(view string, clientObj client.Object) (Object, error) {
+func NewViewObjectFromNativeObject(operator, view string, clientObj client.Object) (Object, error) {
 	unstructuredObj := &unstructured.Unstructured{}
 	var err error
 	unstructuredObj.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(clientObj)
@@ -38,10 +38,15 @@ func NewViewObjectFromNativeObject(view string, clientObj client.Object) (Object
 		return nil, err
 	}
 
-	obj := NewViewObject(view)
+	obj := NewViewObject(operator, view)
 	SetName(obj, clientObj.GetNamespace(), clientObj.GetName())
 	SetContent(obj, unstructuredObj.UnstructuredContent())
 	return obj, nil
+}
+
+// GetOperator returns the operator namespace the object belongs to.
+func GetOperator(obj Object) string {
+	return viewv1a1.GetOperator(obj.GroupVersionKind())
 }
 
 // SetName is a shortcut to SetNamespace(ns) followed by SetNamespace(name).
@@ -83,25 +88,4 @@ func DeepCopy(in Object) Object {
 	out := new(unstructured.Unstructured)
 	DeepCopyInto(in, out)
 	return out
-}
-
-// NewViewObjectList creates an empty object list.
-func NewViewObjectList(view string) ObjectList {
-	list := &unstructured.UnstructuredList{}
-	list.SetGroupVersionKind(viewv1a1.NewGVK(view))
-	return list
-}
-
-// AppendToListItem appends an object to a list.
-func AppendToListItem(list client.ObjectList, obj client.Object) {
-	listu, ok := list.(ObjectList)
-	if !ok {
-		return
-	}
-	u, ok := obj.(Object)
-	if !ok {
-		return
-	}
-
-	listu.Items = append(listu.Items, *DeepCopy(u))
 }

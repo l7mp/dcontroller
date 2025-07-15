@@ -1,4 +1,4 @@
-package cache
+package composite
 
 import (
 	. "github.com/onsi/ginkgo/v2"
@@ -17,7 +17,7 @@ var _ = Describe("Store", func() {
 
 	BeforeEach(func() {
 		store = NewStore()
-		obj1 = object.NewViewObject("view")
+		obj1 = object.NewViewObject("test", "view")
 		object.SetContent(obj1, map[string]any{"a": "x"})
 		object.SetName(obj1, "ns", "name")
 
@@ -48,7 +48,7 @@ var _ = Describe("Store", func() {
 		})
 
 		It("should return an error for non-existent object", func() {
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetName(obj, "", "non-existent")
 			_, ok, err := store.Get(obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -58,7 +58,7 @@ var _ = Describe("Store", func() {
 
 	Describe("List operation", func() {
 		It("should list all added objects", func() {
-			objects := []object.Object{object.NewViewObject("view"), object.NewViewObject("view"), object.NewViewObject("view")}
+			objects := []object.Object{object.NewViewObject("test", "view"), object.NewViewObject("test", "view"), object.NewViewObject("test", "view")}
 			object.SetName(objects[0], "ns1", "test-1")
 			object.SetName(objects[1], "ns2", "test-2")
 			object.SetName(objects[2], "ns3", "test-3")

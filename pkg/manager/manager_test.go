@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	ccache "github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
@@ -89,16 +89,15 @@ var _ = Describe("Startup", func() {
 			go mgr.Start(ctx)
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			cc := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			cc := cache.(*composite.CompositeCache)
 			Expect(cc).NotTo(BeNil())
-			Expect(cc.GetViewCache()).Should(BeAssignableToTypeOf(&ccache.ViewCache{}))
+			Expect(cc.GetViewCache()).Should(BeAssignableToTypeOf(&composite.ViewCache{}))
 			Expect(cc.GetViewCache()).NotTo(BeNil())
 
 			c := mgr.GetClient()
 			Expect(c).NotTo(BeNil())
-			Expect(c).Should(BeAssignableToTypeOf(&compositeClient{}))
-
+			Expect(c).Should(BeAssignableToTypeOf(&composite.CompositeClient{}))
 		})
 	})
 
@@ -113,7 +112,7 @@ var _ = Describe("Startup", func() {
 			Expect(mgr.GetRuntimeCache().Add(pod)).NotTo(HaveOccurred())
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
 
 			obj := &unstructured.Unstructured{}
 			obj.GetObjectKind().SetGroupVersionKind(pod.GetObjectKind().GroupVersionKind())
@@ -136,10 +135,10 @@ var _ = Describe("Startup", func() {
 			go mgr.Start(ctx)
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			ccache := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			ccache := cache.(*composite.CompositeCache)
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetName(obj, "test-ns", "test-obj")
 			object.SetContent(obj, map[string]any{"x": "y"})
 
@@ -186,13 +185,13 @@ var _ = Describe("Startup", func() {
 
 			go mgr.Start(ctx)
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"a": int64(1)})
 			object.SetName(obj, "ns", "test-1")
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			ccache := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			ccache := cache.(*composite.CompositeCache)
 
 			err = ccache.GetViewCache().Add(obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -200,7 +199,7 @@ var _ = Describe("Startup", func() {
 			c := mgr.GetClient()
 			Expect(c).NotTo(BeNil())
 
-			retrieved := object.NewViewObject("view")
+			retrieved := object.NewViewObject("test", "view")
 			object.SetName(retrieved, "ns", "test-1")
 
 			err = c.Get(ctx, client.ObjectKeyFromObject(retrieved), retrieved)
@@ -214,13 +213,13 @@ var _ = Describe("Startup", func() {
 
 			go mgr.Start(ctx)
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"a": int64(1)})
 			object.SetName(obj, "ns", "test-1")
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			ccache := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			ccache := cache.(*composite.CompositeCache)
 
 			err = ccache.GetViewCache().Add(obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -228,7 +227,7 @@ var _ = Describe("Startup", func() {
 			c := mgr.GetClient()
 			Expect(c).NotTo(BeNil())
 
-			retrieved := object.NewViewObject("view")
+			retrieved := object.NewViewObject("test", "view")
 			object.SetContent(retrieved, map[string]any{"a": int64(2)})
 			object.SetName(retrieved, "ns", "test-1")
 
@@ -236,11 +235,14 @@ var _ = Describe("Startup", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// reset obj
-			obj = object.NewViewObject("view")
+			obj = object.NewViewObject("test", "view")
 			object.SetName(obj, "ns", "test-1")
 			err = c.Patch(ctx, obj, client.RawPatch(types.MergePatchType, patch))
 			Expect(err).NotTo(HaveOccurred())
 
+			// must Get the new new content (Patch does not update object)
+			err = c.Get(ctx, client.ObjectKeyFromObject(obj), obj)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(obj).To(Equal(retrieved))
 		})
 
@@ -404,13 +406,13 @@ var _ = Describe("Startup", func() {
 
 			go mgr.Start(ctx)
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"a": int64(1), "b": int64(2)})
 			object.SetName(obj, "ns", "test-1")
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			ccache := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			ccache := cache.(*composite.CompositeCache)
 
 			err = ccache.GetViewCache().Add(obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -419,11 +421,12 @@ var _ = Describe("Startup", func() {
 			Expect(c).NotTo(BeNil())
 
 			retrieved := object.DeepCopy(obj)
+			object.SetContent(retrieved, map[string]any{"a": int64(1), "b": int64(2)})
 			Expect(unstructured.SetNestedMap(retrieved.UnstructuredContent(),
 				map[string]any{"ready": "true"}, "status")).NotTo(HaveOccurred())
 
 			// reset obj
-			obj = object.NewViewObject("view")
+			obj = object.NewViewObject("test", "view")
 			object.SetName(obj, "ns", "test-1")
 
 			// create sub-resource obj
@@ -434,6 +437,9 @@ var _ = Describe("Startup", func() {
 			err = c.Status().Create(ctx, obj, sObj)
 			Expect(err).NotTo(HaveOccurred())
 
+			// must Get the new new content (Status client does not update obj)
+			err = c.Get(ctx, client.ObjectKeyFromObject(obj), obj)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(obj).To(Equal(retrieved))
 		})
 
@@ -443,7 +449,7 @@ var _ = Describe("Startup", func() {
 
 			go mgr.Start(ctx)
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"a": int64(1), "b": int64(2)})
 			object.SetName(obj, "ns", "test-1")
 
@@ -452,8 +458,8 @@ var _ = Describe("Startup", func() {
 				map[string]any{"ready": "true"}, "status")).NotTo(HaveOccurred())
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			ccache := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			ccache := cache.(*composite.CompositeCache)
 
 			err = ccache.GetViewCache().Add(obj)
 			Expect(err).NotTo(HaveOccurred())
@@ -475,7 +481,7 @@ var _ = Describe("Startup", func() {
 
 			go mgr.Start(ctx)
 
-			obj := object.NewViewObject("view")
+			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"a": int64(1), "b": int64(2),
 				"status": map[string]any{
 					"a": map[string]any{
@@ -486,8 +492,8 @@ var _ = Describe("Startup", func() {
 			object.SetName(obj, "ns", "test-1")
 
 			cache := mgr.GetCache()
-			Expect(cache).Should(BeAssignableToTypeOf(&ccache.CompositeCache{}))
-			ccache := cache.(*ccache.CompositeCache)
+			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
+			ccache := cache.(*composite.CompositeCache)
 
 			err = ccache.GetViewCache().Add(obj) // this adds the status but anyway
 			Expect(err).NotTo(HaveOccurred())
@@ -503,11 +509,14 @@ var _ = Describe("Startup", func() {
 			Expect(c).NotTo(BeNil())
 
 			// reset obj
-			obj = object.NewViewObject("view")
+			obj = object.NewViewObject("test", "view")
 			object.SetName(obj, "ns", "test-1")
 			err = c.Status().Patch(ctx, obj, client.RawPatch(types.MergePatchType, patch))
 			Expect(err).NotTo(HaveOccurred())
 
+			// must Get the new new content (Status client does not update obj)
+			err = c.Get(ctx, client.ObjectKeyFromObject(obj), obj)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(obj).To(Equal(retrieved))
 		})
 	})

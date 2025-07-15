@@ -15,7 +15,7 @@ var _ = Describe("JSONPath", func() {
 	var obj1, obj2 object.Object
 
 	BeforeEach(func() {
-		obj1 = object.NewViewObject("testview1")
+		obj1 = object.NewViewObject("test", "testview1")
 		object.SetContent(obj1, unstruct{
 			"spec": unstruct{
 				"a": int64(1),
@@ -25,7 +25,7 @@ var _ = Describe("JSONPath", func() {
 		})
 		object.SetName(obj1, "default", "name")
 
-		obj2 = object.NewViewObject("testview2")
+		obj2 = object.NewViewObject("test", "testview2")
 		object.SetContent(obj2, unstruct{
 			"metadata": unstruct{
 				"namespace": "default2",
@@ -84,7 +84,7 @@ var _ = Describe("JSONPath", func() {
 				},
 			}
 
-			obj, err := object.NewViewObjectFromNativeObject("Service", input)
+			obj, err := object.NewViewObjectFromNativeObject("test", "Service", input)
 			Expect(err).NotTo(HaveOccurred())
 
 			res, err := GetJSONPathRaw(`$.metadata.name`, obj.UnstructuredContent())
@@ -123,7 +123,7 @@ var _ = Describe("JSONPath", func() {
 		})
 
 		It("should evaluate an escaped JSONPath expression on Kubernetes object", func() {
-			obj, err := object.NewViewObjectFromNativeObject("Service", &corev1.Service{
+			obj, err := object.NewViewObjectFromNativeObject("test", "Service", &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: "testnamespace",
 					Name:      "testservice-ok",
@@ -232,7 +232,7 @@ var _ = Describe("JSONPath", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(res).To(Equal(unstruct{
-				"apiVersion": "view.dcontroller.io/v1alpha1",
+				"apiVersion": "test.view.dcontroller.io/v1alpha1",
 				"kind":       "testview1",
 				"metadata": unstruct{
 					"name":      "name",

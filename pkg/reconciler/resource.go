@@ -18,12 +18,14 @@ type Resource interface {
 
 type resource struct {
 	mgr      runtimeManager.Manager
+	operator string
 	resource opv1a1.Resource
 }
 
-func NewResource(mgr runtimeManager.Manager, r opv1a1.Resource) Resource {
+func NewResource(mgr runtimeManager.Manager, operator string, r opv1a1.Resource) Resource {
 	return &resource{
 		mgr:      mgr,
+		operator: operator,
 		resource: r,
 	}
 }
@@ -46,9 +48,9 @@ func (r *resource) GetGVK() (schema.GroupVersionKind, error) {
 		return schema.GroupVersionKind{}, fmt.Errorf("empty Kind in %s", util.Stringify(*r))
 	}
 
-	if r.resource.Group == nil || *r.resource.Group == viewv1a1.GroupVersion.Group {
+	if r.resource.Group == nil || viewv1a1.IsViewGroup(*r.resource.Group) {
 		// this will be a View, version is enforced
-		return r.getGVKByGroupKind(schema.GroupKind{Group: viewv1a1.GroupVersion.Group, Kind: r.resource.Kind})
+		return r.getGVKByGroupKind(schema.GroupKind{Group: viewv1a1.Group(r.operator), Kind: r.resource.Kind})
 	}
 
 	// this will be a standard Kubernetes object
@@ -63,11 +65,11 @@ func (r *resource) GetGVK() (schema.GroupVersionKind, error) {
 }
 
 func (r *resource) getGVKByGroupKind(gr schema.GroupKind) (schema.GroupVersionKind, error) {
-	if gr.Group == viewv1a1.GroupVersion.Group {
+	if viewv1a1.IsViewGroup(gr.Group) {
 		return schema.GroupVersionKind{
-			Group:   viewv1a1.GroupVersion.Group,
+			Group:   gr.Group,
 			Kind:    gr.Kind,
-			Version: viewv1a1.GroupVersion.Version,
+			Version: viewv1a1.Version,
 		}, nil
 	}
 

@@ -28,11 +28,11 @@ type source struct {
 	log    logr.Logger
 }
 
-func NewSource(mgr runtimeManager.Manager, s opv1a1.Source) Source {
+func NewSource(mgr runtimeManager.Manager, operator string, s opv1a1.Source) Source {
 	src := &source{
 		mgr:      mgr,
 		source:   s,
-		Resource: NewResource(mgr, s.Resource),
+		Resource: NewResource(mgr, operator, s.Resource),
 	}
 
 	log := mgr.GetLogger().WithName("source").WithValues("name", src.Resource.String())

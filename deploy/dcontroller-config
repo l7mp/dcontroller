@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: http://localhost:8443
+  name: dcontroller-api
+contexts:
+- context:
+    cluster: dcontroller-api
+  name: dcontroller-context
+current-context: dcontroller-context

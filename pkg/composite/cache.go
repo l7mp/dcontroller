@@ -1,7 +1,7 @@
-package cache
+package composite
 
-// composite cache is a cache that serves views from the view cache and the rest from the default
-// Kubernetes cache
+// Composite cache is a cache that serves views from the view cache and the rest from the default
+// Kubernetes cache.
 
 import (
 	"context"
@@ -24,8 +24,8 @@ type CompositeCache struct {
 	logger, log  logr.Logger
 }
 
-// Options are generic caching options
-type Options struct {
+// CacheOptions are generic caching options
+type CacheOptions struct {
 	cache.Options
 	// DefaultCache is the controller-runtime cache used for anything that is not a view.
 	DefaultCache cache.Cache
@@ -33,9 +33,14 @@ type Options struct {
 	Logger logr.Logger
 }
 
-func NewCompositeCache(config *rest.Config, opts Options) (*CompositeCache, error) {
+func NewCompositeCache(config *rest.Config, opts CacheOptions) (*CompositeCache, error) {
+	logger := opts.Logger
+	if logger.GetSink() == nil {
+		logger = logr.Discard()
+	}
+
 	defaultCache := opts.DefaultCache
-	if opts.DefaultCache == nil {
+	if defaultCache == nil && config != nil {
 		dc, err := cache.New(config, opts.Options)
 		if err != nil {
 			return nil, err
@@ -43,16 +48,11 @@ func NewCompositeCache(config *rest.Config, opts Options) (*CompositeCache, erro
 		defaultCache = dc
 	}
 
-	logger := opts.Logger
-	if logger.GetSink() == nil {
-		logger = logr.Discard()
-	}
-
 	return &CompositeCache{
 		defaultCache: defaultCache,
 		viewCache:    NewViewCache(opts),
 		logger:       logger,
-		log:          logger.WithName("compositecache"),
+		log:          logger.WithName("cache"),
 	}, nil
 }
 
@@ -73,7 +73,7 @@ func (cc *CompositeCache) GetInformer(ctx context.Context, obj client.Object, op
 
 	cc.log.V(6).Info("get-informer", "gvk", gvk)
 
-	if gvk.Group == viewv1a1.GroupVersion.Group {
+	if viewv1a1.IsViewKind(gvk) {
 		return cc.viewCache.GetInformer(ctx, obj)
 	}
 	return cc.defaultCache.GetInformer(ctx, obj)
@@ -82,7 +82,7 @@ func (cc *CompositeCache) GetInformer(ctx context.Context, obj client.Object, op
 func (cc *CompositeCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind, opts ...cache.InformerGetOption) (cache.Informer, error) {
 	cc.log.V(6).Info("get-informer-for-kind", "gvk", gvk)
 
-	if gvk.Group == viewv1a1.GroupVersion.Group {
+	if viewv1a1.IsViewKind(gvk) {
 		return cc.viewCache.GetInformerForKind(ctx, gvk)
 	}
 	return cc.defaultCache.GetInformerForKind(ctx, gvk)
@@ -93,7 +93,7 @@ func (cc *CompositeCache) RemoveInformer(ctx context.Context, obj client.Object)
 
 	cc.log.V(6).Info("remove-informer", "gvk", gvk)
 
-	if gvk.Group == viewv1a1.GroupVersion.Group {
+	if viewv1a1.IsViewKind(gvk) {
 		return cc.viewCache.RemoveInformer(ctx, obj)
 	}
 	return cc.defaultCache.RemoveInformer(ctx, obj)
@@ -115,7 +115,7 @@ func (cc *CompositeCache) WaitForCacheSync(ctx context.Context) bool {
 
 func (cc *CompositeCache) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if gvk.Group == viewv1a1.GroupVersion.Group {
+	if viewv1a1.IsViewKind(gvk) {
 		return cc.viewCache.IndexField(ctx, obj, field, extractValue)
 	}
 	return cc.defaultCache.IndexField(ctx, obj, field, extractValue)
@@ -126,7 +126,7 @@ func (cc *CompositeCache) Get(ctx context.Context, key client.ObjectKey, obj cli
 
 	cc.log.V(5).Info("get", "gvk", gvk, "key", key)
 
-	if gvk.Group == viewv1a1.GroupVersion.Group {
+	if viewv1a1.IsViewKind(gvk) {
 		return cc.viewCache.Get(ctx, key, obj, opts...)
 	}
 	return cc.defaultCache.Get(ctx, key, obj, opts...)
@@ -137,7 +137,7 @@ func (cc *CompositeCache) List(ctx context.Context, list client.ObjectList, opts
 
 	cc.log.V(5).Info("list", "gvk", gvk)
 
-	if gvk.Group == viewv1a1.GroupVersion.Group {
+	if viewv1a1.IsViewKind(gvk) {
 		return cc.viewCache.List(ctx, list, opts...)
 	}
 	return cc.defaultCache.List(ctx, list, opts...)

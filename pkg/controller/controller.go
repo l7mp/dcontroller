@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/cache"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/pipeline"
 	"github.com/l7mp/dcontroller/pkg/reconciler"
@@ -29,6 +29,7 @@ type ProcessorFunc func(ctx context.Context, c *Controller, req reconciler.Reque
 type Options struct {
 	// Processor allows to override the default request processor of the controller.
 	Processor ProcessorFunc
+
 	// ErrorChannel is a channel to receive errors from the controller.
 	ErrorChan chan error
 }
@@ -38,22 +39,22 @@ var _ runtimeManager.Runnable = &Controller{}
 // Controller is a dcontroller reconciler.
 type Controller struct {
 	*errorReporter
-	name, kind  string
-	config      opv1a1.Controller
-	sources     []reconciler.Source
-	cache       map[schema.GroupVersionKind]*cache.Store // needed to recover deleted objects
-	target      reconciler.Target
-	mgr         runtimeManager.Manager
-	watcher     chan reconciler.Request
-	pipeline    pipeline.Evaluator
-	processor   ProcessorFunc
-	logger, log logr.Logger
+	name, kind, op string
+	config         opv1a1.Controller
+	sources        []reconciler.Source
+	cache          map[schema.GroupVersionKind]*composite.Store // needed to recover deleted objects
+	target         reconciler.Target
+	mgr            runtimeManager.Manager
+	watcher        chan reconciler.Request
+	pipeline       pipeline.Evaluator
+	processor      ProcessorFunc
+	logger, log    logr.Logger
 }
 
-// New registers a new controller given by the source resource(s) the controller watches, a target
-// resource the controller sends its output, and a processing pipeline to process the base
-// resources into target resources.
-func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*Controller, error) {
+// New registers a new controller for an operator, given by the source resource(s) the controller
+// watches, a target resource the controller sends its output, and a processing pipeline to process
+// the base resources into target resources.
+func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, opts Options) (*Controller, error) {
 	logger := mgr.GetLogger()
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -61,8 +62,9 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 
 	c := &Controller{
 		mgr:           mgr,
+		op:            operator,
 		sources:       []reconciler.Source{},
-		cache:         make(map[schema.GroupVersionKind]*cache.Store),
+		cache:         make(map[schema.GroupVersionKind]*composite.Store),
 		config:        config,
 		watcher:       make(chan reconciler.Request, WatcherBufferSize),
 		errorReporter: NewErrorReporter(opts.ErrorChan),
@@ -95,7 +97,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 
 	// Create the target
 	c.kind = config.Target.Kind // the kind of the target
-	c.target = reconciler.NewTarget(mgr, config.Target)
+	c.target = reconciler.NewTarget(mgr, c.op, config.Target)
 
 	// Create the reconciler
 	controllerReconciler := NewControllerReconciler(mgr, c)
@@ -103,7 +105,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 	// Create the sources and the cache
 	srcs := []string{}
 	for _, s := range config.Sources {
-		source := reconciler.NewSource(mgr, s)
+		source := reconciler.NewSource(mgr, c.op, s)
 		c.sources = append(c.sources, source)
 		srcs = append(srcs, source.String())
 	}
@@ -119,7 +121,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 		}
 
 		// Init the cache
-		c.cache[gvk] = cache.NewStore()
+		c.cache[gvk] = composite.NewStore()
 
 		// Create the controller
 		ctrl, err := controller.NewTyped(name, mgr, controller.TypedOptions[reconciler.Request]{
@@ -149,7 +151,7 @@ func New(mgr runtimeManager.Manager, config opv1a1.Controller, opts Options) (*C
 	}
 
 	// Create the pipeline
-	pipeline, err := pipeline.NewPipeline(c.kind, baseviews, c.config.Pipeline,
+	pipeline, err := pipeline.NewPipeline(c.op, c.kind, baseviews, c.config.Pipeline,
 		logger.WithName("pipeline").WithValues("controller", c.name, "target-kind", c.kind))
 	if err != nil {
 		return c, c.PushCriticalError(fmt.Errorf("failed to create pipleline for controller %s: %w",
@@ -178,6 +180,25 @@ func (c *Controller) SetPipeline(pipeline pipeline.Evaluator) { c.pipeline = pip
 
 // ReportErrors returns a short report on the error stack of the controller.
 func (c *Controller) ReportErrors() []string { return c.Report() }
+
+// GetGVKs returns the GVKs of the views registered with the controller.
+func (c *Controller) GetGVKs() []schema.GroupVersionKind {
+	gvks := []schema.GroupVersionKind{}
+	if c.target != nil {
+		gvk, err := c.target.GetGVK()
+		if err == nil {
+			gvks = append(gvks, gvk)
+		}
+	}
+	for _, src := range c.sources {
+		gvk, err := src.GetGVK()
+		if err == nil {
+			gvks = append(gvks, gvk)
+		}
+	}
+
+	return gvks
+}
 
 // Start starts running the controller. The Start function blocks until the context is closed or an
 // error occurs, and it will stop running when the context is closed.
@@ -251,7 +272,7 @@ func processRequest(ctx context.Context, c *Controller, req reconciler.Request) 
 	obj.SetName(req.Name)
 
 	switch req.EventType {
-	case cache.Added, cache.Updated, cache.Replaced:
+	case object.Added, object.Updated, object.Replaced:
 		if err := c.mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
 			return fmt.Errorf("object %s/%s disappeared from client for Add/Update event: %w",
 				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
@@ -260,7 +281,7 @@ func processRequest(ctx context.Context, c *Controller, req reconciler.Request) 
 			return fmt.Errorf("failed to add object %s/%s to cache: %w",
 				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
 		}
-	case cache.Deleted:
+	case object.Deleted:
 		d, ok, err := c.cache[req.GVK].Get(obj)
 		if err != nil {
 			return fmt.Errorf("failed to get object %s/%s to cache in Delete event: %w",
@@ -281,7 +302,7 @@ func processRequest(ctx context.Context, c *Controller, req reconciler.Request) 
 		return nil
 	}
 
-	delta := cache.Delta{
+	delta := object.Delta{
 		Type:   req.EventType,
 		Object: obj,
 	}

@@ -145,6 +145,21 @@ var (
 		},
 	}
 
+	TestConfigMapDeployment = &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "dcontroller.io/v1alpha1",
+			"kind":       "ConfigDeployment",
+			"metadata": map[string]any{
+				"name":      "dep-config",
+				"namespace": "default",
+			},
+			"spec": map[string]any{
+				"configMap":  "test-configmap",
+				"deployment": "test-deployment",
+			},
+		},
+	}
+
 	TestPod = &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": "/v1",
