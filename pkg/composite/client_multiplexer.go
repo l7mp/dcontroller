@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,12 +28,18 @@ type ClientMultiplexer interface {
 type clientMultiplexer struct {
 	mu      sync.RWMutex
 	clients map[string]client.Client
+	log     logr.Logger
 }
 
 // NewClientMultiplexer creates a new ClientMultiplexer instance
-func NewClientMultiplexer() ClientMultiplexer {
+func NewClientMultiplexer(logger logr.Logger) ClientMultiplexer {
+	if logger.GetSink() == nil {
+		logger = logr.Discard()
+	}
+
 	return &clientMultiplexer{
 		clients: make(map[string]client.Client),
+		log:     logger.WithName("client-mpx"),
 	}
 }
 
@@ -46,6 +53,9 @@ func (m *clientMultiplexer) RegisterClient(group string, c client.Client) error 
 	}
 
 	m.clients[group] = c
+
+	m.log.V(3).Info("API group registered", "group", group)
+
 	return nil
 }
 
@@ -59,6 +69,9 @@ func (m *clientMultiplexer) UnregisterClient(group string) error {
 	}
 
 	delete(m.clients, group)
+
+	m.log.V(3).Info("API group unregistered", "group", group)
+
 	return nil
 }
 
@@ -69,7 +82,7 @@ func (m *clientMultiplexer) getClientForObject(obj client.Object) (client.Client
 		return nil, apierrors.NewBadRequest("object does not have GroupVersionKind set")
 	}
 
-	return m.getClientForGroup(gvk.Group)
+	return m.getClientForGroup(gvk.Group, gvk.Kind)
 }
 
 // getClientForObject determines the appropriate client based on the object's API group
@@ -79,11 +92,11 @@ func (m *clientMultiplexer) getClientForObjectList(list client.ObjectList) (clie
 		return nil, apierrors.NewBadRequest("object does not have GroupVersionKind set")
 	}
 
-	return m.getClientForGroup(gvk.Group)
+	return m.getClientForGroup(gvk.Group, gvk.Kind)
 }
 
 // getClientForGroup returns the client for the specified API group
-func (m *clientMultiplexer) getClientForGroup(group string) (client.Client, error) {
+func (m *clientMultiplexer) getClientForGroup(group, kind string) (client.Client, error) {
 	m.mu.RLock()
 	c, exists := m.clients[group]
 	defer m.mu.RUnlock()
@@ -91,8 +104,8 @@ func (m *clientMultiplexer) getClientForGroup(group string) (client.Client, erro
 	if !exists {
 		return nil, apierrors.NewNotFound(schema.GroupResource{
 			Group:    group,
-			Resource: "unknown",
-		}, "")
+			Resource: kind,
+		}, "client-mpx")
 	}
 
 	return c, nil
@@ -102,6 +115,8 @@ func (m *clientMultiplexer) getClientForGroup(group string) (client.Client, erro
 
 // Get retrieves an obj for the given object key from the Kubernetes Cluster
 func (m *clientMultiplexer) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	m.log.V(3).Info("GET", "GVK", client.ObjectKeyFromObject(obj).String())
+
 	c, err := m.getClientForObject(obj)
 	if err != nil {
 		return err
@@ -111,15 +126,20 @@ func (m *clientMultiplexer) Get(ctx context.Context, key client.ObjectKey, obj c
 
 // List retrieves list of objects for a given namespace and list options
 func (m *clientMultiplexer) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	m.log.V(3).Info("LIST", "GVK", list.GetObjectKind().GroupVersionKind().String())
+
 	c, err := m.getClientForObjectList(list)
 	if err != nil {
 		return err
 	}
+
 	return c.List(ctx, list, opts...)
 }
 
 // Create saves the object obj in the Kubernetes cluster
 func (m *clientMultiplexer) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	m.log.V(3).Info("CREATE", "GVK", client.ObjectKeyFromObject(obj).String())
+
 	c, err := m.getClientForObject(obj)
 	if err != nil {
 		return err
@@ -129,6 +149,8 @@ func (m *clientMultiplexer) Create(ctx context.Context, obj client.Object, opts 
 
 // Delete deletes the given obj from Kubernetes cluster
 func (m *clientMultiplexer) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	m.log.V(3).Info("DELETE", "GVK", client.ObjectKeyFromObject(obj).String())
+
 	c, err := m.getClientForObject(obj)
 	if err != nil {
 		return err
@@ -138,6 +160,8 @@ func (m *clientMultiplexer) Delete(ctx context.Context, obj client.Object, opts 
 
 // Update updates the given obj in the Kubernetes cluster
 func (m *clientMultiplexer) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	m.log.V(3).Info("UPDATE", "GVK", client.ObjectKeyFromObject(obj).String())
+
 	c, err := m.getClientForObject(obj)
 	if err != nil {
 		return err
@@ -147,6 +171,8 @@ func (m *clientMultiplexer) Update(ctx context.Context, obj client.Object, opts 
 
 // Patch patches the given obj in the Kubernetes cluster
 func (m *clientMultiplexer) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	m.log.V(3).Info("PATCH", "GVK", client.ObjectKeyFromObject(obj).String())
+
 	c, err := m.getClientForObject(obj)
 	if err != nil {
 		return err
@@ -156,6 +182,8 @@ func (m *clientMultiplexer) Patch(ctx context.Context, obj client.Object, patch 
 
 // DeleteAllOf deletes all objects of the given type matching the given options
 func (m *clientMultiplexer) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+	m.log.V(3).Info("DELETE-ALL", "GVK", client.ObjectKeyFromObject(obj).String())
+
 	c, err := m.getClientForObject(obj)
 	if err != nil {
 		return err
@@ -221,7 +249,7 @@ func (m *clientMultiplexer) IsObjectNamespaced(obj runtime.Object) (bool, error)
 		return false, err
 	}
 
-	c, err := m.getClientForGroup(gvk.Group)
+	c, err := m.getClientForGroup(gvk.Group, gvk.Kind)
 	if err != nil {
 		return false, err
 	}
@@ -241,6 +269,8 @@ func (m *clientMultiplexer) SubResource(subResource string) client.SubResourceCl
 
 // Watch watches objects of type obj and sends events on the returned channel
 func (m *clientMultiplexer) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
+	m.log.V(3).Info("WATCH", "GVK", list.GetObjectKind().GroupVersionKind().String())
+
 	c, err := m.getClientForObjectList(list)
 	if err != nil {
 		return nil, err

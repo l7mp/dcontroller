@@ -264,7 +264,7 @@ var _ = Describe("APIServer Integration", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Create the client multiplexer
-		clientMpx = composite.NewClientMultiplexer()
+		clientMpx = composite.NewClientMultiplexer(logger)
 		err = clientMpx.RegisterClient(viewv1a1.Group("test"), mgr.GetClient())
 		Expect(err).NotTo(HaveOccurred())
 

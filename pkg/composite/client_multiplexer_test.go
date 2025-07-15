@@ -38,7 +38,7 @@ var _ = Describe("ClientMultiplexer", func() {
 		anotherViewCache = NewViewCache(CacheOptions{})
 		anotherViewClient = anotherViewCache.GetClient()
 
-		multiplexer = NewClientMultiplexer()
+		multiplexer = NewClientMultiplexer(logger)
 	})
 
 	Describe("Client Registration", func() {

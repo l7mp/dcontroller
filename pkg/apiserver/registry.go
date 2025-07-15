@@ -82,7 +82,7 @@ func (s *APIServer) RegisterAPIGroup(group string, gvks []schema.GroupVersionKin
 	s.cachedOpenAPIDefs = nil
 	s.cachedOpenAPIV3Defs = nil
 
-	s.log.V(1).Info("API group registered", "group", group, "GVKs", len(gvks))
+	s.log.Info("API group registered", "group", group, "GVKs", len(gvks))
 
 	return nil
 }
@@ -103,7 +103,7 @@ func (s *APIServer) UnregisterAPIGroup(group string) {
 	s.cachedOpenAPIDefs = nil
 	s.cachedOpenAPIV3Defs = nil
 
-	s.log.V(1).Info("API group unregistered", "group", group)
+	s.log.Info("API group unregistered", "group", group)
 }
 
 // registerAPIGroup registers a single API group with its resources

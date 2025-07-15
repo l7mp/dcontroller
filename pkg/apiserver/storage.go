@@ -401,7 +401,7 @@ func (s *ClientDelegatedStorage) Watch(ctx context.Context, options *metainterna
 
 // ConvertToTable converts objects to table format for kubectl output
 func (s *ClientDelegatedStorage) ConvertToTable(ctx context.Context, object runtime.Object, tableOptions runtime.Object) (*metav1.Table, error) {
-	s.log.V(4).Info("CONVERT TO TABLE", "GVR", s.gvr.String())
+	s.log.V(4).Info("CONVERT-TO-TABLE", "GVR", s.gvr.String())
 
 	table := &metav1.Table{
 		TypeMeta: metav1.TypeMeta{

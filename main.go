@@ -90,6 +90,7 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "92062b70.dcontroller.io",
+		Logger:                 logger,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to set up dcontroller")
@@ -109,7 +110,7 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 
 	if !disableAPIServer {
-		config, err := apiserver.NewDefaultConfig("", APIServerPort, mgr.GetClient(), true, logger)
+		config, err := apiserver.NewDefaultConfig("", APIServerPort, c.GetClient(), true, logger)
 		if err != nil {
 			setupLog.Error(err, "failed to create the config for the embedded API server")
 			os.Exit(1)
@@ -120,12 +121,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		setupLog.Info("starting embedded API server", "config", config.String())
-		go func() {
-			if err := apiServer.Start(ctx); err != nil {
-				setupLog.Error(err, "embedded API server raised an error")
-			}
-		}()
+		c.SetAPIServer(apiServer)
 	}
 
 	setupLog.Info("starting operator")

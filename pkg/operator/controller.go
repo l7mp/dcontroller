@@ -22,6 +22,7 @@ import (
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/apiserver"
 	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/util"
@@ -36,6 +37,8 @@ type Controller interface {
 	runtimeManager.Runnable
 	reconcile.Reconciler
 	GetManager() runtimeManager.Manager
+	GetClient() client.Client
+	SetAPIServer(*apiserver.APIServer)
 }
 
 type opEntry struct {
@@ -49,6 +52,7 @@ type controller struct {
 	mgr         runtimeManager.Manager
 	operators   map[types.NamespacedName]*opEntry
 	clientMpx   composite.ClientMultiplexer
+	apiServer   *apiserver.APIServer
 	mu          sync.Mutex
 	options     runtimeManager.Options
 	ctx         context.Context
@@ -77,7 +81,7 @@ func NewController(config *rest.Config, options runtimeManager.Options) (Control
 	controller := &controller{
 		Client:    mgr.GetClient(),
 		mgr:       mgr,
-		clientMpx: composite.NewClientMultiplexer(),
+		clientMpx: composite.NewClientMultiplexer(logger),
 		options:   options,
 		operators: make(map[types.NamespacedName]*opEntry),
 		logger:    logger,
@@ -138,6 +142,12 @@ func (c *controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	return reconcile.Result{}, nil
 }
 
+// SetAPIServer allows to set the embedded API server. The API server will be started automatically
+// by Start.
+func (c *controller) SetAPIServer(apiServer *apiserver.APIServer) {
+	c.apiServer = apiServer
+}
+
 // Start starts the operator controller and each operator registered with the controller. It blocks
 func (c *controller) Start(ctx context.Context) error {
 	c.log.Info("starting operators")
@@ -149,6 +159,14 @@ func (c *controller) Start(ctx context.Context) error {
 
 	for k := range c.operators {
 		c.startOp(k)
+	}
+
+	if c.apiServer != nil {
+		go func() {
+			if err := c.apiServer.Start(ctx); err != nil {
+				c.log.Error(err, "embedded API server error")
+			}
+		}()
 	}
 
 	return c.mgr.Start(ctx)
@@ -196,8 +214,8 @@ func (c *controller) upsertOperator(spec *opv1a1.Operator) (*Operator, error) {
 }
 
 func (c *controller) addOperator(spec *opv1a1.Operator) (*Operator, error) {
-	name := client.ObjectKeyFromObject(spec).String()
-	c.log.V(2).Info("adding operator", "name", name)
+	opName := spec.GetName()
+	c.log.V(4).Info("adding operator", "name", opName)
 
 	// disable leader-election, health-check and the metrics server on the embedded manager
 	opts := c.options // shallow copy?
@@ -212,12 +230,13 @@ func (c *controller) addOperator(spec *opv1a1.Operator) (*Operator, error) {
 	mgr, err := manager.New(c.mgr.GetConfig(), manager.Options{Options: opts})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create manager for operator %s: %w",
-			spec.Name, err)
+			opName, err)
 	}
 
 	key := client.ObjectKeyFromObject(spec)
 	errorChan := make(chan error, StatusChannelBufferSize)
-	operator := New(spec.GetName(), mgr, &spec.Spec, Options{
+	operator := New(opName, mgr, &spec.Spec, Options{
+		APIServer:    c.apiServer,
 		ErrorChannel: errorChan,
 		Logger:       c.logger,
 	})
@@ -227,8 +246,8 @@ func (c *controller) addOperator(spec *opv1a1.Operator) (*Operator, error) {
 	c.mu.Unlock()
 
 	// register the operator in the client multiplexer
-	if err := c.clientMpx.RegisterClient(viewv1a1.Group(name), operator.mgr.GetClient()); err != nil {
-		c.log.Error(err, "failed to register operator in the multiplex client", "operator", name)
+	if err := c.clientMpx.RegisterClient(viewv1a1.Group(opName), operator.mgr.GetClient()); err != nil {
+		c.log.Error(err, "failed to register operator in the multiplex client", "operator", opName)
 	}
 
 	// start the new operator if we are already running
@@ -240,7 +259,7 @@ func (c *controller) addOperator(spec *opv1a1.Operator) (*Operator, error) {
 }
 
 func (c *controller) deleteOperator(k types.NamespacedName) {
-	c.log.V(2).Info("deleting operator", "name", k)
+	c.log.V(4).Info("deleting operator", "name", k)
 
 	e := c.getOperatorEntry(k)
 	if e == nil {

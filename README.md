@@ -232,6 +232,26 @@ kubectl -n kube-system get pod etcd -o jsonpath='{.metadata.annotations}'
 ...
 ```
 
+### Connecting to the embedded API server
+
+Δ-controller includes an custom embedded Kubernetes API server that allows standard kubectl
+clients to inspect, modify or watch operators' view resources. Currently the API server is exposed
+over insecure unauthenticated HTTP for simplicity so we do not expose it to the Internet. Rather,
+use a kubectl port-forward to reach it:
+
+1. Start a port-forward in background:
+
+```console
+kubectl port-forward deployment/dcontroller-manager 8443:8443 &
+```
+
+2. Use the default dcontroller kubeconfig pointing to forwarded port:
+
+```console
+export KUBECONFIG=deploy/dcontroller-config
+kubectl list my-operator.view.dcontroller.io
+```
+
 ### Cleanup
 
 Remove all resources we have created:
