@@ -2,8 +2,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   labels:
-    control-plane: dcontroller-manager
-  name: dcontroller-manager-system
+    control-plane: dcontroller
+  name: dcontroller-system
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -268,14 +268,14 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: dcontroller-manager
-  namespace: dcontroller-manager-system
+  name: dcontroller
+  namespace: dcontroller-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: dcontroller-leader-election-role
-  namespace: dcontroller-manager-system
+  namespace: dcontroller-system
 rules:
 - apiGroups:
   - ""
@@ -312,7 +312,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: dcontroller-manager-role
+  name: dcontroller-role
 rules:
 - apiGroups:
   - '*'
@@ -343,28 +343,28 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: dcontroller-leader-election-rolebinding
-  namespace: dcontroller-manager-system
+  namespace: dcontroller-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: dcontroller-leader-election-role
 subjects:
 - kind: ServiceAccount
-  name: dcontroller-manager
-  namespace: dcontroller-manager-system
+  name: dcontroller
+  namespace: dcontroller-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: dcontroller-manager-rolebinding
+  name: dcontroller-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: dcontroller-manager-role
+  name: dcontroller-role
 subjects:
 - kind: ServiceAccount
-  name: dcontroller-manager
-  namespace: dcontroller-manager-system
+  name: dcontroller
+  namespace: dcontroller-system
 ---
 apiVersion: v1
 data:
@@ -382,27 +382,27 @@ data:
       resourceName: 92062b70.dcontroller.io
 kind: ConfigMap
 metadata:
-  name: dcontroller-manager-config
-  namespace: dcontroller-manager-system
+  name: dcontroller-config
+  namespace: dcontroller-system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    control-plane: dcontroller-manager
-  name: dcontroller-manager
-  namespace: dcontroller-manager-system
+    control-plane: dcontroller
+  name: dcontroller
+  namespace: dcontroller-system
 spec:
   replicas: 1
   selector:
     matchLabels:
-      control-plane: dcontroller-manager
+      control-plane: dcontroller
   template:
     metadata:
       annotations:
-        kubectl.kubernetes.io/default-container: dcontroller-manager
+        kubectl.kubernetes.io/default-container: dcontroller
       labels:
-        control-plane: dcontroller-manager
+        control-plane: dcontroller
     spec:
       containers:
       - args:
@@ -416,7 +416,7 @@ spec:
             port: 8081
           initialDelaySeconds: 15
           periodSeconds: 20
-        name: dcontroller-manager
+        name: dcontroller
         readinessProbe:
           httpGet:
             path: /readyz
@@ -434,5 +434,5 @@ spec:
           allowPrivilegeEscalation: false
       securityContext:
         runAsNonRoot: true
-      serviceAccountName: dcontroller-manager
+      serviceAccountName: dcontroller
       terminationGracePeriodSeconds: 10
