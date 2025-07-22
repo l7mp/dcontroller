@@ -110,7 +110,7 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 
 	if !disableAPIServer {
-		config, err := apiserver.NewDefaultConfig("", APIServerPort, c.GetClient(), true, logger)
+		config, err := apiserver.NewDefaultConfig("0.0.0.0", APIServerPort, c.GetClient(), true, logger)
 		if err != nil {
 			setupLog.Error(err, "failed to create the config for the embedded API server")
 			os.Exit(1)
