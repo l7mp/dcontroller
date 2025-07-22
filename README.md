@@ -19,7 +19,6 @@ helm install dcontroller dcontroller/dcontroller
 
 ## License
 
-Copyright 2024 by its authors. Some rights reserved. See [AUTHORS](AUTHORS).
+Copyright 2025 by its authors. Some rights reserved. See [AUTHORS](https://github.com/l7mp/dcontroller/blob/master/AUTHORS).
 
-Apache License - see [LICENSE](LICENSE) for full text.
-
+Apache License - see [LICENSE](https://github.com/l7mp/dcontroller/blob/master/LICENSE) for full text.
