@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web-app
+  template:
+    metadata:
+      labels:
+        app: web-app
+        dcontroller.io/health-monitor: "enabled"
+    spec:
+      containers:
+      - name: app
+        image: busybox
+        command: ["sh", "-c"]
+        args:
+          - |
+            # Trap SIGUSR1 to exit gracefully
+            trap 'echo "Received SIGUSR1, exiting..."; exit 1' USR1            
+            echo "Starting app (PID: $$). Send SIGUSR1 to terminate."
+            # Keep running until signal received
+            while true; do
+              sleep 10
+            done
+        readinessProbe:
+          exec:
+            command: ["sh", "-c", "pgrep sleep"]
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command: ["sh", "-c", "pgrep sleep"]
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app
+  namespace: default
+spec:
+  selector:
+    app: web-app
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
