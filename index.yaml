@@ -3,9 +3,9 @@ entries:
   dcontroller:
   - apiVersion: v2
     appVersion: 0.0.0
-    created: "2025-07-23T17:13:05.140844636Z"
+    created: "2025-07-23T17:29:59.6081883Z"
     description: A Helm chart for deploying dcontroller
-    digest: 6298f1214ee42e86320879160142226fc7f88b35e77590fced1d2ea57df58b94
+    digest: f0de968f3c2ee5e689511efc7313e0520b718b8be323e9ac9c859d797f305871
     maintainers:
     - name: rg0now
     name: dcontroller
@@ -13,4 +13,4 @@ entries:
     urls:
     - https://l7mp.github.io/dcontroller/dcontroller-0.0.0.tgz
     version: 0.0.0
-generated: "2025-07-23T17:13:05.140479745Z"
+generated: "2025-07-23T17:29:59.607820132Z"
