@@ -21,3 +21,4 @@ Welcome to the official documentation for Δ-controller, a NoCode/LowCode framew
     *   [ConfigMap-Deployment Controller](./examples/configmap-deployment-controller/README.md): A purely declarative controller that automatically restarts Deployments when a referenced ConfigMap changes.
     *   [Service Health Monitor](./examples/service-health-monitor/README.md): A two-stage pipeline using a custom View to monitor pod health and annotate Services with the results.
     *   [EndpointSlice Controller](./examples/endpointslice-controller/README.md): A hybrid controller demonstrating how to integrate declarative pipelines with imperative Go-based reconcilers.
+*   [Further reading](./further-reading.md)
