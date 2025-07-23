@@ -162,7 +162,7 @@ var (
 
 	TestPod = &unstructured.Unstructured{
 		Object: map[string]any{
-			"apiVersion": "/v1",
+			"apiVersion": "v1",
 			"kind":       "Pod",
 			"metadata": map[string]any{
 				"name":      "testpod",
