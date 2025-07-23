@@ -88,6 +88,12 @@ var _ = Describe("APIServerUnitTest", func() {
 		config, err := NewDefaultConfig("", port, mgr.GetClient(), true, logger)
 		Expect(err).NotTo(HaveOccurred())
 		server, err = NewAPIServer(config)
+		if err != nil {
+			port = rand.IntN(5000) + (32768) //nolint:gosec
+			config, err = NewDefaultConfig("", port, mgr.GetClient(), true, logger)
+			Expect(err).NotTo(HaveOccurred())
+			server, err = NewAPIServer(config)
+		}
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -206,6 +212,12 @@ var _ = Describe("APIServerUnitTest", func() {
 				config, err := NewDefaultConfig(tc.addr, port, mgr.GetClient(), true, logger)
 				Expect(err).NotTo(HaveOccurred())
 				s, err := NewAPIServer(config)
+				if err != nil {
+					port = rand.IntN(15000) + (32768) //nolint:gosec
+					config, err = NewDefaultConfig(tc.addr, port, mgr.GetClient(), true, logger)
+					Expect(err).NotTo(HaveOccurred())
+					s, err = NewAPIServer(config)
+				}
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s).NotTo(BeNil())
 			}
@@ -281,6 +293,15 @@ var _ = Describe("APIServer Integration", func() {
 		config, err := NewDefaultConfig(serverAddr, port, clientMpx, true, logger)
 		Expect(err).NotTo(HaveOccurred())
 		apiServer, err = NewAPIServer(config)
+		if err != nil {
+			// Try again of there was a port clash
+			serverAddr = "localhost"
+			port = rand.IntN(15000) + 32768 //nolint:gosec
+			config, err = NewDefaultConfig(serverAddr, port, clientMpx, true, logger)
+			Expect(err).NotTo(HaveOccurred())
+			apiServer, err = NewAPIServer(config)
+			Expect(err).NotTo(HaveOccurred())
+		}
 		Expect(err).NotTo(HaveOccurred())
 
 		err = apiServer.RegisterAPIGroup(viewv1a1.Group("test"), []schema.GroupVersionKind{

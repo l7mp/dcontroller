@@ -55,6 +55,13 @@ var _ = Describe("APIServerUnitTest", func() {
 		config, err := NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, logger)
 		Expect(err).NotTo(HaveOccurred())
 		server, err = NewAPIServer(config)
+		if err != nil {
+			serverAddr = "localhost"
+			port = rand.IntN(15000) + 32768 //nolint:gosec
+			config, err = NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, logger)
+			Expect(err).NotTo(HaveOccurred())
+			server, err = NewAPIServer(config)
+		}
 		Expect(err).NotTo(HaveOccurred())
 
 		// Start the server
