@@ -1,27 +1,16 @@
 # ConfigMap-Deployment operator: A NoCode Δ-controller operator
 
-In this tutorial we are going to create a ConfigDeployment custom resource definition (CRD) and
-write a fully declarative controller that will implement the reconciler logic for this
-resource. The purpose is to manage a Deployment whose pods are always using the latest version of a
-ConfigMap. While ConfigMaps are auto-updated within Pods, applications may not always be able to
-auto-refresh config from the file system. Some applications require restarts to apply configuration
-updates, and this is the logic that our controller will implement.
+In this tutorial we are going to create a ConfigDeployment custom resource definition (CRD) and write a fully declarative controller that will implement the reconciler logic for this resource.
+
+The goal is to manage a Deployment whose pods are always using the latest version of a ConfigMap. While ConfigMaps are auto-updated within Pods, applications may not always be able to auto-refresh config from the file system. Some applications require restarts to apply configuration updates, and this is the logic that our controller will implement.
 
 ## Description
 
-This example will specify a NoCode Kubernetes operator taken from the [kubebuilder
-book](https://book.kubebuilder.io/reference/watching-resources/externally-managed.html?highlight=configmap#watch-linked-resources). The
-operator will implemented in a completely declarative form using the Δ-controller framework.
+The example will specify a NoCode Kubernetes operator taken from the [kubebuilder book](https://book.kubebuilder.io/reference/watching-resources/externally-managed.html?highlight=configmap#watch-linked-resources). The operator will implemented in a completely declarative form using the Δ-controller framework.
 
-- A ConfigDeployment CRD will hold a reference to a ConfigMap and a Deployment (both by name)
-  inside its Spec, specifying the intent that the Deployment should be restarted whenever the
-  corresponding ConfigMap is updated. All three objects must be in the same namespace.
-- The ConfigDeployment controller will be in charge of linking each ConfigMap with the
-  corresponding Deployment, watching ConfigMaps and writing an annotation into the PodTemplate of
-  the linked Deployment that will keep track of the latest version of the data within the
-  referenced ConfigMap. Therefore when the version of the configMap is changed, the PodTemplate in
-  the Deployment will change. This will cause a rolling upgrade of all Pods managed by the
-  Deployment.
+A ConfigDeployment CRD will hold a reference to a ConfigMap and a Deployment (both by name) inside its Spec, specifying the intent that the Deployment should be restarted whenever the corresponding ConfigMap is updated. All three objects must be in the same namespace.
+
+The ConfigDeployment controller will be in charge of linking each ConfigMap with the corresponding Deployment, watching ConfigMaps and writing an annotation into the PodTemplate of the linked Deployment that will keep track of the latest version of the data within the referenced ConfigMap. Therefore when the version of the configMap is changed, the PodTemplate in the Deployment will change. This will cause a rolling upgrade of all Pods managed by the Deployment.
 
 ## Setup
 
@@ -40,26 +29,13 @@ Insert the ConfigDeployment operator that will handle the CRD and implement the 
 kubectl apply -f examples/configmap-deployment-controller/configdeployment-operator.yaml
 ```
 
-The operator definition includes a single controller, which in turn consists of 4 parts:
+The operator definition includes a single controller, which consists of 4 parts:
 
-The name specifies a unique controller name inside our operator that is used to refer to individual
-controllers. The `sources` field contains a set of Kubernetes API resources to watch. This time,
-the resources are the Deployments, the ConfigMaps, plus the ConfigDeployment CRD we have just
-created. The `target` field specifies a single API resource to update with the results. The type of
-the target is `Patches`, which indicates that the controller will use the processing pipeline
-output to patch the target. (In contrast, `Updater` targets will simply overwrite the target.)
+The name specifies a unique controller name inside our operator that is used to refer to individual controllers. The `sources` field contains a set of Kubernetes API resources to watch. This time, the resources are the Deployments, the ConfigMaps, plus the ConfigDeployment CRD we have just created. The `target` field specifies a single API resource to update with the results. The type of the target is `Patches`, which indicates that the controller will use the processing pipeline output to patch the target. (In contrast, `Updater` targets will simply overwrite the target.)
 
-The most important field is the `pipeline`, which specifies a declarative pipeline to process the
-source API resources into the target resource. The fields of the source and the target resource can
-be specified using standard [JSONPath notation](https://datatracker.ietf.org/doc/html/rfc9535).
+The most important field is `pipeline`, which specifies a declarative pipeline to process the source API resources into the target resource. The fields of the source and the target resource can be specified using standard [JSONPath notation](https://datatracker.ietf.org/doc/html/rfc9535). 
 
-The first `@join` op (if exists, this must always come first) describes how to combine the source
-resources. This is done by taking a Cartesian product of all source objects, creating a temporary
-object with one root-level field corresponding to each source resource type (so the ConfigMap will
-go into `$.ConfigMap`, Deployment into `$.Deployment`, etc.), and then evaluating the boolean
-expression on the result. The first `@eq` expression matches the `$.spec.configMap` field from the
-ConfigDeployment with the name of the ConfigMap, the second does likewise for Deployments, and the
-final two `@eq` ops makes sure that all three objects must be in the same namespace:
+Δ-controller comes with a rich aggregation and expression language that allows to manipulate structured objects in purely declarative way. The first `@join` op (if exists, this must always come first) describes how to combine the source resources. This is done by taking a Cartesian product of all source objects, creating a temporary object with one root-level field corresponding to each source resource type (so the ConfigMap will go into `$.ConfigMap`, Deployment into `$.Deployment`, etc.), and then evaluating the boolean expression on the result. The first `@eq` expression matches the `$.spec.configMap` field from the ConfigDeployment with the name of the ConfigMap, the second does likewise for Deployments, and the final two `@eq` ops makes sure that all three objects must be in the same namespace:
 
 ```yaml
 "@join":
@@ -73,11 +49,7 @@ final two `@eq` ops makes sure that all three objects must be in the same namesp
 ...
 ```
 
-The second part of the pipeline specifies how to aggregate the objects selected by the join into a
-patch that will be used to update the target. The operations is fairly simple: we copy the
-Deployment name and namespace from the metadata (these will make sure we actually update the
-selected Deployment) and writes the ConfigMap's resource version into an annotation in the pod
-template:
+The second part of the pipeline specifies how to aggregate the objects selected by the join into a patch that will be used to update the target. The operations is fairly simple: we copy the Deployment name and namespace from the metadata (these will make sure we actually update the selected Deployment) and writes the ConfigMap's resource version into an annotation in the pod template:
 
 ```yaml
 "@aggregate":
@@ -93,9 +65,7 @@ template:
 ...
 ```
 
-And that's all. With about 40 lines of purely declarative and mostly self-explanatory YAML we have
-recreated the functionality of a textbook example operator that takes couple of hundreds of lines
-of Go plus a sizeable boilerplate.
+And that's all. With about 40 lines of purely declarative and mostly self-explanatory YAML we have recreated the functionality of a textbook example operator that takes couple of hundreds of lines of Go plus a sizeable boilerplate.
 
 ## Test
 
@@ -137,8 +107,7 @@ status:
       type: Ready
 ```
 
-Let's check whether the resource version of the configmap actually appears as an annotation on the
-pods of the deployment:
+Let's check whether the resource version of the configmap actually appears as an annotation on the pods of the deployment:
 
 ```console
 kubectl get configmaps config -o jsonpath='{.metadata.resourceVersion}'
