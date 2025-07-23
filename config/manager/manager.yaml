@@ -2,27 +2,27 @@ apiVersion: v1
 kind: Namespace
 metadata:
   labels:
-    control-plane: dcontroller-manager
-  name: system
+    control-plane: dcontroller
+  name: -system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: manager
-  namespace: system
+  name: -manager
+  namespace: -system
   labels:
-    control-plane: dcontroller-manager
+    control-plane: dcontroller
 spec:
   selector:
     matchLabels:
-      control-plane: dcontroller-manager
+      control-plane: dcontroller
   replicas: 1
   template:
     metadata:
       annotations:
-        kubectl.kubernetes.io/default-container: dcontroller-manager
+        kubectl.kubernetes.io/default-container: dcontroller
       labels:
-        control-plane: dcontroller-manager
+        control-plane: dcontroller
     spec:
       securityContext:
         runAsNonRoot: true
@@ -32,7 +32,7 @@ spec:
         args:
         - --leader-elect
         image: dcontroller:latest
-        name: dcontroller-manager
+        name: dcontroller
         securityContext:
           allowPrivilegeEscalation: false
         livenessProbe:
@@ -54,5 +54,5 @@ spec:
           requests:
             cpu: 10m
             memory: 64Mi
-      serviceAccountName: dcontroller-manager
+      serviceAccountName: dcontroller-account
       terminationGracePeriodSeconds: 10

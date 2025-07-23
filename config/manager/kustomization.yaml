@@ -7,8 +7,11 @@ generatorOptions:
 configMapGenerator:
 - files:
   - manager_config.yaml
-  name: manager-config
+  name: -config
 images:
 - name: controller
   newName: retvari/dcontroller
+  newTag: latest
+- name: dcontroller
+  newName: l7mp/dcontroller
   newTag: latest
