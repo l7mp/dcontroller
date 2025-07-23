@@ -11,6 +11,8 @@ controller-runtime](https://github.com/kubernetes-sigs/controller-runtime) proje
 is to let anyone with minimal Go skills to write complex Kubernetes operators in the NoCode/LowCode
 style.
 
+See the full documentation [here](doc/README.md).
+
 ## Description
 
 The main design philosophy behind Δ-controller is to view the Kubernetes API as a gigantic NoSQL
