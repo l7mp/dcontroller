@@ -446,7 +446,7 @@ var _ = Describe("Pipelines", func() {
 	var testUDPGateway = map[string]any{
 		"metadata": map[string]any{
 			"annotations": map[string]any{
-				"kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"gateway.networking.k8s.io/v1\",\"kind\":\"Gateway\",\"metadata\":{\"annotations\":{},\"name\":\"udp-gateway\",\"namespace\":\"stunner\"},\"spec\":{\"gatewayClassName\":\"stunner-gatewayclass\",\"listeners\":[{\"name\":\"udp-listener\",\"port\":3478,\"protocol\":\"TURN-UDP\"}]}}",
+				"kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"gateway.networking.k8s.io/v1\",\"kind\":\"Gateway\",\"metadata\":{\"annotations\":{},\"name\":\"udp-gateway\",\"namespace\":\"default\"},\"spec\":{\"gatewayClassName\":\"test-gatewayclass\",\"listeners\":[{\"name\":\"udp-listener\",\"port\":3478,\"protocol\":\"TURN-UDP\"}]}}",
 			},
 			"creationTimestamp": "2024-06-27T13:45:32Z",
 			"generation":        int64(1),
@@ -456,7 +456,7 @@ var _ = Describe("Pipelines", func() {
 			"uid":               "3312bf0c-ccac-4998-bbd7-743522839dd2",
 		},
 		"spec": map[string]any{
-			"gatewayClassName": "stunner-gatewayclass",
+			"gatewayClassName": "test-gatewayclass",
 			"listeners": []any{
 				map[string]any{
 					"allowedRoutes": map[string]any{
@@ -480,7 +480,7 @@ var _ = Describe("Pipelines", func() {
 			"conditions": []any{
 				map[string]any{
 					"lastTransitionTime": "2024-07-01T12:46:03Z",
-					"message":            "gateway accepted by controller stunner.l7mp.io/gateway-operator",
+					"message":            "gateway accepted by dcontroller.l7mp.io/gateway-operator",
 					"observedGeneration": int64(1),
 					"reason":             "Accepted",
 					"status":             "True",
@@ -531,7 +531,7 @@ var _ = Describe("Pipelines", func() {
 							"kind":  "UDPRoute",
 						},
 						map[string]any{
-							"group": "stunner.l7mp.io",
+							"group": "gateway.networking.k8s.io",
 							"kind":  "UDPRoute",
 						},
 					},
@@ -543,7 +543,7 @@ var _ = Describe("Pipelines", func() {
 	var testUDPRoute = map[string]any{
 		"metadata": map[string]any{
 			"annotations": map[string]any{
-				"kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"stunner.l7mp.io/v1\",\"kind\":\"UDPRoute\",\"metadata\":{\"annotations\":{},\"name\":\"iperf-server\",\"namespace\":\"stunner\"},\"spec\":{\"parentRefs\":[{\"name\":\"udp-gateway\"},{\"name\":\"tcp-gateway\"}],\"rules\":[{\"backendRefs\":[{\"name\":\"iperf-server\",\"namespace\":\"default\"}]}]}}\n",
+				"kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"gateway.networking.k8s.io/v1\",\"kind\":\"UDPRoute\",\"metadata\":{\"annotations\":{},\"name\":\"iperf-server\",\"namespace\":\"default\"},\"spec\":{\"parentRefs\":[{\"name\":\"udp-gateway\"},{\"name\":\"tcp-gateway\"}],\"rules\":[{\"backendRefs\":[{\"name\":\"iperf-server\",\"namespace\":\"default\"}]}]}}\n",
 			},
 			"creationTimestamp": "2024-07-16T09:36:59Z",
 			"generation":        int64(1),
@@ -596,7 +596,7 @@ var _ = Describe("Pipelines", func() {
 								"type":               "ResolvedRefs",
 							},
 						},
-						"controllerName": "stunner.l7mp.io/gateway-operator",
+						"controllerName": "dcontroller.l7mp.io/gateway-operator",
 						"parentRef": map[string]any{
 							"group": "gateway.networking.k8s.io",
 							"kind":  "Gateway",
@@ -622,7 +622,7 @@ var _ = Describe("Pipelines", func() {
 								"type":               "ResolvedRefs",
 							},
 						},
-						"controllerName": "stunner.l7mp.io/gateway-operator",
+						"controllerName": "dcontroller.l7mp.io/gateway-operator",
 						"parentRef": map[string]any{
 							"group": "gateway.networking.k8s.io",
 							"kind":  "Gateway",
