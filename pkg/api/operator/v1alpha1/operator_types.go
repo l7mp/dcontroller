@@ -35,7 +35,7 @@ type OperatorSpec struct {
 	// Controllers is a list of controllers that collectively implement the operator.
 	//
 	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=24
+	// +kubebuilder:validation:MaxItems=255
 	Controllers []Controller `json:"controllers"`
 }
 
