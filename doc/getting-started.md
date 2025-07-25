@@ -14,7 +14,7 @@ First, add the Δ-controller Helm repository and install the controller into you
 ```bash
 helm repo add dcontroller https://l7mp.github.io/dcontroller/
 helm repo update
-helm install dcontroller dcontroller/dcontroller --namespace dcontroller-system --create-namespace
+helm install dcontroller dcontroller/dcontroller
 ```
 
 ## Deploy Your First Operator
@@ -110,10 +110,10 @@ Note that you will see no API resources yet: the extension API server only handl
 To remove the resources created in this guide, run the following commands:
 
 ```bash
-kubectl delete pod nginx
-kubectl delete operator pod-annotator
 # Stop the port-forward and restore your original Kubeconfig
 fg
 # (press Ctrl+C to stop the port-forward)
 unset KUBECONFIG
+kubectl delete pod nginx
+kubectl delete operator pod-annotator
 ```

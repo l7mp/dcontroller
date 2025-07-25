@@ -1,12 +1,12 @@
 # Concepts: Operators, Controllers and Objects
 
-In Δ-controller, the terms "Operator" and "Controller" have specific meaning that is crucial to understand. While closely related, they represent different layers of abstraction. To use a more familiar example, think of an **Operator** as a complete microservice or an application, and **Controllers** as the specific functions or handlers within that application.
+In Δ-controller, the terms "Operator", "Controller" and "Object" come with a specific meaning that is crucial to understand. While closely related, they represent different layers of abstraction. To use a more familiar example, think of an **Operator** as a complete RESTd-based microservice, **Controllers** as the specific HTTP/REST handler within that application, and **Object** as an REST API resource that the microservice serves and acts upon.
 
 ## The Operator: A Container for Automation
 
-In Δ-controller, an **Operator** is the primary custom resource you create and manage with `kubectl`. It acts as a logical container that groups together one or more related controllers to achieve a complete automation goal.
+In Δ-controller, an **Operator** is the primary custom resource you create and manage with `kubectl`, or instantiate from Go code if so you wish (see later on "hybrid operators"). The operator acts as a logical container that groups together one or more related controllers to achieve a complete automation goal.
 
-An **Operator** is defined in a cluster-scope custom resource. An operator is defined by a unique `name`, a list of **Controllers** with one or more controller definitions that collectively form the operator's business logic, and a set of **views**, which are the internal Kubernetes object-like resources storing temporary internal state. When you `kubectl apply` an `Operator` manifest, the central Δ-controller manager brings your automation to life by starting the controllers defined within it. When you delete the `Operator` CR, all its associated controllers are gracefully shut down and the view store is wiped. In essence, the `Operator` CR is the **unit of deployment and lifecycle management** for your automation logic. (Note that you can also insert operators from Go for using hybrid operators, see later.)
+An **Operator** is defined in a cluster-scope custom resource (CR). An operator is defined by a unique `name`, a list of **Controllers** with one or more controller definitions that collectively form the operator's business logic, and a set of **views**, which are the internal Kubernetes object-like resources storing temporary internal state. When you `kubectl-apply` an `Operator` manifest, the central Δ-controller manager brings your automation to life by starting the controllers defined within it. When you delete the `Operator` CR, all its associated controllers are gracefully shut down and the view store is wiped. In essence, the `Operator` CR is the **unit of deployment and lifecycle management** for your automation logic.
 
 A minimal `Operator` structure looks like this:
 
@@ -21,6 +21,8 @@ spec:
     - # <-- Controller definition 2 goes here
     - # ... and so on
 ```
+
+Use lower-case alphanumeric characters and dashes for the operator name and in general try to keep it short, otherwise you'll have to type a lot when using the embedded extension API server (see later).
 
 ## The Controller: The Engine of a Data Pipeline
 
@@ -49,6 +51,6 @@ spec:
 
 ## Object Model: Universal and Schemaless
 
-Δ-controller operates on a universal, schemaless object model. Internally, all Kubernetes resources, whether they are built-in types like `Pods` and `Services`, your own Custom Resources and internal views, are treated as "unstructured" objects. In Go speak, objects are represented as flexible `map[string]any` structures, just like their raw YAML or JSON counterparts. This design choice is fundamental to the framework's power, as it allows you to write controllers that operate on *any* resource kind without needing to import specific Go type definitions or recompile the controller.
+Δ-controller operates on a universal, schemaless **object** model. Internally, all Kubernetes resources, whether they are built-in types like `Pods` and `Services`, your own Custom Resources, or Δ-controller's internal views, are treated as "unstructured" objects. In Go speak, objects are represented as flexible `map[string]any` structures, just like their raw YAML or JSON counterparts. This design choice is fundamental to the framework's power, as it allows you to write controllers that operate on *any* resource kind without needing to import specific Go type definitions or recompile the controller.
 
 Because every object is just unstructured data, the entire pipeline and expression language is built around manipulating this data directly. You use JSONPath expressions to navigate and extract values (e.g., `$.spec.replicas`), and operators like `@project` to construct new object shapes dynamically. This approach trades the compile-time type safety of Go structs for the runtime flexibility of a dynamic, document-oriented model, reinforcing the core concept of treating the Kubernetes API as a queryable database. However, this model also comes with certain risks, as there are no API promises for Δ-controller objects apart from the pipeline logic that generates them.

@@ -23,20 +23,16 @@ The **Δ** (Delta) in the name signifies two core principles:
 
 ## Δ-controller: The Bad
 
-**The Learning Curve.** While it eliminates the need to learn the depths of `controller-runtime`, it introduces its own domain-specific language (DSL) for expressions. A new user has to learn the syntax and semantics of `@project`, `@unwind`, `$.` vs `$$`, and the nuances of the JSONPath implementation. This can make for a steeper learning curve for new users, especially those without former familiarity with MongoDB.
-
 **Debugging Can Be Opaque.** The declarative nature that makes it so easy to write controllers can make it hard to debug them. When a pipeline doesn't produce the expected output, there is no way to set a breakpoint or add a `printf` or a log message. The extension API server can be used for inspecting the final state of views, but the framework currently lacks more advanced debugging tools. A "dry-run" mode, pipeline tracing, and metrics are on the TODO list to improve the debuggability.
 
 **Permissive RBAC model.** In its current form, the central Δ-controller manager needs cluster-wide permissions to watch and modify *any* resource type, because it can't know in advance what declarative operators users will submit. This is a non-starter for some production security postures. Eventually Δ-controller will gain a mechanism to dynamically generate and apply scoped RBAC rules from the deployed operators; for now consider this limitation when using Δ-controller.
 
 **No schemata.** Δ-controller uses a completely the schemaless, unstructured API object model. This allows it to process *any* resource, even CRDs it does not even know and view resources not registered with the Kubernetes API server, flexibly. At the same time this approach can be risky, since there is no guarantee that the final shape and content of a processed resource will adhere to *any* API promise. Your pipeline is your schema, use it accordingly.
 
-## Δ-controller: The Ugly
-
-**Another YAML DSL.** Working with Kubernetes extensively, it is easy to grow a certain level of "YAML fatigue". Using Δ-controller will require learning yet another way to express logic in structured text.
-
-**DBSP magic.** The DBSP engine is powerful, but it's also a black box. When it works, it's amazing, but when something goes wrong inside the incremental engine there is no way to introspect it. The beauty of imperative Go is that while it's verbose, you can read the code and see exactly what it's doing. Trusting the magic requires a leap of faith, and currently Δ-controller is not (yet) at a maturity level where you can blindly trust it.
-
 **The "NoCode" Promise.** In truly complex real-world scenarios, you will still drop down into Go. Perhaps it is best to describe Δ-controller as a powerful "LowCode" framework that lets you solve 80% of your problems declaratively and provides clean hooks for the remaining 20% that requires imperative Go logic.
 
-Δ-controller has the potential to fundamentally change how a large class of operators are built, but the code is still in an initial phase. The usual cautionary approach doubly applies: **use Δ-controller at your own risk**.
+## Δ-controller: The Ugly
+
+**Another YAML DSL.** Working with Kubernetes a lot it is easy to grow a certain level of "YAML fatigue", and Δ-controller will require learning yet another way to express logic in structured text. And while it eliminates the need to learn the depths of `controller-runtime`, Δ-controller introduces its own domain-specific language (DSL) for expressions. A new user has to learn the syntax and semantics of `@project`, `@unwind`, `$.` vs `$$`, and the nuances of the JSONPath, which can make for a steeper learning curve for new users, especially for those without former familiarity with MongoDB. 
+
+Δ-controller has the potential to fundamentally change how a large class of operators are built, but the code is still in an initial phase. It works surprisingly reliably in many complex use cases, but the usual cautionary approach doubly applies here: **use Δ-controller at your own risk**.

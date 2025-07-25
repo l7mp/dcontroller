@@ -1,6 +1,6 @@
 # Concepts: Expressions
 
-In the previous sections, you've seen snippets of logic like `$.metadata.name` and operators like `@eq`. These are all part of Δ-controller's **expression language**, the "language" of Δ-controller pipelines.  An expression is a declarative, JSON/YAML-based structure that is evaluated at runtime to produce a value. Expressions are the fundamental building blocks used within a controller's `pipeline` to filter, transform, and construct Kubernetes objects.
+In the previous sections, you've seen snippets of logic like `$.metadata.name` and operators like `@eq`. These are all part of Δ-controller's **expression language**, the low-level logic for Δ-controller pipelines.  An expression is a declarative, JSON/YAML-based structure that is evaluated at runtime to produce a value. Expressions are the fundamental building blocks used within a controller's `pipeline` to filter, transform, and construct Kubernetes objects.
 
 ## The Subject: What an Expression Operates On
 
@@ -15,13 +15,14 @@ The primary way to interact with the subject is through **JSONPath**, a standard
 Expressions recognize strings that start with `$` as JSONPath queries.
 
 *   `$.spec.replicas`: Navigates to the `replicas` field inside the `spec`.
+*   `$.spec.ports[2]`: Navigates to the 2nd service-port of a `Service` or any other object that has such a field.
 *   `$['metadata']['annotations']['my.co/annotation']`: Accesses an annotation with special characters in its key.
 
-### Global vs. Local Subject: `$` vs. `$$`
+## Global vs. Local Subject: `$` vs. `$$`
 
 This is one of the most important concepts for list manipulation. Δ-controller defines two special symbols for JSONPath:
 
-*   **`$` (Global Subject)**: Refers to the root of the main object currently flowing through the pipeline stage.
+*   **`$` (Global Subject)**: Refers to the root of the **single object** currently flowing through the pipeline stage.
 *   **`$$` (Local Subject)**: Used *only inside list operators* like `@map` and `@filter`. It refers to the **individual item** of the list currently being processed.
 
 This distinction allows you to compare or combine a specific list item with data from the parent object that contains the list.
@@ -45,7 +46,7 @@ spec:
 
 We want to filter its `spec.ports` list to find the port whose name is specified in an annotation.
 
-Consider the below @filter expression. Here, the condition compares each list item's name (accessed as the local list subject `$$`) with the global annotation (accessed as the global subject `$`). The second argument is the list we want to filter, in particular, the ports array from the Service (our global subject, accessed with `$`).
+Consider the below @filter expression. Here, the condition compares each list item's name (accessed as the local list subject `$$`) with the global annotation (accessed as the global subject `$`). The second argument is the list we want to filter, in particular, the ports list from the Service (our global subject, accessed with `$`).
 
 ```yaml
 @filter
@@ -78,7 +79,7 @@ These operators allow you to build decision-making logic into your pipeline.
 
 *   **`@and`, `@or`, `@not`**: Standard boolean logic that takes a list of boolean arguments. They perform short-circuiting, meaning they stop evaluating as soon as the outcome is certain.
 *   **`@eq`, `@gt`, `@lt`, etc.**: Comparison operators that take a list of two arguments and return `true` or `false`.
-*   **`@cond`**: An `if/then/else` construct. It takes an array of three arguments: `[<condition>, <value_if_true>, <value_if_false>]`.
+*   **`@cond`**: An `if/then/else` construct. It takes an list of three arguments: `[<condition>, <value_if_true>, <value_if_false>]`.
 
 The below example sets the 'environment' field to "prod" if the namespace is "production", otherwise sets it to "dev".
 
@@ -91,7 +92,7 @@ The below example sets the 'environment' field to "prod" if the namespace is "pr
 
 #### List Operators
 
-These operators are the heart of data transformation, used for iterating and manipulating arrays within your objects. They always introduce the `$$` local subject.
+These operators are the heart of data transformation, used for iterating and manipulating lists within your objects. They always introduce the `$$` local subject.
 
 *   **`@map`**: Applies an expression to every item in a list and returns a new list with the transformed items. It takes two arguments: `[<expression_to_apply_to_$$>, <list>]`.
 
@@ -125,5 +126,3 @@ These operators are the heart of data transformation, used for iterating and man
 *   **`@sum`**: Calculates the sum of a list of numbers.
 *   **`@hash`**: Computes a short, stable hash of any value. This is extremely useful for generating unique but deterministic names for objects.
 *   **`@new`**: Returns the current date in ISO format. Useful to set status fields like `lastTransitionTime` or `startTime`.
-
-By combining these primitives, you can build powerful and readable declarative pipelines that precisely define your operator's logic. Note that 

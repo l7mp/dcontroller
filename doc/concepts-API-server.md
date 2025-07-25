@@ -10,31 +10,9 @@ Some cautionary remarks apply:
 *   **Read-Write Access**: While primarily used for inspection, the API server supports full CRUD (Create, Read, Update, Delete) operations. This can be a powerful debugging tool, allowing you to manually create or modify a view object to trigger a downstream controller and observe its behavior.
 *   **Ephemeral State**: Remember that views are in-memory. If the Δ-controller manager pod restarts, all views will be cleared and then repopulated as the controllers re-reconcile their sources.
 
-## Connecting to the Extension API Server
+For instructions on connecting to the Extension API Server, see the [Getting started guide](getting-started.md#accessing-the-extension-api-server). Once connected, you can interact with your views as if they were standard Custom Resources.
 
-By default, the extension API server is not exposed outside the cluster for security reasons, as it runs with an unauthenticated HTTP endpoint. The recommended way to access it is via `kubectl port-forward`.
-
-1.  **Start the Port-Forward:**
-    Open a new terminal and run the following command. This will forward traffic from your local machine's port `8443` to the Δ-controller manager's API server port.
-
-    ```bash
-    kubectl -n dcontroller-system port-forward deployment/dcontroller-manager 8443:8443 &
-    ```
-
-2.  **Use the Correct Kubeconfig:**
-    To direct `kubectl` commands to this local endpoint instead of your main cluster's API server, you need to use a specific kubeconfig file. The below assumes you are in the root of the dcontroller project checkout:
-
-    ```bash
-    export KUBECONFIG=deploy/dcontroller-config
-    ```
-
-You are now connected. All subsequent `kubectl` commands in this terminal will be sent to the Δ-controller's extension API server. When finishing the debug session, use `unset KUBECONFIG` to restore the default Kubernetes context and shoot down the port-forward.
-
-## Discovering and Inspecting Views
-
-Once connected, you can interact with your views as if they were standard Custom Resources.
-
-### Discovering View API Groups
+## Discovering View API Groups
 
 The first step is to see what view types are available. The API groups for views are generated dynamically from your `Operator` names. You can discover them using `kubectl api-resources`.
 
@@ -50,7 +28,7 @@ healthview                svc-health-operator.view.dcontroller.io/v1alpha1   tru
 
 The API group for a view is always **`<operator-name>.view.dcontroller.io`** and the version is `v1alpha1`. This unique naming prevents conflicts between views defined in different operators.
 
-### Getting and Listing Views
+## Getting and Listing Views
 
 You can use standard `kubectl get` and `kubectl list` commands to inspect your view objects. Because views are schemaless and can have any structure, it's best to use the `-o yaml` or `-o json` output format to see their full content.
 

@@ -27,7 +27,7 @@ Understanding the flow of data through the pipeline is key to mastering Δ-contr
 "EndpointSlice": { "metadata": { "name": "my-svc-xyz" }, ... }
 }
 ```
-If there is no `@join`, the source object from the delta is passed directly to the aggregation stage; in this case the controller must have a single source. Otherwise, a controller has as many sources are there are resources referenced in the join expression.
+If there is no `@join`, the source object from the delta is passed directly to the aggregation stage; in this case the controller must have only a single source. Otherwise, a controller has as many sources are there are resources referenced in the join expression.
 
 **Aggregation Stages**: The object (or set of objects) from the previous stage is fed into the first stage of the `@aggregate` array. Each stage processes the data and passes its output as the input to the next stage. This sequential execution allows you to build up complex transformations step-by-step.
 
@@ -45,7 +45,7 @@ The below example joins a `UDPRoute` with its parent `Gateway` (see the [Gateway
 sources:
   - apiGroup: "gateway.networking.k8s.io"
     kind: Gateway
-  - apiGroup: "stunner.l7mp.io"
+  - apiGroup: "gateway.networking.k8s.io"
     kind: UDPRoute
 pipeline:
   "@join":
@@ -149,6 +149,8 @@ The `@gather` operator (also aliased as `@mux`) is the inverse of `@unwind`. It 
 
 The output is one summary object per unique group key. The original object that first created the group is used as a template, and the collected values are written into it at the path specified by the value expression.
 
+Note that `@unwind` followed by a `@gather` should yield the same object unchanged, but the list order is not guaranteed to be preserved (this is by nature of the underlying incremental processing engine, DBSP).
+
 The below pipeline gathers all `Pods`, groups them by `namespace`, and collects their names into a `podNames` list within the output object.
 
 ```yaml
@@ -173,5 +175,3 @@ The output is 2 summary objects:
 { metadata: { name: pod-a, namespace: ns-1 }, spec: { podNames: ["pod-a", "pod-c"] } }
 { metadata: { name: pod-b, namespace: ns-2 }, spec: { podNames: ["pod-b"] } }
 ```
-
-By combining these primitives, you can construct sophisticated, declarative workflows to handle a broad range of Kubernetes automation tasks.
