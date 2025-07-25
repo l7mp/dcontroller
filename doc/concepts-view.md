@@ -25,7 +25,7 @@ Under the hood, a View is a namespaced, unstructured Kubernetes resource. While 
 *   **Ephemeral**: Views are not stored in `etcd` or persisted by the Kubernetes API server. In fact, the Kubernetes API does not even know about your views. They exist only within the memory of the running Δ-controller manager. If the manager restarts, all views are lost and will be recreated as the source resources are reconciled.
 *   **Namespaced**: Every view object **must** be scoped into a namespace. There is no such thing as a "cluster-scoped view". Like everything in Δ-controller, view namespaces are an internal concept within an operator and do not exist in Kubernetes.
 *   **Standard Metadata**: Every view object **must** have `metadata.name` and `metadata.namespace` that uniquely identify it.
-*   **Schemaless Body**: Beyond the required metadata, the structure is entirely up to you. You can add a `spec`, a `status`, or any other top-level fields and embedded structures and lists. The content is a flexible `map[string]any`, just like any other Kubernetes object.
+*   **Schemaless Body**: Beyond the required metadata, the structure is entirely up to you. You can add a `spec`, a `status`, or any other top-level fields and embedded structures and lists. The content is a flexible key-value struct, just like any other Kubernetes object.
 *   **Labels and Annotations**: Views fully support labels and annotations, which can be used for filtering and metadata.
 
 The GVK for a view is determined dynamically based on the name of the `Operator` that defines it and the `kind` specified in the controller's target. The structure of the API group is always: **`<operator-name>.view.dcontroller.io/v1alpha1`**

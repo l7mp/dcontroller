@@ -31,7 +31,9 @@ If there is no `@join`, the source object from the delta is passed directly to t
 
 **Aggregation Stages**: The object (or set of objects) from the previous stage is fed into the first stage of the `@aggregate` array. Each stage processes the data and passes its output as the input to the next stage. This sequential execution allows you to build up complex transformations step-by-step.
 
-The result of the final aggregation stage is a set of deltas (adds, updates, or deletes, along with the processed object) that are then sent to the controller's `target` to be written to the Kubernetes API server or an internal view.
+The result of the final aggregation stage is a set of deltas (adds, updates, or deletes, along with the processed object) that are then sent to the controller's `target` to be written to the Kubernetes API server or an internal view. 
+
+Note that *inside* the pipeline transient result and subject objects passed by one pipeline stage to the other do not need to adhere to the Kubernetes naming conventions (i.e., have a valid namespace/name in the metadata) or satisfy any schemata. That is, pipelines are completely free to produce and consume any key-value struct internally, depending the business logic. However, the final result emitted by the pipeline *must* be a valid object: if the target is a View then the [view naming rules](concepts-views.md#the-anatomy-of-a-view-api-promise) apply, and it is a native Kubernetes resource (e.g., a `Pod` or a `Deployment`) then it also must be accepted by the corresponding Kubernetes API schema.
 
 ## The Join Operation: `@join`
 
@@ -151,14 +153,14 @@ The output is one summary object per unique group key. The original object that 
 
 Note that `@unwind` followed by a `@gather` should yield the same object unchanged, but the list order is not guaranteed to be preserved (this is by nature of the underlying incremental processing engine, DBSP).
 
-The below pipeline gathers all `Pods`, groups them by `namespace`, and collects their names into a `podNames` list within the output object.
+The below pipeline gathers all `Pods`, groups them by `namespace`, and collects their names back into the `$.metadata.name` field, which will now become a list:
 
 ```yaml
 - "@gather":
     # Argument 1: Group by namespace
     - "$.metadata.namespace"
     # Argument 2: Collect the pod names and write them to `spec.podNames`
-    - "$.spec.podNames": "$.metadata.name"
+    - "$.metadata.name"
 ```
 
 Consider the below input of 3 Pod objects:
@@ -172,6 +174,28 @@ Consider the below input of 3 Pod objects:
 The output is 2 summary objects:
 
 ```yaml
-{ metadata: { name: pod-a, namespace: ns-1 }, spec: { podNames: ["pod-a", "pod-c"] } }
-{ metadata: { name: pod-b, namespace: ns-2 }, spec: { podNames: ["pod-b"] } }
+{ metadata: { name: ["pod-a", "pod-c"], namespace: ns-1 } }
+{ metadata: { name: ["pod-b"], namespace: ns-2 } }
+```
+
+It is very common for a gathered object to end up with an incorrect shape. In the below example, the result would be an invalid object since the `metadata.name` field must be a single `string`, and not be a list. Therefore it is a common pattern to follow up a `@gather` operation with a subsequent `@project` that will get the shape right. In the below example we will copy the names out into a `podNames` list and add a sensible name, which will be just the name of the namespace followed by `-summary`.
+
+```yaml
+"@aggregate":
+- "@gather":
+  - "$.metadata.namespace"
+  - "$.metadata.name"
+- "@project":
+    metadata:
+      name:
+        "@concat": ["$.metadata.namespace", "-summary"]
+      namespace: $.metadata.namespace
+    podNames: "$.metadata.name"
+```
+
+This will result the following 2 result summaries:
+
+```yaml
+{ metadata: { name: ns-1-summary, namespace: ns-1 }, podNames: [pod-a, pod-c] }
+{ metadata: { name: n2-2-summary, namespace: ns-2 }, podNames: [pod-b] }
 ```
