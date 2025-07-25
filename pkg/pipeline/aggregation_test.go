@@ -382,6 +382,68 @@ var _ = Describe("Aggregations", func() {
 			_, err = ag.Evaluate(object.Delta{Type: object.Upserted, Object: objs[0]})
 			Expect(err).To(HaveOccurred())
 		})
+
+		It("should evaluate a projection using a conditioned JSONpath setter", func() {
+			// @set has been deprecated
+			//
+			// the below example:
+			//     "@set":
+			//       - "$.spec.a"
+			//       - "$[?(@.name=='listener_2')].port"
+			//       - 123`
+			//
+			// can be implemented as the below
+			jsonData := `
+"@aggregate":
+  - "@project":
+      - "$.metadata": "$.metadata"
+      - "$.c": "$.c"
+      - spec:
+          a:
+            "@map":
+              - "@cond":
+                  - "@eq": ["$$.name", "listener_2"]
+                  - {name: $$.name, port: 123}
+                  - "$$"
+              - "$.spec.a"`
+			ag, err := newAggregation(jsonData)
+			Expect(err).NotTo(HaveOccurred())
+
+			obj := object.DeepCopy(objs[0])
+			Expect(unstructured.SetNestedSlice(obj.UnstructuredContent(), []any{
+				map[string]any{"name": "listener_1", "port": int64(12)},
+				map[string]any{"name": "listener_2", "port": int64(13)},
+				map[string]any{"name": "listener_3", "port": int64(14)},
+			}, "spec", "a")).NotTo(HaveOccurred())
+
+			res, err := ag.Evaluate(object.Delta{Type: object.Upserted, Object: obj})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(HaveLen(1))
+
+			Expect(res[0]).To(Equal(
+				object.Delta{
+					Type: object.Upserted,
+					Object: &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": "test.view.dcontroller.io/v1alpha1",
+							"kind":       "view",
+							"metadata": map[string]any{
+								"name":      "name",
+								"namespace": "default",
+							},
+							"c": "c",
+							"spec": map[string]any{
+								"a": []any{
+									map[string]any{"name": "listener_1", "port": int64(12)},
+									map[string]any{"name": "listener_2", "port": int64(123)},
+									map[string]any{"name": "listener_3", "port": int64(14)},
+								},
+							},
+						},
+					},
+				}))
+		})
+
 	})
 
 	Describe("Evaluating aggregations on native Unstructured objects", func() {

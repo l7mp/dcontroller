@@ -168,7 +168,7 @@ spec:
                   - sources
                   - target
                   type: object
-                maxItems: 24
+                maxItems: 255
                 minItems: 1
                 type: array
             required:

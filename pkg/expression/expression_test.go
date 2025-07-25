@@ -10,7 +10,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap/zapcore"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/yaml"
@@ -202,6 +201,20 @@ var _ = Describe("Expressions", func() {
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
 			Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
 		})
+
+		// FIt("should deserialize and evaluate a bool expression with an argument list", func() {
+		// 	jsonData := `{"@not": [false]}`
+		// 	var exp Expression
+		// 	err := json.Unmarshal([]byte(jsonData), &exp)
+		// 	Expect(err).NotTo(HaveOccurred())
+
+		// 	ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+		// 	res, err := exp.Evaluate(ctx)
+		// 	Expect(err).NotTo(HaveOccurred())
+
+		// 	Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Bool))
+		// 	Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
+		// })
 
 		It("should deserialize and evaluate a compound literal expression", func() {
 			jsonData := `{"@eq": [10, 10]}`
@@ -1051,40 +1064,6 @@ var _ = Describe("Expressions", func() {
 			v, err := AsString(res)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(v).To(Equal("default"))
-		})
-
-		It("should evaluate a projection using a conditioned JSONpath setter", func() {
-			jsonData := `
-spec:
-  a: 
-    "@set":
-      - "$.spec.a"
-      - "$[?(@.name=='listener_2')].port"
-      - 123`
-			var exp Expression
-			err := yaml.Unmarshal([]byte(jsonData), &exp)
-			Expect(err).NotTo(HaveOccurred())
-
-			obj := object.DeepCopy(obj1)
-			Expect(unstructured.SetNestedSlice(obj.UnstructuredContent(), []any{
-				map[string]any{"name": "listener_1", "port": int64(12)},
-				map[string]any{"name": "listener_2", "port": int64(13)},
-				map[string]any{"name": "listener_3", "port": int64(14)},
-			}, "spec", "a")).NotTo(HaveOccurred())
-
-			ctx := EvalCtx{Object: obj.UnstructuredContent(), Log: logger}
-			res, err := exp.Evaluate(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(1))
-			Expect(res).To(Equal(unstruct{
-				"spec": unstruct{
-					"a": []any{
-						map[string]any{"name": "listener_1", "port": int64(12)},
-						map[string]any{"name": "listener_2", "port": int64(123)},
-						map[string]any{"name": "listener_3", "port": int64(14)},
-					},
-				},
-			}))
 		})
 	})
 

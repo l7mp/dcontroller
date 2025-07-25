@@ -283,43 +283,50 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
-		case "@set":
-			// @set[arg1,arg2,arg2] copies arg1, and updates arg2:arg3 and returns the result
+			// @set has been removed: it is too complex and the same effect can be
+			// achieved with the below projection steps:
 			//
-			// e.g., {"@set":["$.list","$.list[?(@.x=='y')].z",123}` takes the list at "$.list"
-			// and updates the elem for which the conditional JSONpath expression
-			// $.list[?(@.x=='y')].z to 123 and returns the result
-			args, err := AsExpOrExpList(e.Arg)
-			if err != nil {
-				return nil, NewExpressionError(e, err)
-			}
+			// "@project":
+			// - "$.spec.a": "$.spec.a"
+			// - {".spec.a[?(@.name=='listener_2')].port", 123}
+			//
+			// 	case "@set":
+			// 		// @set[arg1,arg2,arg2] copies arg1, and updates arg2:arg3 and returns the result
+			// 		//
+			// 		// e.g., {"@set":["$.list","$.list[?(@.x=='y')].z",123}` takes the list at
+			// 		// "$.list" and updates the elem(s) selected by the conditional JSONpath
+			// 		// expression $.list[?(@.x=='y')].z to 123 and returns the result
+			// 		args, err := AsExpOrExpList(e.Arg)
+			// 		if err != nil {
+			// 			return nil, NewExpressionError(e, err)
+			// 		}
 
-			if len(args) != 3 {
-				return nil, NewExpressionError(e,
-					errors.New("invalid arguments: expected 3 arguments"))
-			}
+			// 		if len(args) != 3 {
+			// 			return nil, NewExpressionError(e,
+			// 				errors.New("invalid arguments: expected 3 arguments"))
+			// 		}
 
-			ret, err := args[0].Evaluate(ctx)
-			if err != nil {
-				return nil, err
-			}
+			// 		ret, err := args[0].Evaluate(ctx)
+			// 		if err != nil {
+			// 			return nil, err
+			// 		}
 
-			// key and value both must be a literals but we must not eval them now,
-			// SetJSONPath requires uneval'd keys and values
-			key, err := AsString(args[1].Literal)
-			if err != nil {
-				return nil, NewExpressionError(e, err)
-			}
-			value := args[2].Literal
+			// 		// key and value both must be a literals but we must not eval them now,
+			// 		// SetJSONPath requires uneval'd keys and values
+			// 		key, err := AsString(args[1].Literal)
+			// 		if err != nil {
+			// 			return nil, NewExpressionError(e, err)
+			// 		}
+			// 		value := args[2].Literal
 
-			if err := SetJSONPath(ctx, key, value, ret); err != nil {
-				return nil, NewExpressionError(e,
-					fmt.Errorf("could not deference JSON \"set\" expression: %w", err))
-			}
+			// 		if err := SetJSONPath(ctx, key, value, ret); err != nil {
+			// 			return nil, NewExpressionError(e,
+			// 				fmt.Errorf("could not deference JSON \"set\" expression: %w", err))
+			// 		}
 
-			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
+			// 		ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
 
-			return ret, nil
+			// 		return ret, nil
 		}
 	}
 
