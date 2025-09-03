@@ -30,11 +30,14 @@ type Manager struct {
 	manager.Manager
 }
 
-// New creates a new manager.
+// New creates a new delta-controller manager. If called with a nil config, create a headless
+// manager, otherwise create a composite manager. A headless manager runs with no upstream
+// Kubernetes API access so it handles only view resources, not native objects. For native
+// Kubernetes object support, create a composite manager by providing a valid REST config to access
+// a full Kubernetes API server.
 func New(config *rest.Config, opts Options) (*Manager, error) {
-	logger := opts.Logger
-	if logger.GetSink() == nil {
-		logger = logr.Discard()
+	if opts.Logger.GetSink() == nil {
+		opts.Logger = logr.Discard()
 	}
 
 	// If runtime manager is provided by the caller, use that
@@ -42,8 +45,42 @@ func New(config *rest.Config, opts Options) (*Manager, error) {
 		return &Manager{Manager: opts.Manager}, nil
 	}
 
-	// Otherwise create a new manager overriding the cache and the client created by the base
-	// manager.
+	// If no Kubernetes config is provided, fire up a standalone manager.
+	if config == nil {
+		return newHeadlessManager(opts)
+	}
+
+	return newManager(config, opts)
+}
+
+func newHeadlessManager(opts Options) (*Manager, error) {
+	logger := opts.Logger
+
+	// We can create a static cache since we do not need to wait until NewCache/NewClient is
+	// callled by the controller runtime to reveal the cache options and client options.
+	c := composite.NewViewCache(composite.CacheOptions{Logger: logger})
+	if opts.NewCache == nil {
+		opts.NewCache = func(_ *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
+			return c, nil
+		}
+	}
+
+	if opts.NewClient == nil {
+		opts.NewClient = func(config *rest.Config, options client.Options) (client.Client, error) {
+			return c.GetClient(), nil
+		}
+	}
+
+	mgr, err := manager.New(&rest.Config{}, opts.Options)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Manager{Manager: mgr}, nil
+}
+
+func newManager(config *rest.Config, opts Options) (*Manager, error) {
+	logger := opts.Logger
 	if opts.NewCache == nil {
 		opts.NewCache = func(config *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
 			return composite.NewCompositeCache(config, composite.CacheOptions{
@@ -82,9 +119,3 @@ func New(config *rest.Config, opts Options) (*Manager, error) {
 
 	return &Manager{Manager: mgr}, nil
 }
-
-// // GetCache returns the view cache. Use manager.Manager.GetCache() to obtain the cache of the
-// // controller runtime manager.
-// func (m *Manager) GetCache() *cache.ViewCache {
-// 	return m.cache
-// }

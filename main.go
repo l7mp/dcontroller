@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"os"
 
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"go.uber.org/zap/zapcore"
@@ -55,9 +53,8 @@ func init() {
 }
 
 func main() {
-	var disableAPIServer bool
+	var disableAPIServer, enableLeaderElection bool
 	var metricsAddr, probeAddr string
-	var enableLeaderElection bool
 
 	flag.BoolVar(&disableAPIServer, "disable-api-server", false, "Disable the embedded API server.")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -110,12 +107,12 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 
 	if !disableAPIServer {
-		config, err := apiserver.NewDefaultConfig("0.0.0.0", APIServerPort, c.GetClient(), true, logger)
+		apiServerConfig, err := apiserver.NewDefaultConfig("0.0.0.0", APIServerPort, c.GetClient(), true, logger)
 		if err != nil {
 			setupLog.Error(err, "failed to create the config for the embedded API server")
 			os.Exit(1)
 		}
-		apiServer, err := apiserver.NewAPIServer(config)
+		apiServer, err := apiserver.NewAPIServer(apiServerConfig)
 		if err != nil {
 			setupLog.Error(err, "failed to create the embedded API server")
 			os.Exit(1)
