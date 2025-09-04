@@ -10,14 +10,10 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/grokify/mogo/encoding/base36"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
 const ExpressionDumpMaxLevel = 10
-
-type unstruct = map[string]any
-type GVK = schema.GroupVersionKind
 
 type EvalCtx struct {
 	Object, Subject any
@@ -165,7 +161,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 		return ret, nil
 
 	case "@dict":
-		ret := unstruct{}
+		ret := map[string]any{}
 		if e.Arg != nil {
 			// eval stacked expressions stored in e.Arg
 			v, err := e.Arg.Evaluate(ctx)
@@ -174,7 +170,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			}
 
 			// must be Unstructured
-			vs, ok := v.(unstruct)
+			vs, ok := v.(map[string]any)
 			if !ok {
 				return nil, NewExpressionError(e, errors.New("argument must be a map"))
 			}
@@ -931,5 +927,5 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 	}
 
 	// literal map
-	return unstruct{e.Op: arg}, nil
+	return map[string]any{e.Op: arg}, nil
 }

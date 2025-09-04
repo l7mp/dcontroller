@@ -38,30 +38,30 @@ var _ = Describe("Expressions", func() {
 
 	BeforeEach(func() {
 		obj1 = object.NewViewObject("test", "testview1")
-		object.SetContent(obj1, unstruct{
-			"spec": unstruct{
+		object.SetContent(obj1, map[string]any{
+			"spec": map[string]any{
 				"a": int64(1),
-				"b": unstruct{"c": int64(2)},
+				"b": map[string]any{"c": int64(2)},
 				"x": []any{int64(1), int64(2), int64(3), int64(4), int64(5)},
 			},
 		})
 		object.SetName(obj1, "default", "name")
 
 		obj2 = object.NewViewObject("test", "testview2")
-		object.SetContent(obj2, unstruct{
-			"metadata": unstruct{
+		object.SetContent(obj2, map[string]any{
+			"metadata": map[string]any{
 				"namespace": "default2",
 				"name":      "name",
 			},
 			"spec": []any{
-				unstruct{
+				map[string]any{
 					"name": "name1",
 					"a":    int64(1),
-					"b":    unstruct{"c": int64(2)},
-				}, unstruct{
+					"b":    map[string]any{"c": int64(2)},
+				}, map[string]any{
 					"name": "name2",
 					"a":    int64(2),
-					"b":    unstruct{"d": int64(3)},
+					"b":    map[string]any{"d": int64(3)},
 				},
 			},
 		})
@@ -359,7 +359,7 @@ var _ = Describe("Expressions", func() {
 			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(Equal(unstruct{"x": unstruct{"a": int64(1), "b": int64(2)}}))
+			Expect(res).To(Equal(map[string]any{"x": map[string]any{"a": int64(1), "b": int64(2)}}))
 		})
 
 		It("should deserialize and evaluate a multi-level compound literal expression", func() {
@@ -590,8 +590,8 @@ var _ = Describe("Expressions", func() {
 
 			kind := reflect.ValueOf(res).Kind()
 			Expect(kind).To(Equal(reflect.Map))
-			Expect(reflect.ValueOf(res).Interface().(unstruct)).
-				To(Equal(unstruct{"dummy": []any{int64(1), int64(2), int64(3)}}))
+			Expect(reflect.ValueOf(res).Interface().(map[string]any)).
+				To(Equal(map[string]any{"dummy": []any{int64(1), int64(2), int64(3)}}))
 		})
 
 		It("should deserialize and evaluate a literal list expression with multiple keys", func() {
@@ -606,8 +606,8 @@ var _ = Describe("Expressions", func() {
 
 			kind := reflect.ValueOf(res).Kind()
 			Expect(kind).To(Equal(reflect.Map))
-			Expect(reflect.ValueOf(res).Interface().(unstruct)).
-				To(Equal(unstruct{"dummy": []any{int64(1), int64(2), int64(3)}, "another-dummy": "a"}))
+			Expect(reflect.ValueOf(res).Interface().(map[string]any)).
+				To(Equal(map[string]any{"dummy": []any{int64(1), int64(2), int64(3)}, "another-dummy": "a"}))
 		})
 
 		It("should deserialize and evaluate a mixed list expression", func() {
@@ -622,7 +622,7 @@ var _ = Describe("Expressions", func() {
 
 			kind := reflect.ValueOf(res).Kind()
 			Expect(kind).To(Equal(reflect.Map))
-			Expect(res).To(Equal(unstruct{"dummy": []any{int64(1), int64(2), int64(3)}, "x": false}))
+			Expect(res).To(Equal(map[string]any{"dummy": []any{int64(1), int64(2), int64(3)}, "x": false}))
 		})
 
 		It("should deserialize and evaluate a compound list expression", func() {
@@ -637,10 +637,10 @@ var _ = Describe("Expressions", func() {
 
 			kind := reflect.ValueOf(res).Kind()
 			Expect(kind).To(Equal(reflect.Map))
-			Expect(reflect.ValueOf(res).Interface().(unstruct)).
-				To(Equal(unstruct{"another-dummy": []any{
-					unstruct{"a": int64(1), "b": 2.2},
-					unstruct{"x": []any{int64(1), int64(2), int64(3)}},
+			Expect(reflect.ValueOf(res).Interface().(map[string]any)).
+				To(Equal(map[string]any{"another-dummy": []any{
+					map[string]any{"a": int64(1), "b": 2.2},
+					map[string]any{"x": []any{int64(1), int64(2), int64(3)}},
 				}}))
 		})
 	})
@@ -1111,7 +1111,7 @@ var _ = Describe("Expressions", func() {
 
 			vs, err := AsList(res)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(vs).To(Equal([]any{unstruct{"metadata": unstruct{"namespace": "default"}}}))
+			Expect(vs).To(Equal([]any{map[string]any{"metadata": map[string]any{"namespace": "default"}}}))
 		})
 
 		// @map
@@ -1260,7 +1260,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Map))
-			Expect(res).To(Equal(unstruct{"a": int64(1), "b": unstruct{"c": "x"}}))
+			Expect(res).To(Equal(map[string]any{"a": int64(1), "b": map[string]any{"c": "x"}}))
 		})
 
 		It("should deserialize and evaluate a compound literal map expression", func() {
@@ -1300,7 +1300,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Map))
-			Expect(res).To(Equal(unstruct{"a": 1.1, "b": int64(3), "c": "abba"}))
+			Expect(res).To(Equal(map[string]any{"a": 1.1, "b": int64(3), "c": "abba"}))
 		})
 	})
 
@@ -1316,7 +1316,7 @@ var _ = Describe("Expressions", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Map))
-			Expect(res).To(Equal(unstruct{"a": int64(1), "b": unstruct{"c": true}}))
+			Expect(res).To(Equal(map[string]any{"a": int64(1), "b": map[string]any{"c": true}}))
 		})
 	})
 })

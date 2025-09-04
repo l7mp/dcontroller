@@ -17,30 +17,30 @@ var _ = Describe("JSONPath", func() {
 
 	BeforeEach(func() {
 		obj1 = object.NewViewObject("test", "testview1")
-		object.SetContent(obj1, unstruct{
-			"spec": unstruct{
+		object.SetContent(obj1, map[string]any{
+			"spec": map[string]any{
 				"a": int64(1),
-				"b": unstruct{"c": int64(2)},
+				"b": map[string]any{"c": int64(2)},
 				"x": []any{int64(1), int64(2), int64(3), int64(4), int64(5)},
 			},
 		})
 		object.SetName(obj1, "default", "name")
 
 		obj2 = object.NewViewObject("test", "testview2")
-		object.SetContent(obj2, unstruct{
-			"metadata": unstruct{
+		object.SetContent(obj2, map[string]any{
+			"metadata": map[string]any{
 				"namespace": "default2",
 				"name":      "name",
 			},
 			"spec": []any{
-				unstruct{
+				map[string]any{
 					"name": "name1",
 					"a":    int64(1),
-					"b":    unstruct{"c": int64(2)},
-				}, unstruct{
+					"b":    map[string]any{"c": int64(2)},
+				}, map[string]any{
 					"name": "name2",
 					"a":    int64(2),
-					"b":    unstruct{"d": int64(3)},
+					"b":    map[string]any{"d": int64(3)},
 				},
 			},
 		})
@@ -102,7 +102,7 @@ var _ = Describe("JSONPath", func() {
 
 			res, err = GetJSONPathRaw(`$.metadata`, obj.UnstructuredContent())
 			Expect(err).NotTo(HaveOccurred())
-			d, ok := res.(unstruct)
+			d, ok := res.(map[string]any)
 			Expect(ok).To(BeTrue())
 			Expect(d).To(HaveKey("namespace"))
 			Expect(d["namespace"]).To(Equal("testnamespace"))
@@ -218,7 +218,7 @@ var _ = Describe("JSONPath", func() {
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(res).To(Equal(unstruct{"c": int64(2)}))
+			Expect(res).To(Equal(map[string]any{"c": int64(2)}))
 		})
 
 		It("should deserialize and evaluate a full JSONPath expression", func() {
@@ -232,16 +232,16 @@ var _ = Describe("JSONPath", func() {
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(res).To(Equal(unstruct{
+			Expect(res).To(Equal(map[string]any{
 				"apiVersion": "test.view.dcontroller.io/v1alpha1",
 				"kind":       "testview1",
-				"metadata": unstruct{
+				"metadata": map[string]any{
 					"name":      "name",
 					"namespace": "default",
 				},
-				"spec": unstruct{
+				"spec": map[string]any{
 					"a": int64(1),
-					"b": unstruct{"c": int64(2)},
+					"b": map[string]any{"c": int64(2)},
 					"x": []any{int64(1), int64(2), int64(3), int64(4), int64(5)},
 				},
 			}))
@@ -261,7 +261,7 @@ var _ = Describe("JSONPath", func() {
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(res).To(Equal(unstruct{"c": int64(2)}))
+			Expect(res).To(Equal(map[string]any{"c": int64(2)}))
 		})
 
 		It("should deserialize and evaluate a list search JSONPath expression returning a list", func() {
@@ -273,10 +273,10 @@ var _ = Describe("JSONPath", func() {
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(res).To(Equal(unstruct{
+			Expect(res).To(Equal(map[string]any{
 				"name": "name2",
 				"a":    int64(2),
-				"b":    unstruct{"d": int64(3)},
+				"b":    map[string]any{"d": int64(3)},
 			}))
 		})
 
@@ -303,7 +303,7 @@ var _ = Describe("JSONPath", func() {
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			d, ok := res.(unstruct)
+			d, ok := res.(map[string]any)
 			Expect(ok).To(BeTrue())
 			Expect(d).To(HaveKey("y"))
 			Expect(d["y"]).To(Equal([]any{nil, nil, nil, int64(12)}))
@@ -319,9 +319,9 @@ var _ = Describe("JSONPath", func() {
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(res).To(Equal(unstruct{
-				"y": unstruct{
-					"z": unstruct{"c": int64(2)},
+			Expect(res).To(Equal(map[string]any{
+				"y": map[string]any{
+					"z": map[string]any{"c": int64(2)},
 				},
 			}))
 		})
@@ -336,10 +336,10 @@ var _ = Describe("JSONPath", func() {
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(res).To(Equal(unstruct{
-				"q": unstruct{
-					"y": unstruct{
-						"z": unstruct{"c": int64(2)},
+			Expect(res).To(Equal(map[string]any{
+				"q": map[string]any{
+					"y": map[string]any{
+						"z": map[string]any{"c": int64(2)},
 					},
 				},
 			}))
@@ -355,7 +355,7 @@ var _ = Describe("JSONPath", func() {
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			d, ok := res.(unstruct)
+			d, ok := res.(map[string]any)
 			Expect(ok).To(BeTrue())
 			Expect(d).To(HaveKey("a"))
 			Expect(d["a"]).To(Equal(obj1.UnstructuredContent()))
@@ -371,7 +371,7 @@ var _ = Describe("JSONPath", func() {
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			d, ok := res.(unstruct)
+			d, ok := res.(map[string]any)
 			Expect(ok).To(BeTrue())
 			Expect(d).To(HaveKey("a"))
 			Expect(d["a"]).To(Equal(obj1.UnstructuredContent()))
@@ -387,7 +387,7 @@ var _ = Describe("JSONPath", func() {
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			d, ok := res.(unstruct)
+			d, ok := res.(map[string]any)
 			Expect(ok).To(BeTrue())
 			Expect(d).To(Equal(map[string]any{"a": "b"}))
 		})
@@ -413,7 +413,7 @@ var _ = Describe("JSONPath", func() {
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			d, ok := res.(unstruct)
+			d, ok := res.(map[string]any)
 			Expect(ok).To(BeTrue())
 			Expect(d).To(Equal(map[string]any{"a": int64(1)}))
 		})
@@ -428,15 +428,15 @@ var _ = Describe("JSONPath", func() {
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			d, ok := res.(unstruct)
+			d, ok := res.(map[string]any)
 			Expect(ok).To(BeTrue())
 
 			Expect(d).To(HaveKey("spec"))
 			Expect(d["spec"]).To(HaveKey("y"))
-			Expect(d["spec"].(unstruct)["y"]).To(Equal("aaa"))
+			Expect(d["spec"].(map[string]any)["y"]).To(Equal("aaa"))
 
 			Expect(d["spec"]).To(HaveKey("b"))
-			Expect(d["spec"].(unstruct)["b"]).To(Equal(map[string]any{"d": int64(12)}))
+			Expect(d["spec"].(map[string]any)["b"]).To(Equal(map[string]any{"d": int64(12)}))
 		})
 
 		It("should deserialize and evaluate a setter with multiple JSONPath expressions", func() {
@@ -449,15 +449,15 @@ var _ = Describe("JSONPath", func() {
 			res, err := exp.Evaluate(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
-			d, ok := res.(unstruct)
+			d, ok := res.(map[string]any)
 			Expect(ok).To(BeTrue())
 
 			Expect(d).To(HaveKey("spec"))
 			Expect(d["spec"]).To(HaveKey("y"))
-			Expect(d["spec"].(unstruct)["y"]).To(Equal("aaa"))
+			Expect(d["spec"].(map[string]any)["y"]).To(Equal("aaa"))
 
 			Expect(d["spec"]).To(HaveKey("b"))
-			Expect(d["spec"].(unstruct)["b"]).To(Equal(map[string]any{"c": int64(2), "d": int64(12)}))
+			Expect(d["spec"].(map[string]any)["b"]).To(Equal(map[string]any{"c": int64(2), "d": int64(12)}))
 		})
 
 		It("should create and evaluate a JSONPath getter expression constructor", func() {
