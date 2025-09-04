@@ -16,7 +16,7 @@ import (
 
 var _ ClientMultiplexer = &clientMultiplexer{}
 
-// ClientMultiplexer multiplexes controller-runtime clients by API group
+// ClientMultiplexer multiplexes controller-runtime clients by API group.
 type ClientMultiplexer interface {
 	client.WithWatch
 
@@ -24,14 +24,14 @@ type ClientMultiplexer interface {
 	UnregisterClient(group string) error
 }
 
-// clientMultiplexer implements ClientMultiplexer
+// clientMultiplexer implements ClientMultiplexer.
 type clientMultiplexer struct {
 	mu      sync.RWMutex
 	clients map[string]client.Client
 	log     logr.Logger
 }
 
-// NewClientMultiplexer creates a new ClientMultiplexer instance
+// NewClientMultiplexer creates a new ClientMultiplexer instance.
 func NewClientMultiplexer(logger logr.Logger) ClientMultiplexer {
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -43,7 +43,7 @@ func NewClientMultiplexer(logger logr.Logger) ClientMultiplexer {
 	}
 }
 
-// RegisterClient registers a client for the specified API group
+// RegisterClient registers a client for the specified API group.
 func (m *clientMultiplexer) RegisterClient(group string, c client.Client) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -59,7 +59,7 @@ func (m *clientMultiplexer) RegisterClient(group string, c client.Client) error 
 	return nil
 }
 
-// UnregisterClient removes the client for the specified API group
+// UnregisterClient removes the client for the specified API group.
 func (m *clientMultiplexer) UnregisterClient(group string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -75,7 +75,7 @@ func (m *clientMultiplexer) UnregisterClient(group string) error {
 	return nil
 }
 
-// getClientForObject determines the appropriate client based on the object's API group
+// getClientForObject returns the client for object's API group.
 func (m *clientMultiplexer) getClientForObject(obj client.Object) (client.Client, error) {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	if gvk.Empty() {
@@ -85,7 +85,7 @@ func (m *clientMultiplexer) getClientForObject(obj client.Object) (client.Client
 	return m.getClientForGroup(gvk.Group, gvk.Kind)
 }
 
-// getClientForObject determines the appropriate client based on the object's API group
+// getClientForObject returns the client for an object list API group.
 func (m *clientMultiplexer) getClientForObjectList(list client.ObjectList) (client.Client, error) {
 	gvk := list.GetObjectKind().GroupVersionKind()
 	if gvk.Empty() {
@@ -95,7 +95,7 @@ func (m *clientMultiplexer) getClientForObjectList(list client.ObjectList) (clie
 	return m.getClientForGroup(gvk.Group, gvk.Kind)
 }
 
-// getClientForGroup returns the client for the specified API group
+// getClientForGroup returns the client for the specified API group.
 func (m *clientMultiplexer) getClientForGroup(group, kind string) (client.Client, error) {
 	m.mu.RLock()
 	c, exists := m.clients[group]
@@ -111,9 +111,9 @@ func (m *clientMultiplexer) getClientForGroup(group, kind string) (client.Client
 	return c, nil
 }
 
-// Client interface implementation
+// Client interface implementation.
 
-// Get retrieves an obj for the given object key from the Kubernetes Cluster
+// Get retrieves an obj for the given object key.
 func (m *clientMultiplexer) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	m.log.V(3).Info("GET", "GVK", client.ObjectKeyFromObject(obj).String())
 
@@ -124,7 +124,7 @@ func (m *clientMultiplexer) Get(ctx context.Context, key client.ObjectKey, obj c
 	return c.Get(ctx, key, obj, opts...)
 }
 
-// List retrieves list of objects for a given namespace and list options
+// List retrieves list of objects for a given namespace and list options.
 func (m *clientMultiplexer) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	m.log.V(3).Info("LIST", "GVK", list.GetObjectKind().GroupVersionKind().String())
 
@@ -136,7 +136,7 @@ func (m *clientMultiplexer) List(ctx context.Context, list client.ObjectList, op
 	return c.List(ctx, list, opts...)
 }
 
-// Create saves the object obj in the Kubernetes cluster
+// Create saves the object obj.
 func (m *clientMultiplexer) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	m.log.V(3).Info("CREATE", "GVK", client.ObjectKeyFromObject(obj).String())
 
@@ -147,7 +147,7 @@ func (m *clientMultiplexer) Create(ctx context.Context, obj client.Object, opts 
 	return c.Create(ctx, obj, opts...)
 }
 
-// Delete deletes the given obj from Kubernetes cluster
+// Delete deletes the given obj.
 func (m *clientMultiplexer) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	m.log.V(3).Info("DELETE", "GVK", client.ObjectKeyFromObject(obj).String())
 
@@ -158,7 +158,7 @@ func (m *clientMultiplexer) Delete(ctx context.Context, obj client.Object, opts 
 	return c.Delete(ctx, obj, opts...)
 }
 
-// Update updates the given obj in the Kubernetes cluster
+// Update updates the given obj.
 func (m *clientMultiplexer) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	m.log.V(3).Info("UPDATE", "GVK", client.ObjectKeyFromObject(obj).String())
 
@@ -169,7 +169,7 @@ func (m *clientMultiplexer) Update(ctx context.Context, obj client.Object, opts 
 	return c.Update(ctx, obj, opts...)
 }
 
-// Patch patches the given obj in the Kubernetes cluster
+// Patch patches the given obj.
 func (m *clientMultiplexer) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	m.log.V(3).Info("PATCH", "GVK", client.ObjectKeyFromObject(obj).String())
 
@@ -180,7 +180,7 @@ func (m *clientMultiplexer) Patch(ctx context.Context, obj client.Object, patch 
 	return c.Patch(ctx, obj, patch, opts...)
 }
 
-// DeleteAllOf deletes all objects of the given type matching the given options
+// DeleteAllOf deletes all objects of the given type matching the given options.
 func (m *clientMultiplexer) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
 	m.log.V(3).Info("DELETE-ALL", "GVK", client.ObjectKeyFromObject(obj).String())
 
@@ -191,18 +191,18 @@ func (m *clientMultiplexer) DeleteAllOf(ctx context.Context, obj client.Object, 
 	return c.DeleteAllOf(ctx, obj, opts...)
 }
 
-// Status returns a client which can update status subresource for kubernetes objects
+// Status returns a client which can update status subresource for kubernetes objects.
 func (m *clientMultiplexer) Status() client.StatusWriter {
 	return &statusWriter{multiplexer: m}
 }
 
-// Scheme returns the scheme this client is using
+// Scheme returns the scheme this client is using.
 func (m *clientMultiplexer) Scheme() *runtime.Scheme {
 	// No scheme available in this multiplexer
 	return nil
 }
 
-// RESTMapper returns the rest this client is using
+// RESTMapper returns the rest this client is using.
 func (m *clientMultiplexer) RESTMapper() meta.RESTMapper {
 	// This is more complex as we'd need to merge RESTMappers from all clients
 	// For now, return the first available one
@@ -217,7 +217,7 @@ func (m *clientMultiplexer) RESTMapper() meta.RESTMapper {
 	return nil
 }
 
-// GroupVersionKindFor returns the GroupVersionKind for the given object
+// GroupVersionKindFor returns the GroupVersionKind for the given object.
 func (m *clientMultiplexer) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
 	// First try to get GVK directly from the object
 	if gvkObj, ok := obj.(schema.ObjectKind); ok {
@@ -242,7 +242,7 @@ func (m *clientMultiplexer) GroupVersionKindFor(obj runtime.Object) (schema.Grou
 	return schema.GroupVersionKind{}, fmt.Errorf("unable to determine GroupVersionKind for object type %T", obj)
 }
 
-// IsObjectNamespaced returns true if the object is namespaced
+// IsObjectNamespaced returns true if the object is namespaced.
 func (m *clientMultiplexer) IsObjectNamespaced(obj runtime.Object) (bool, error) {
 	gvk, err := m.GroupVersionKindFor(obj)
 	if err != nil {
@@ -257,7 +257,7 @@ func (m *clientMultiplexer) IsObjectNamespaced(obj runtime.Object) (bool, error)
 	return c.IsObjectNamespaced(obj)
 }
 
-// SubResource returns a client for the specified subresource
+// SubResource returns a client for the specified subresource.
 func (m *clientMultiplexer) SubResource(subResource string) client.SubResourceClient {
 	return &subResourceMultiplexer{
 		multiplexer: m,
@@ -265,9 +265,9 @@ func (m *clientMultiplexer) SubResource(subResource string) client.SubResourceCl
 	}
 }
 
-// Watch interface implementation
+// Watch interface implementation.
 
-// Watch watches objects of type obj and sends events on the returned channel
+// Watch watches objects of type obj and sends events on the returned channel.
 func (m *clientMultiplexer) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
 	m.log.V(3).Info("WATCH", "GVK", list.GetObjectKind().GroupVersionKind().String())
 
@@ -276,7 +276,7 @@ func (m *clientMultiplexer) Watch(ctx context.Context, list client.ObjectList, o
 		return nil, err
 	}
 
-	// Check if the client supports watching
+	// Check if the client supports watching.
 	if wc, ok := c.(client.WithWatch); ok {
 		return wc.Watch(ctx, list, opts...)
 	}
@@ -285,12 +285,12 @@ func (m *clientMultiplexer) Watch(ctx context.Context, list client.ObjectList, o
 		list.GetObjectKind().GroupVersionKind().String())
 }
 
-// statusWriter implements client.StatusWriter by delegating to the appropriate client
+// statusWriter implements client.StatusWriter by delegating to the appropriate client.
 type statusWriter struct {
 	multiplexer *clientMultiplexer
 }
 
-// Update updates the status subresource of the given object
+// Update updates the status subresource of the given object.
 func (sw *statusWriter) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
 	c, err := sw.multiplexer.getClientForObject(obj)
 	if err != nil {
@@ -299,7 +299,7 @@ func (sw *statusWriter) Create(ctx context.Context, obj client.Object, subResour
 	return c.Status().Create(ctx, obj, subResource, opts...)
 }
 
-// Update updates the status subresource of the given object
+// Update updates the status subresource of the given object.
 func (sw *statusWriter) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 	c, err := sw.multiplexer.getClientForObject(obj)
 	if err != nil {
@@ -308,7 +308,7 @@ func (sw *statusWriter) Update(ctx context.Context, obj client.Object, opts ...c
 	return c.Status().Update(ctx, obj, opts...)
 }
 
-// Patch patches the status subresource of the given object
+// Patch patches the status subresource of the given object.
 func (sw *statusWriter) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 	c, err := sw.multiplexer.getClientForObject(obj)
 	if err != nil {
@@ -317,13 +317,13 @@ func (sw *statusWriter) Patch(ctx context.Context, obj client.Object, patch clie
 	return c.Status().Patch(ctx, obj, patch, opts...)
 }
 
-// subResourceMultiplexer implements client.SubResourceClient by delegating to the appropriate client
+// subResourceMultiplexer implements client.SubResourceClient by delegating to the appropriate client.
 type subResourceMultiplexer struct {
 	multiplexer *clientMultiplexer
 	subResource string
 }
 
-// Get retrieves the subresource for the given object
+// Get retrieves the subresource for the given object.
 func (sr *subResourceMultiplexer) Get(ctx context.Context, obj, subResource client.Object, opts ...client.SubResourceGetOption) error {
 	c, err := sr.multiplexer.getClientForObject(obj)
 	if err != nil {
@@ -332,7 +332,7 @@ func (sr *subResourceMultiplexer) Get(ctx context.Context, obj, subResource clie
 	return c.SubResource(sr.subResource).Get(ctx, obj, subResource, opts...)
 }
 
-// Create creates the subresource for the given object
+// Create creates the subresource for the given object.
 func (sr *subResourceMultiplexer) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
 	c, err := sr.multiplexer.getClientForObject(obj)
 	if err != nil {
@@ -341,7 +341,7 @@ func (sr *subResourceMultiplexer) Create(ctx context.Context, obj client.Object,
 	return c.SubResource(sr.subResource).Create(ctx, obj, subResource, opts...)
 }
 
-// Update updates the subresource for the given object
+// Update updates the subresource for the given object.
 func (sr *subResourceMultiplexer) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 	c, err := sr.multiplexer.getClientForObject(obj)
 	if err != nil {
@@ -350,7 +350,7 @@ func (sr *subResourceMultiplexer) Update(ctx context.Context, obj client.Object,
 	return c.SubResource(sr.subResource).Update(ctx, obj, opts...)
 }
 
-// Patch patches the subresource for the given object
+// Patch patches the subresource for the given object.
 func (sr *subResourceMultiplexer) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 	c, err := sr.multiplexer.getClientForObject(obj)
 	if err != nil {

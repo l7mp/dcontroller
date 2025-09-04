@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/scheme"
 )
 
 const (
@@ -16,20 +14,22 @@ const (
 	Version         = "v1alpha1"
 )
 
-// Constuctors
+// Group returns the group for the view objects created by an operator.
 func Group(operator string) string {
 	return fmt.Sprintf("%s.%s", operator, GroupSuffix)
 }
 
+// GroupVersion returns the group-version for the view objects created by an operator.
 func GroupVersion(operator string) schema.GroupVersion {
 	return schema.GroupVersion{Group: Group(operator), Version: Version}
 }
 
+// GroupVersionKind returns the group-version-kind for the view objects created by an operator.
 func GroupVersionKind(operator, view string) schema.GroupVersionKind {
 	return GroupVersion(operator).WithKind(view)
 }
 
-// Mappers for native objects
+// MapIntoView maps a native object into an operator view resource.
 func MapIntoView(operator string, gvk schema.GroupVersionKind) schema.GroupVersionKind {
 	// specialcase corev1
 	group := gvk.Group
@@ -43,6 +43,7 @@ func MapIntoView(operator string, gvk schema.GroupVersionKind) schema.GroupVersi
 	}
 }
 
+// MapIntoView restores a native object back from an operator view into its native GVK.
 func MapFromView(gvk schema.GroupVersionKind) (schema.GroupVersionKind, error) {
 	if !IsViewGroup(gvk.Group) {
 		return schema.GroupVersionKind{}, errors.New("not a view resource")
@@ -63,7 +64,7 @@ func MapFromView(gvk schema.GroupVersionKind) (schema.GroupVersionKind, error) {
 	}, nil
 }
 
-// Getters
+// GetOperator returns the operator name for a view resource.
 func GetOperator(gvk schema.GroupVersionKind) string {
 	s := gvk.Group
 	if strings.HasSuffix(s, fullGroupSuffix) {
@@ -74,19 +75,21 @@ func GetOperator(gvk schema.GroupVersionKind) string {
 	return ""
 }
 
-// Checkers
+// IsViewGroup checks whether a group belongs to a view resource.
 func IsViewGroup(group string) bool { return strings.HasSuffix(group, GroupSuffix) }
 
+// IsViewGroupVersion checks whether a group-version belongs to a view resource.
 func IsViewGroupVersion(gv schema.GroupVersion) bool {
 	return IsViewGroup(gv.Group) && gv.Version == Version
 }
 
+// IsViewGroupVersion checks whether a group-version-kind belongs to a view resource.
 func IsViewKind(gvk schema.GroupVersionKind) bool {
 	return IsViewGroupVersion(gvk.GroupVersion())
 }
 
-// Scheme
-func AddGroupToScheme(operator string, s *runtime.Scheme) error {
-	schemeBuilder := &scheme.Builder{GroupVersion: GroupVersion(operator)}
-	return schemeBuilder.AddToScheme(s)
-}
+// // Scheme
+// func AddGroupToScheme(operator string, s *runtime.Scheme) error {
+// 	schemeBuilder := &scheme.Builder{GroupVersion: GroupVersion(operator)}
+// 	return schemeBuilder.AddToScheme(s)
+// }

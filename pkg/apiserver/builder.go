@@ -21,7 +21,7 @@ import (
 
 // buildServer creates a new API server instance.
 func (s *APIServer) buildServer() error {
-	// Step 1: Create minimal scheme with unstructured types
+	// Step 1: Create minimal scheme with unstructured types.
 	scheme, codecs, err := s.createSchemeAndCodecs()
 	if err != nil {
 		return fmt.Errorf("failed to create scheme: %w", err)
@@ -29,20 +29,20 @@ func (s *APIServer) buildServer() error {
 	s.scheme = scheme
 	s.codecs = codecs
 
-	// Step 2: Apply customizations to the config
+	// Step 2: Apply customizations to the config.
 	config, err := s.createServerConfig()
 	if err != nil {
 		return fmt.Errorf("failed to create server config: %w", err)
 	}
 
-	// Step 3: Create the GenericAPIServer
+	// Step 3: Create the GenericAPIServer.
 	server, err := config.Complete().New("dcontroller-apiserver", genericapiserver.NewEmptyDelegate())
 	if err != nil {
 		return fmt.Errorf("failed to create server: %w", err)
 	}
 	s.server = server
 
-	// Step 4: Register initial GVKs added before the server starts iup
+	// Step 4: Register initial GVKs added before the server starts up.
 	if err := s.initGVKs(); err != nil {
 		return fmt.Errorf("failed to register initial GVKs: %w", err)
 	}
@@ -56,12 +56,12 @@ func (s *APIServer) buildServer() error {
 func (s *APIServer) createSchemeAndCodecs() (*runtime.Scheme, runtime.NegotiatedSerializer, error) {
 	scheme := runtime.NewScheme()
 
-	// Add client-go scheme for core types and meta types
+	// Add client-go scheme for core types and meta types.
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		return nil, serializer.CodecFactory{}, fmt.Errorf("failed to add client-go scheme: %w", err)
 	}
 
-	// Create codecs
+	// Create codecs.
 	codecs := NewCompositeCodecFactory(serializer.NewCodecFactory(scheme), scheme)
 
 	return scheme, codecs, nil
@@ -71,7 +71,7 @@ func (s *APIServer) createSchemeAndCodecs() (*runtime.Scheme, runtime.Negotiated
 func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, error) {
 	config := s.config
 
-	// Apply secure serving options
+	// Apply secure serving options.
 	secureAddr := config.Addr.IP
 	securePort := config.Addr.Port
 	if config.UseHTTP {
@@ -92,7 +92,7 @@ func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, e
 		return nil, fmt.Errorf("failed to apply secure serving: %w", err)
 	}
 
-	// Create the HTTP middleware for the inecure HTTP server
+	// Create the HTTP middleware for the inecure HTTP server.
 	config.BuildHandlerChainFunc = func(apiHandler http.Handler, c *genericapiserver.Config) http.Handler {
 		handler := genericfilters.WithWaitGroup(apiHandler, c.LongRunningFunc, c.NonLongRunningRequestWaitGroup)
 		middleware := genericapifilters.WithRequestInfo(handler, c.RequestInfoResolver)
@@ -107,7 +107,7 @@ func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, e
 		return handler
 	}
 
-	// Ensure secure serving is configured
+	// Ensure secure serving is configured.
 	if config.UseHTTP {
 		insecureAddr := &net.TCPAddr{
 			IP:   config.Addr.IP,
@@ -120,10 +120,10 @@ func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, e
 		s.insecureListener = listener
 	}
 
-	// Override/set required fields for our dynamic server
+	// Override/set required fields for our dynamic server.
 	config.Serializer = s.codecs
 
-	// Build OpenAPI config specs: inject our dynamic OpenAPI handler
+	// Build OpenAPI config specs: inject our dynamic OpenAPI handler.
 	namer := openapiendpoints.NewDefinitionNamer(s.scheme)
 	openAPIConfig := genericapiserver.DefaultOpenAPIConfig(s.getOpenAPIv2Handler(), namer)
 	openAPIConfig.Info = &spec.Info{
@@ -141,6 +141,7 @@ func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, e
 	return config.RecommendedConfig, nil
 }
 
+// initGVKs registers the GVKs added before the API server starts.
 func (s *APIServer) initGVKs() error {
 	groupGVKs := map[string][]schema.GroupVersionKind{}
 	for group, gvks := range s.groupGVKs {

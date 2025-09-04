@@ -16,13 +16,13 @@ var _ discovery.DiscoveryInterface = &CompositeDiscoveryClient{}
 var _ ViewDiscoveryInterface = &CompositeDiscoveryClient{}
 
 // CompositeDiscoveryClient implements discovery.DiscoveryInterface by routing
-// view groups to ViewDiscovery and native groups to native discovery
+// view groups to ViewDiscovery and native groups to native discovery.
 type CompositeDiscoveryClient struct {
 	ViewDiscoveryInterface
 	nativeDiscovery discovery.DiscoveryInterface
 }
 
-// NewCompositeDiscoveryClient creates a new composite discovery client
+// NewCompositeDiscoveryClient creates a new composite discovery client.
 func NewCompositeDiscoveryClient(nativeDiscovery discovery.DiscoveryInterface) *CompositeDiscoveryClient {
 	return &CompositeDiscoveryClient{
 		ViewDiscoveryInterface: NewViewDiscovery(),
@@ -30,7 +30,7 @@ func NewCompositeDiscoveryClient(nativeDiscovery discovery.DiscoveryInterface) *
 	}
 }
 
-// RESTClient implements discovery.DiscoveryInterface
+// RESTClient implements discovery.DiscoveryInterface.
 func (c *CompositeDiscoveryClient) RESTClient() restclient.Interface {
 	if c.nativeDiscovery != nil {
 		return c.nativeDiscovery.RESTClient()
@@ -38,7 +38,9 @@ func (c *CompositeDiscoveryClient) RESTClient() restclient.Interface {
 	return nil
 }
 
-// ServerResourcesForGroupVersion implements discovery.DiscoveryInterface
+// Implement the Discovery.DiscoveryInterface interface.
+
+// ServerResourcesForGroupVersion returns the supported resources for a group and version.
 func (c *CompositeDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
 	gv, err := schema.ParseGroupVersion(groupVersion)
 	if err != nil {
@@ -56,7 +58,8 @@ func (c *CompositeDiscoveryClient) ServerResourcesForGroupVersion(groupVersion s
 	return c.nativeDiscovery.ServerResourcesForGroupVersion(groupVersion)
 }
 
-// ServerGroups implements discovery.DiscoveryInterface
+// ServerGroups returns the supported groups, with information like supported versions and the
+// preferred version.
 func (c *CompositeDiscoveryClient) ServerGroups() (*metav1.APIGroupList, error) {
 	var groups []metav1.APIGroup
 
@@ -79,7 +82,7 @@ func (c *CompositeDiscoveryClient) ServerGroups() (*metav1.APIGroupList, error) 
 	return &metav1.APIGroupList{Groups: groups}, nil
 }
 
-// ServerGroupsAndResources implements discovery.DiscoveryInterface
+// ServerGroupsAndResources returns the supported groups and resources for all groups and versions.
 func (c *CompositeDiscoveryClient) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	var allGroups []*metav1.APIGroup
 	var allResources []*metav1.APIResourceList
@@ -105,7 +108,8 @@ func (c *CompositeDiscoveryClient) ServerGroupsAndResources() ([]*metav1.APIGrou
 	return allGroups, allResources, nil
 }
 
-// ServerPreferredResources implements discovery.DiscoveryInterface
+// ServerPreferredResources returns the supported resources with the version preferred by the
+// server.
 func (c *CompositeDiscoveryClient) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
 	var allResources []*metav1.APIResourceList
 
@@ -128,7 +132,8 @@ func (c *CompositeDiscoveryClient) ServerPreferredResources() ([]*metav1.APIReso
 	return allResources, nil
 }
 
-// ServerPreferredNamespacedResources implements discovery.DiscoveryInterface
+// ServerPreferredNamespacedResources returns the supported namespaced resources with the
+// version preferred by the server.
 func (c *CompositeDiscoveryClient) ServerPreferredNamespacedResources() ([]*metav1.APIResourceList, error) {
 	var allResources []*metav1.APIResourceList
 
@@ -151,7 +156,7 @@ func (c *CompositeDiscoveryClient) ServerPreferredNamespacedResources() ([]*meta
 	return allResources, nil
 }
 
-// ServerVersion implements discovery.DiscoveryInterface
+// ServerVersion retrieves and parses the server's version.
 func (c *CompositeDiscoveryClient) ServerVersion() (*version.Info, error) {
 	if c.nativeDiscovery != nil {
 		return c.nativeDiscovery.ServerVersion()
@@ -165,7 +170,7 @@ func (c *CompositeDiscoveryClient) ServerVersion() (*version.Info, error) {
 	}, nil
 }
 
-// OpenAPISchema implements discovery.DiscoveryInterface
+// OpenAPISchema retrieves and parses the swagger API schema the server supports.
 func (c *CompositeDiscoveryClient) OpenAPISchema() (*openapiv2.Document, error) {
 	if c.nativeDiscovery != nil {
 		return c.nativeDiscovery.OpenAPISchema()
@@ -173,7 +178,7 @@ func (c *CompositeDiscoveryClient) OpenAPISchema() (*openapiv2.Document, error) 
 	return nil, fmt.Errorf("OpenAPI schema not available")
 }
 
-// OpenAPIV3 implements discovery.DiscoveryInterface (for newer K8s versions)
+// OpenAPISchema retrieves and parses the OpenAPIv3 schema the server supports.
 func (c *CompositeDiscoveryClient) OpenAPIV3() openapi.Client {
 	if c.nativeDiscovery != nil {
 		return c.nativeDiscovery.OpenAPIV3()
@@ -181,7 +186,8 @@ func (c *CompositeDiscoveryClient) OpenAPIV3() openapi.Client {
 	return nil
 }
 
-// WithLegacy implements discovery.DiscoveryInterface
+// WithLegacy returns a copy of the discovery client that will only receive the legacy discovery
+// format.
 func (c *CompositeDiscoveryClient) WithLegacy() discovery.DiscoveryInterface {
 	if c.nativeDiscovery != nil {
 		return NewCompositeDiscoveryClient(c.nativeDiscovery.WithLegacy())

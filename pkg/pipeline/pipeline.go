@@ -1,3 +1,31 @@
+// Package pipeline implements declarative data processing pipelines that transform
+// Kubernetes resources using DBSP-based incremental computation.
+//
+// Pipelines define how source Kubernetes resources are joined, filtered, and
+// aggregated to produce target view objects. They support complex relational
+// operations while maintaining incremental update semantics for efficiency.
+//
+// Key components:
+//   - Pipeline: Main pipeline processor with DBSP executor integration.
+//   - Evaluator: Interface for pipeline evaluation.
+//   - Pipeline operators: Selection, projection, join, aggregation operations.
+//   - ZSet adaptors: Convert between Kubernetes objects and DBSP Z-sets.
+//
+// Pipeline operations:
+//   - @join: Combine multiple resource types with boolean conditions.
+//   - @select: Filter objects based on boolean expressions.
+//   - @project: Transform object structure and extract fields.
+//   - @unwind: Expand array fields into multiple objects.
+//   - @gather: Collect multiple objects into aggregated results.
+//
+// Example usage:
+//
+//	pipeline, _ := pipeline.NewPipeline("my-op", "TargetView", sources,
+//	    opv1a1.Pipeline{
+//	        Join: &opv1a1.JoinExpression{...},
+//	        Aggregation: &opv1a1.AggregationExpression{...},
+//	     ...
+//	    }, logger)
 package pipeline
 
 import (
@@ -15,10 +43,9 @@ import (
 	"github.com/l7mp/dcontroller/pkg/util"
 )
 
-var (
-	_         Evaluator = &Pipeline{}
-	ObjectKey           = toolscache.MetaObjectToName
-)
+var _ Evaluator = &Pipeline{}
+
+var ObjectKey = toolscache.MetaObjectToName
 
 // Evaluator is a query that knows how to evaluate itself on a given delta and how to print itself.
 type Evaluator interface {
@@ -40,8 +67,9 @@ type Pipeline struct {
 	log         logr.Logger
 }
 
-// NewPipeline creates a new pipeline from the set of base objects and a seralized pipeline that writes into a given target.
-func NewPipeline(operator string, target string, sources []schema.GroupVersionKind, config opv1a1.Pipeline, log logr.Logger) (Evaluator, error) {
+// New creates a new pipeline from the set of base objects and a seralized pipeline that writes
+// into a given target.
+func New(operator string, target string, sources []schema.GroupVersionKind, config opv1a1.Pipeline, log logr.Logger) (Evaluator, error) {
 	if len(sources) > 1 && config.Join == nil {
 		return nil, errors.New("invalid controller configuration: controllers " +
 			"defined on multiple base resources must specify a Join in the pipeline")
@@ -126,11 +154,12 @@ func NewPipeline(operator string, target string, sources []schema.GroupVersionKi
 	return p, nil
 }
 
+// String stringifies a pipeline.
 func (p *Pipeline) String() string {
 	return p.graph.String()
 }
 
-// Evaluate processes an pipeline expression on the given delta.
+// Evaluate processes an pipeline on the given delta.
 func (p *Pipeline) Evaluate(delta object.Delta) ([]object.Delta, error) {
 	p.log.V(2).Info("processing event", "event-type", delta.Type, "object", ObjectKey(delta.Object))
 

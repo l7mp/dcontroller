@@ -7,6 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// Event type definition.
 type DeltaType string
 
 const (
@@ -21,12 +22,14 @@ const (
 // NilDelta is a placeholder for a delta that means no change.
 var NilDelta = Delta{Object: nil}
 
-// Delta registers a change (addition, deletion, etc) on an object. By convention, Object is nil if no change occurs.
+// Delta registers a change (addition, deletion, etc) on an object. By convention, Object is nil if
+// no change occurs.
 type Delta struct {
 	Object Object
 	Type   DeltaType
 }
 
+// IsUnchanged checks of a delta indicates a change.
 func (d Delta) IsUnchanged() bool { return d.Object == nil }
 
 func (d Delta) String() string {

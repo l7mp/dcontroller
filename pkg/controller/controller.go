@@ -1,3 +1,30 @@
+// Package controller implements the core Δ-controller controller runtime that processes
+// declarative pipeline specifications and manages incremental view reconciliation.
+//
+// This package provides the main controller abstraction that bridges declarative
+// YAML specifications with imperative Go reconciliation logic. Controllers watch
+// source Kubernetes resources, process them through declarative pipelines to
+// generate view objects, and manage target resource updates.
+//
+// Key components:
+//   - Controller: Main controller struct that manages the reconciliation lifecycle.
+//   - StatusReporter: Handles controller status reporting and error management.
+//   - ProcessorFunc: Interface for pluggable request processing logic.
+//
+// Controllers support:
+//   - multiple source resource types with optional label selectors,
+//   - declarative pipeline processing with joins and aggregations,
+//   - incremental reconciliation using DBSP (Database Stream Processing),
+//   - configurable error handling and status reporting, and
+//   - integration with the composite client system.
+//
+// Example usage:
+//
+//	ctrl, _ := controller.New("my-controller", mgr, controller.Config{
+//	    Sources: []opv1a1.Source{{Kind: "Pod"}},
+//	    Target: opv1a1.Target{Kind: "PodView"},
+//	    Pipeline: opv1a1.Pipeline{...},
+//	})
 package controller
 
 import (
@@ -23,9 +50,15 @@ import (
 	"github.com/l7mp/dcontroller/pkg/util"
 )
 
+var _ runtimeManager.Runnable = &Controller{}
+
+// WatcherBufferSize is the default buffer size for the watch event handler.
 const WatcherBufferSize int = 1024
 
+// ProcessorFunc is the request processor type for the controller.
 type ProcessorFunc func(ctx context.Context, c *Controller, req reconciler.Request) error
+
+// Options defines the controller configuration.
 type Options struct {
 	// Processor allows to override the default request processor of the controller.
 	Processor ProcessorFunc
@@ -33,8 +66,6 @@ type Options struct {
 	// ErrorChannel is a channel to receive errors from the controller.
 	ErrorChan chan error
 }
-
-var _ runtimeManager.Runnable = &Controller{}
 
 // Controller is a dcontroller reconciler.
 type Controller struct {
@@ -78,7 +109,6 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 	c.name = name
 	c.log = logger.WithName("controller").WithValues("name", name)
 
-	// sanity check
 	if len(config.Sources) == 0 {
 		return c, c.PushCriticalError(errors.New("invalid controller configuration: no source"))
 	}
@@ -88,27 +118,27 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 		return c, c.PushCriticalError(errors.New("invalid controller configuration: no target"))
 	}
 
-	// opts
 	processor := processRequest
 	if opts.Processor != nil {
 		processor = opts.Processor
 	}
 	c.processor = processor
 
-	// Create the target
+	// Create the target.
 	c.kind = config.Target.Kind // the kind of the target
 	c.target = reconciler.NewTarget(mgr, c.op, config.Target)
 
-	// Create the reconciler
+	// Create the reconciler.
 	controllerReconciler := NewControllerReconciler(mgr, c)
 
-	// Create the sources and the cache
+	// Create the sources and the cache.
 	srcs := []string{}
 	for _, s := range config.Sources {
 		source := reconciler.NewSource(mgr, c.op, s)
 		c.sources = append(c.sources, source)
 		srcs = append(srcs, source.String())
 	}
+
 	c.log.Info("creating", "sources", fmt.Sprintf("[%s]", strings.Join(srcs, ",")))
 
 	on := true
@@ -120,10 +150,10 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 				util.Stringify(s), err))
 		}
 
-		// Init the cache
+		// Init the cache.
 		c.cache[gvk] = composite.NewStore()
 
-		// Create the controller
+		// Create the controller.
 		ctrl, err := controller.NewTyped(name, mgr, controller.TypedOptions[reconciler.Request]{
 			SkipNameValidation: &on,
 			Reconciler:         controllerReconciler,
@@ -133,13 +163,14 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 				"for resource %s: %w", gvk.String(), err))
 		}
 
-		// Set up the watch
+		// Set up the watch.
 		src, err := s.GetSource()
 		if err != nil {
 			return c, c.PushCriticalError(fmt.Errorf("failed to create runtime source for "+
 				"resource %s: %w", gvk.String(), err))
 		}
 
+		// Create the watch for the source.
 		if err := ctrl.Watch(src); err != nil {
 			return c, c.PushCriticalError(fmt.Errorf("failed to watch resource %s: %w",
 				gvk.String(), err))
@@ -150,8 +181,8 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 		baseviews = append(baseviews, gvk)
 	}
 
-	// Create the pipeline
-	pipeline, err := pipeline.NewPipeline(c.op, c.kind, baseviews, c.config.Pipeline,
+	// Create the pipeline.
+	pipeline, err := pipeline.New(c.op, c.kind, baseviews, c.config.Pipeline,
 		logger.WithName("pipeline").WithValues("controller", c.name, "target-kind", c.kind))
 	if err != nil {
 		return c, c.PushCriticalError(fmt.Errorf("failed to create pipleline for controller %s: %w",
@@ -160,7 +191,7 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 	c.pipeline = pipeline
 
 	// Add the controller to the manager (this will automatically start it when Start is called
-	// on the manager, but the reconciler must still be explicitly started)
+	// on the manager, but the reconciler must still be explicitly started).
 	if err := mgr.Add(c); err != nil {
 		return c, c.PushCriticalError(fmt.Errorf("failed to schedule controller %s: %w",
 			c.name, err))
@@ -222,6 +253,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	}
 }
 
+// GetStatus returns the status of the controller.
 func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 	status := opv1a1.ControllerStatus{Name: c.name}
 
@@ -236,7 +268,7 @@ func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 			Reason:             string(opv1a1.ControllerReasonReady),
 			Message:            "Controller is up and running",
 		}
-	case c.IsCritical():
+	case c.HasCritical():
 		condition = metav1.Condition{
 			Type:               string(opv1a1.ControllerConditionReady),
 			Status:             metav1.ConditionFalse,
@@ -264,8 +296,8 @@ func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 	return status
 }
 
+// processRequest processes a reconcile request.
 func processRequest(ctx context.Context, c *Controller, req reconciler.Request) error {
-	// Obtain the requested object
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(req.GVK)
 	obj.SetNamespace(req.Namespace)
@@ -307,14 +339,14 @@ func processRequest(ctx context.Context, c *Controller, req reconciler.Request) 
 		Object: obj,
 	}
 
-	// Process the delta through the pipeline
+	// Process the delta through the pipeline.
 	deltas, err := c.pipeline.Evaluate(delta)
 	if err != nil {
 		return fmt.Errorf("error evaluating pipeline for object %s/%s: %w", req.GVK,
 			client.ObjectKeyFromObject(obj), err)
 	}
 
-	// Apply the resultant deltas
+	// Apply the resultant deltas.
 	for _, d := range deltas {
 		c.log.V(4).Info("writing delta to target", "target", c.target.String(),
 			"delta-type", d.Type, "object", object.Dump(d.Object))
@@ -336,6 +368,7 @@ type ControllerReconciler struct {
 	log     logr.Logger
 }
 
+// NewControllerReconciler creates a new generic reconciler.
 func NewControllerReconciler(mgr runtimeManager.Manager, c *Controller) *ControllerReconciler {
 	return &ControllerReconciler{
 		manager: mgr,
@@ -344,6 +377,7 @@ func NewControllerReconciler(mgr runtimeManager.Manager, c *Controller) *Control
 	}
 }
 
+// Reconcile implements the reconciler.
 func (r *ControllerReconciler) Reconcile(ctx context.Context, req reconciler.Request) (reconcile.Result, error) {
 	r.log.V(4).Info("reconcile", "request", req)
 	r.watcher <- req

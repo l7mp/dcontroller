@@ -4,12 +4,13 @@ import (
 	"fmt"
 )
 
-// Projection node
+// Projection node.
 type ProjectionOp struct {
 	BaseOp
 	eval Evaluator
 }
 
+// NewProjection creates a new projection op.
 func NewProjection(eval Evaluator) *ProjectionOp {
 	return &ProjectionOp{
 		BaseOp: NewBaseOp("π", 1),
@@ -21,6 +22,7 @@ func (n *ProjectionOp) OpType() OperatorType              { return OpTypeLinear 
 func (n *ProjectionOp) IsTimeInvariant() bool             { return true }
 func (n *ProjectionOp) HasZeroPreservationProperty() bool { return true }
 
+// Process evaluates the op.
 func (n *ProjectionOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err
@@ -46,12 +48,13 @@ func (n *ProjectionOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	return result, nil
 }
 
-// Selection node
+// Selection node.
 type SelectionOp struct {
 	BaseOp
 	eval Evaluator
 }
 
+// NewSelection creates a new selection op.
 func NewSelection(eval Evaluator) *SelectionOp {
 	return &SelectionOp{
 		BaseOp: NewBaseOp("σ", 1),
@@ -63,6 +66,7 @@ func (n *SelectionOp) OpType() OperatorType              { return OpTypeLinear }
 func (n *SelectionOp) IsTimeInvariant() bool             { return true }
 func (n *SelectionOp) HasZeroPreservationProperty() bool { return true }
 
+// Process evaluates the op.
 func (n *SelectionOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	err := n.validateInputs(inputs)
 	if err != nil {
@@ -99,6 +103,7 @@ type UnwindOp struct {
 	transformer Transformer
 }
 
+// NewUnwind creates a new unwind op.
 func NewUnwind(arrayExtractor Extractor, transformer Transformer) *UnwindOp {
 	return &UnwindOp{
 		BaseOp:         NewBaseOp("unwind", 1),
@@ -107,6 +112,7 @@ func NewUnwind(arrayExtractor Extractor, transformer Transformer) *UnwindOp {
 	}
 }
 
+// Process evaluates the op.
 func (op *UnwindOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := op.validateInputs(inputs); err != nil {
 		return nil, err

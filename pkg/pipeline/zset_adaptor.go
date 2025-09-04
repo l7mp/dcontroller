@@ -11,6 +11,7 @@ import (
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
+// ConvertDeltaToZSet converts a delta into a ZSet that can be passed to DBSP.
 func (p *Pipeline) ConvertDeltaToZSet(delta object.Delta) (*dbsp.DocumentZSet, error) {
 	gvk := delta.Object.GetObjectKind().GroupVersionKind()
 	if _, ok := p.sourceCache[gvk]; !ok {
@@ -83,6 +84,7 @@ func (p *Pipeline) ConvertDeltaToZSet(delta object.Delta) (*dbsp.DocumentZSet, e
 	return zset, nil
 }
 
+// ConvertZSetToDelta converts a ZSet as returned by DBSP to a delta.
 func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, view string) ([]object.Delta, error) {
 	ds := []object.Delta{}
 
@@ -162,15 +164,13 @@ func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, view string) ([]o
 // results. To remove this ambiguity, we maintain a target cache that contains the latest known
 // state of the target view and we take the (doc->+/-1) pairs in any order from the zset result
 // set. The rules are as follows:
-//
-// - for additions (doc->+1), we extract the primary key from doc and immediately upsert the doc
-// into the cache with that key and add the upsert delta to our result set, possibly overwriting
-// any previous delta for the same key
-//
-// - for deletions (doc->-1), we again extract the primary key from doc and first we fetch the
-// current entry from the cache and check if doc==doc. If there is no entry in the cache for the
-// key or the latest state equals the doc to be deleted, we add the delete to the cache and the
-// result delta, otherwise we drop the delete event and move on.
+//   - additions (doc->+1): we extract the primary key from doc and immediately upsert the doc into
+//     the cache with that key and add the upsert delta to our result set, possibly overwriting any
+//     previous delta for the same key.
+//   - deletions (doc->-1): we again extract the primary key from doc and first we fetch the
+//     current entry from the cache and check if doc==doc. If there is no entry in the cache for the
+//     key or the latest state equals the doc to be deleted, we add the delete to the cache and the
+//     result delta, otherwise we drop the delete event and move on.
 func (p *Pipeline) Reconcile(ds []object.Delta) ([]object.Delta, error) {
 	deltaCache := map[string]object.Delta{}
 

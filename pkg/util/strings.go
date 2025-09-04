@@ -1,3 +1,4 @@
+// Package util provides common utility functions used throughout the Δ-controller codebase.
 package util
 
 import (

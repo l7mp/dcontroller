@@ -12,7 +12,7 @@ import (
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 )
 
-// ViewDiscoveryInterface handles view-specific discovery operations
+// ViewDiscoveryInterface handles view-specific discovery operations.
 type ViewDiscoveryInterface interface {
 	discovery.ServerResourcesInterface
 	discovery.ServerGroupsInterface
@@ -34,20 +34,20 @@ type ViewDiscoveryInterface interface {
 
 var _ ViewDiscoveryInterface = &ViewDiscovery{}
 
-// ViewDiscovery implements discovery for view resources
+// ViewDiscovery implements discovery for view resources.
 type ViewDiscovery struct {
 	registeredViews map[schema.GroupVersionKind]*metav1.APIResource
 	mu              sync.RWMutex
 }
 
-// NewViewDiscovery creates a new view discovery instance
+// NewViewDiscovery creates a new view discovery instance.
 func NewViewDiscovery() *ViewDiscovery {
 	return &ViewDiscovery{
 		registeredViews: make(map[schema.GroupVersionKind]*metav1.APIResource),
 	}
 }
 
-// ServerResourcesForGroupVersion returns API resources for a view group version
+// ServerResourcesForGroupVersion returns API resources for a view group version.
 func (d *ViewDiscovery) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
 	gv, err := schema.ParseGroupVersion(groupVersion)
 	if err != nil {
@@ -74,7 +74,7 @@ func (d *ViewDiscovery) ServerResourcesForGroupVersion(groupVersion string) (*me
 	}, nil
 }
 
-// ServerGroups returns available view API groups
+// ServerGroups returns available view API groups.
 func (d *ViewDiscovery) ServerGroups() (*metav1.APIGroupList, error) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -124,7 +124,7 @@ func (d *ViewDiscovery) ServerGroups() (*metav1.APIGroupList, error) {
 	return &groups, nil
 }
 
-// ServerGroupsAndResources returns groups and resources separately
+// ServerGroupsAndResources returns groups and resources separately.
 func (d *ViewDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	groupList, err := d.ServerGroups()
 	if err != nil {
@@ -159,7 +159,7 @@ func (d *ViewDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav
 	return groups, resourceLists, nil
 }
 
-// ServerPreferredResources returns preferred API resources
+// ServerPreferredResources returns preferred API resources.
 func (d *ViewDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
 	_, resourceLists, err := d.ServerGroupsAndResources()
 	if err != nil {
@@ -168,27 +168,29 @@ func (d *ViewDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, e
 	return resourceLists, nil
 }
 
+// ServerPreferredNamespacedResources returns the supported namespaced resources with the version
+// preferred by the server.
 func (d *ViewDiscovery) ServerPreferredNamespacedResources() ([]*metav1.APIResourceList, error) {
 	// All view resources are namespaced, so this is the same as ServerPreferredResources
 	return d.ServerPreferredResources()
 }
 
-// IsViewGroup returns true if the group is a view group
+// IsViewGroup returns true if the group is a view group.
 func (d *ViewDiscovery) IsViewGroup(group string) bool {
 	return viewv1a1.IsViewGroup(group)
 }
 
-// IsViewKind returns true if this is a view object kind (not a list)
+// IsViewKind returns true if this is a view object kind (not a list).
 func (d *ViewDiscovery) IsViewKind(gvk schema.GroupVersionKind) bool {
 	return viewv1a1.IsViewKind(gvk) && !strings.HasSuffix(gvk.Kind, "List")
 }
 
-// IsViewListKind returns true if this is a view list kind
+// IsViewListKind returns true if this is a view list kind.
 func (d *ViewDiscovery) IsViewListKind(gvk schema.GroupVersionKind) bool {
 	return viewv1a1.IsViewKind(gvk) && strings.HasSuffix(gvk.Kind, "List")
 }
 
-// ObjectGVKFromListGVK converts a list GVK to its object GVK
+// ObjectGVKFromListGVK converts a list GVK to its object GVK.
 func (d *ViewDiscovery) ObjectGVKFromListGVK(listGVK schema.GroupVersionKind) schema.GroupVersionKind {
 	if d.IsViewListKind(listGVK) {
 		return schema.GroupVersionKind{
@@ -200,7 +202,7 @@ func (d *ViewDiscovery) ObjectGVKFromListGVK(listGVK schema.GroupVersionKind) sc
 	return listGVK // Already an object GVK
 }
 
-// ListGVKFromObjectGVK converts an object GVK to its list GVK
+// ListGVKFromObjectGVK converts an object GVK to its list GVK.
 func (d *ViewDiscovery) ListGVKFromObjectGVK(objGVK schema.GroupVersionKind) schema.GroupVersionKind {
 	if d.IsViewKind(objGVK) {
 		return schema.GroupVersionKind{
@@ -243,7 +245,7 @@ func (d *ViewDiscovery) KindFromResource(resource string) (string, error) {
 	return "", fmt.Errorf("view resource %q not registered", resource)
 }
 
-// RegisterViewGVK registers a new view GVK for discovery
+// RegisterViewGVK registers a new view GVK for discovery.
 func (d *ViewDiscovery) RegisterViewGVK(gvk schema.GroupVersionKind) error {
 	if !d.IsViewKind(gvk) {
 		return nil // Ignore non-view or list kinds
@@ -272,7 +274,7 @@ func (d *ViewDiscovery) RegisterViewGVK(gvk schema.GroupVersionKind) error {
 	return nil
 }
 
-// UnregisterViewGVK removes a view GVK from discovery
+// UnregisterViewGVK removes a view GVK from discovery.
 func (d *ViewDiscovery) UnregisterViewGVK(gvk schema.GroupVersionKind) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -281,7 +283,7 @@ func (d *ViewDiscovery) UnregisterViewGVK(gvk schema.GroupVersionKind) error {
 	return nil
 }
 
-// GetRegisteredViewGVKs returns all registered view GVKs
+// GetRegisteredViewGVKs returns all registered view GVKs.
 func (d *ViewDiscovery) GetRegisteredViewGVKs() []schema.GroupVersionKind {
 	d.mu.RLock()
 	defer d.mu.RUnlock()

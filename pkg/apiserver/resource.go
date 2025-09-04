@@ -10,14 +10,18 @@ import (
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 )
 
+// Resource defines a native or a view resource type for sources and targets.
 type Resource struct {
-	GVK         schema.GroupVersionKind
+	// GVK is the GroupVersionKind for the resource.
+	GVK schema.GroupVersionKind
+	// APIResource is the discovered API resource def for a native object.
 	APIResource *metav1.APIResource
-	HasStatus   bool
+	// HasStatus is true if the resource has a status field.
+	HasStatus bool
 }
 
-// findAPIResource is a helper to obtain an API Resource from a GVK. For views properties are
-// hardcoded, for native resource we use the discovery API.
+// findAPIResource is a helper to obtain an API Resource from a GVK. For views the properties are
+// hardcoded, for native resources use the discovery API.
 func (s *APIServer) findAPIResource(gvk schema.GroupVersionKind) (*Resource, error) {
 	// Do not handle native objects.
 	if !viewv1a1.IsViewKind(gvk) {
@@ -41,6 +45,7 @@ func (s *APIServer) findAPIResource(gvk schema.GroupVersionKind) (*Resource, err
 	}, nil
 }
 
+// listGVK returns the List GVK for a GVK.
 func listGVK(gvk schema.GroupVersionKind) schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Group:   gvk.Group,

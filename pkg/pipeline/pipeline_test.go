@@ -889,7 +889,7 @@ func newPipeline(data string, srcs []string) (Evaluator, error) {
 	for _, view := range srcs {
 		gvks = append(gvks, opv1a1.GroupVersion.WithKind(view))
 	}
-	p, err := NewPipeline("test", gvk.Kind, gvks, conf, logger)
+	p, err := New("test", gvk.Kind, gvks, conf, logger)
 	if err != nil {
 		return nil, err
 	}

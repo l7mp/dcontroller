@@ -28,11 +28,12 @@ import (
 	"github.com/l7mp/dcontroller/pkg/util"
 )
 
+var _ Controller = &controller{}
+
 // StatusChannelBufferSize defines the longest backlog on the status channel.
 const StatusChannelBufferSize = 64
 
-var _ Controller = &controller{}
-
+// Controller definition.
 type Controller interface {
 	runtimeManager.Runnable
 	reconcile.Reconciler
@@ -112,6 +113,7 @@ func NewController(config *rest.Config, options runtimeManager.Options) (Control
 	return controller, nil
 }
 
+// GetManager returns the manager associated with a controller.
 func (c *controller) GetManager() runtimeManager.Manager { return c.mgr }
 
 // GetClient returns a controller runtime client that multiplexes the all operator clients
@@ -120,6 +122,7 @@ func (c *controller) GetClient() client.Client {
 	return c.clientMpx
 }
 
+// Reconcile runs the reconciliation logic for the controller
 func (c *controller) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	log := c.log.WithValues("operator", req.String())
 
@@ -142,8 +145,7 @@ func (c *controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	return reconcile.Result{}, nil
 }
 
-// SetAPIServer allows to set the embedded API server. The API server will be started automatically
-// by Start.
+// SetAPIServer allows to set the embedded API server. The API server will be started by Start.
 func (c *controller) SetAPIServer(apiServer *apiserver.APIServer) {
 	c.apiServer = apiServer
 }

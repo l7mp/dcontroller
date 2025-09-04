@@ -38,6 +38,7 @@ func NewJSONPathSetExpression(key string, value any) (Expression, error) {
 	return Expression{Op: "@dict", Literal: map[string]Expression{key: lit}}, nil
 }
 
+// GetLiteralBool returns a liteal bool from an expression.
 func (e *Expression) GetLiteralBool() (bool, error) {
 	ret, err := AsBool(e.Literal)
 	if err != nil {
@@ -46,6 +47,7 @@ func (e *Expression) GetLiteralBool() (bool, error) {
 	return ret, nil
 }
 
+// GetLiteralInt returns a liteal integer from an expression.
 func (e *Expression) GetLiteralInt() (int64, error) {
 	ret, err := AsInt(e.Literal)
 	if err != nil {
@@ -54,6 +56,7 @@ func (e *Expression) GetLiteralInt() (int64, error) {
 	return ret, nil
 }
 
+// GetLiteralString returns a liteal string from an expression.
 func (e *Expression) GetLiteralString() (string, error) {
 	ret, err := AsString(e.Literal)
 	if err != nil {
@@ -62,6 +65,7 @@ func (e *Expression) GetLiteralString() (string, error) {
 	return ret, nil
 }
 
+// GetLiteralFloat returns a liteal floating point number from an expression.
 func (e *Expression) GetLiteralFloat() (float64, error) {
 	ret, err := AsFloat(e.Literal)
 	if err != nil {
@@ -70,6 +74,7 @@ func (e *Expression) GetLiteralFloat() (float64, error) {
 	return ret, nil
 }
 
+// GetLiteralList returns a liteal list from an expression.
 func (e *Expression) GetLiteralList() ([]any, error) {
 	ret, err := AsList(e.Literal)
 	if err != nil {
@@ -78,6 +83,7 @@ func (e *Expression) GetLiteralList() ([]any, error) {
 	return ret, nil
 }
 
+// GetLiteralMap returns a liteal set of key-value pairs from an expression.
 func (e *Expression) GetLiteralMap() (map[string]any, error) {
 	ret, err := AsMap(e.Literal)
 	if err != nil {

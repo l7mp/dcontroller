@@ -32,29 +32,31 @@ const (
 	OpTypeStructural                     // Graph structure (add, subtract, etc.)
 )
 
-// Operator represents a computation node in the graph
+// Operator represents a computation node in the graph.
 type Operator interface {
-	// Process input ZSets and produce output ZSet
+	// Process input ZSets and produce output ZSet.
 	Process(inputs ...*DocumentZSet) (*DocumentZSet, error)
-	// Get node name for debugging/rewriting
+
+	// id returns the node name for debugging/rewriting
 	id() string
-	// Get input arity (number of inputs expected)
+
+	// Get input arity (number of inputs expected).
 	Arity() int
 
-	// Critical for rewrite engine
+	// OpType returns the type of the operator.
 	OpType() OperatorType
 
-	// For incremental transformation
 	IsTimeInvariant() bool
 	HasZeroPreservationProperty() bool
 }
 
-// Base implementation for validation
+// BaseOp is a base operator embedded by all ops.
 type BaseOp struct {
 	arity int
 	name  string
 }
 
+// NewBaseOp returns a new base op.
 func NewBaseOp(name string, arity int) BaseOp {
 	return BaseOp{arity: arity, name: name}
 }
@@ -62,7 +64,7 @@ func NewBaseOp(name string, arity int) BaseOp {
 func (n *BaseOp) id() string { return n.name } // internal
 func (n *BaseOp) Arity() int { return n.arity }
 
-// Validate inputs in Process methods
+// validateInputs validates inputs in Process methods.
 func (n *BaseOp) validateInputs(inputs []*DocumentZSet) error {
 	if len(inputs) != n.arity {
 		return fmt.Errorf("node %s expects %d inputs, got %d", n.name, n.arity, len(inputs))

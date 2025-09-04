@@ -9,12 +9,13 @@ import (
 
 type DeltaZSet = map[string]*DocumentZSet
 
-// Executor executes incremental queries on the specialized linear chain graph
+// Executor executes incremental queries on the specialized linear chain graph.
 type Executor struct {
 	graph *ChainGraph
 	log   logr.Logger
 }
 
+// NewExecutor returns a new executor.
 func NewExecutor(graph *ChainGraph, log logr.Logger) (*Executor, error) {
 	if err := graph.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid graph: %w", err)
@@ -30,8 +31,8 @@ func NewExecutor(graph *ChainGraph, log logr.Logger) (*Executor, error) {
 	}, nil
 }
 
-// ProcessDelta processes one delta input and produces delta output
-// This is the core incremental execution method
+// ProcessDelta processes one delta input and produces delta output.  This is the core incremental
+// execution method.
 func (e *Executor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet, error) {
 	// Step 1: Validate inputs
 	if len(deltaInputs) != len(e.graph.inputs) {
@@ -97,7 +98,7 @@ func (e *Executor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet, error) {
 	return currentResult, nil
 }
 
-// isIncrementalGraph checks if the graph has been optimized for incremental execution
+// isIncrementalGraph checks if the graph has been optimized for incremental execution.
 func isIncrementalGraph(graph *ChainGraph) bool {
 	// Check if join is incremental (if it exists)
 	if graph.joinNode != "" {
@@ -127,7 +128,7 @@ func isIncrementalGraph(graph *ChainGraph) bool {
 	return true
 }
 
-// Reset all stateful nodes (for incremental computation)
+// Reset resets all stateful nodes (for incremental computation).
 func (e *Executor) Reset() {
 	// Reset join node if it's stateful
 	if e.graph.joinNode != "" {
@@ -156,7 +157,7 @@ func (e *Executor) resetOperator(op Operator) {
 	}
 }
 
-// GetExecutionPlan returns a human-readable execution plan
+// GetExecutionPlan returns a human-readable execution plan.
 func (e *Executor) GetExecutionPlan() string {
 	plan := "Execution Plan:\n"
 
@@ -187,6 +188,7 @@ func (e *Executor) GetExecutionPlan() string {
 	return plan
 }
 
+// getOpTypeString returns the op type as a string.
 func (e *Executor) getOpTypeString(op Operator) string {
 	switch op.OpType() {
 	case OpTypeLinear:
@@ -202,7 +204,7 @@ func (e *Executor) getOpTypeString(op Operator) string {
 	}
 }
 
-// GetNodeResult returns intermediate results for debugging (optional caching)
+// GetNodeResult returns intermediate results for debugging.
 func (e *Executor) GetNodeResult(nodeID string, deltaInputs map[string]*DocumentZSet) (*DocumentZSet, error) {
 	node, exists := e.graph.nodes[nodeID]
 	if !exists {
@@ -265,7 +267,7 @@ func (e *Executor) GetNodeResult(nodeID string, deltaInputs map[string]*Document
 	return currentResult, nil
 }
 
-// IncrementalExecutionContext helps track incremental execution state
+// IncrementalExecutionContext helps track incremental execution state.
 type IncrementalExecutionContext struct {
 	executor         *Executor
 	cumulativeInputs map[string]*DocumentZSet // Running total of all inputs
@@ -273,6 +275,7 @@ type IncrementalExecutionContext struct {
 	timestep         int
 }
 
+// NewIncrementalExecutionContext returns a new executor context.
 func NewIncrementalExecutionContext(executor *Executor) *IncrementalExecutionContext {
 	return &IncrementalExecutionContext{
 		executor:         executor,
@@ -282,7 +285,7 @@ func NewIncrementalExecutionContext(executor *Executor) *IncrementalExecutionCon
 	}
 }
 
-// ProcessDelta processes one delta and updates cumulative state
+// ProcessDelta processes one delta and updates cumulative state.
 func (ctx *IncrementalExecutionContext) ProcessDelta(deltaInputs map[string]*DocumentZSet) (*DocumentZSet, error) {
 	// fmt.Printf("\n=== Incremental Context: Timestep %d ===\n", ctx.timestep)
 
@@ -318,13 +321,13 @@ func (ctx *IncrementalExecutionContext) ProcessDelta(deltaInputs map[string]*Doc
 	return deltaOutput, nil
 }
 
-// GetCumulativeOutput returns the current cumulative output
+// GetCumulativeOutput returns the current cumulative output.
 func (ctx *IncrementalExecutionContext) GetCumulativeOutput() *DocumentZSet {
 	result := ctx.cumulativeOutput.DeepCopy()
 	return result
 }
 
-// Reset the context for a fresh start
+// Reset the context for a fresh start.
 func (ctx *IncrementalExecutionContext) Reset() {
 	ctx.cumulativeInputs = make(map[string]*DocumentZSet)
 	ctx.cumulativeOutput = NewDocumentZSet()

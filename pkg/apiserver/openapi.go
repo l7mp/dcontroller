@@ -11,6 +11,7 @@ import (
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 )
 
+// getOpenAPIv2Handler returns a dynamic handler for OpenAPIv2.
 func (s *APIServer) getOpenAPIv2Handler() openapicommon.GetOpenAPIDefinitions {
 	return func(ref openapicommon.ReferenceCallback) map[string]openapicommon.OpenAPIDefinition {
 		// Called by Kubernetes' OpenAPI system each time someone requests the spec
@@ -33,6 +34,7 @@ func (s *APIServer) getOpenAPIv2Handler() openapicommon.GetOpenAPIDefinitions {
 	}
 }
 
+// generateOpenAPIDefs generates the OpenAPIv2 specs for the dynamic handler.
 func (s *APIServer) generateOpenAPIDefs(ref openapicommon.ReferenceCallback) map[string]openapicommon.OpenAPIDefinition {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -71,6 +73,7 @@ func (s *APIServer) generateOpenAPIDefs(ref openapicommon.ReferenceCallback) map
 	return defs
 }
 
+// getOpenAPIv3Handler returns a dynamic handler for OpenAPIv3.
 func (s *APIServer) getOpenAPIv3Handler() openapicommon.GetOpenAPIDefinitions {
 	return func(ref openapicommon.ReferenceCallback) map[string]openapicommon.OpenAPIDefinition {
 		// Called by Kubernetes' OpenAPI system each time someone requests the spec
@@ -145,7 +148,7 @@ func (s *APIServer) genOpenAPIDef(gvk schema.GroupVersionKind, ref openapicommon
 	}
 }
 
-// genOpenAPIDef generates an OpenAPI definition for a particular GVK.
+// genOpenAPIDef generates an OpenAPI definition for a particular list GVK.
 func (s *APIServer) genOpenAPIListDef(gvk schema.GroupVersionKind, ref openapicommon.ReferenceCallback, defName string) openapicommon.OpenAPIDefinition {
 	return openapicommon.OpenAPIDefinition{
 		Schema: spec.Schema{

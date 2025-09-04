@@ -7,6 +7,7 @@ import (
 	"github.com/ohler55/ojg/jp"
 )
 
+// GetJSONPath evaluates a string op that may or may not be a JSONPath expession.
 func GetJSONPath(ctx EvalCtx, key string) (any, error) {
 	if len(key) == 0 || key[0] != '$' {
 		return key, nil

@@ -29,7 +29,7 @@ import (
 var _ manager.Manager = &FakeRuntimeManager{}
 var _ manager.Manager = &FakeManager{}
 
-// FakeManager is a fake manager that is used for testing.
+// FakeManager is a fake manager that can be used for testing.
 type FakeManager struct {
 	*Manager
 	// runtime

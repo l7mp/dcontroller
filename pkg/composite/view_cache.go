@@ -21,10 +21,13 @@ import (
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
-const DefaultWatchChannelBuffer = 256
-
 var _ cache.Cache = &ViewCache{}
 
+// DefaultWatchChannelBuffer defines the default buffer size for watches.
+const DefaultWatchChannelBuffer = 256
+
+// ViewCache implements an ephemeral store for view objects. The view cache has an internal cache
+// per each GVK that can be stored in the cache.
 type ViewCache struct {
 	mu          sync.RWMutex
 	caches      map[schema.GroupVersionKind]toolscache.Indexer
@@ -33,6 +36,7 @@ type ViewCache struct {
 	logger, log logr.Logger
 }
 
+// NewViewCache creates a new view cache.
 func NewViewCache(opts CacheOptions) *ViewCache {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
@@ -49,6 +53,7 @@ func NewViewCache(opts CacheOptions) *ViewCache {
 	return c
 }
 
+// RegisterCacheForKind registers a new GVK in the cache.
 func (c *ViewCache) RegisterCacheForKind(gvk schema.GroupVersionKind) error {
 	c.log.V(1).Info("registering cache for new GVK", "gvk", gvk)
 
@@ -70,6 +75,7 @@ func (c *ViewCache) RegisterCacheForKind(gvk schema.GroupVersionKind) error {
 	return nil
 }
 
+// GetCacheForKind returns the internal cache for a given GVK.
 func (c *ViewCache) GetCacheForKind(gvk schema.GroupVersionKind) (toolscache.Indexer, error) {
 	c.mu.RLock()
 	indexer, exists := c.caches[gvk]
@@ -91,6 +97,7 @@ func (c *ViewCache) GetCacheForKind(gvk schema.GroupVersionKind) (toolscache.Ind
 	return indexer, nil
 }
 
+// RegisterInformerForKind registers an informer for a GVK.
 func (c *ViewCache) RegisterInformerForKind(gvk schema.GroupVersionKind) error {
 	c.log.V(4).Info("registering informer for new GVK", "gvk", gvk)
 
@@ -113,6 +120,14 @@ func (c *ViewCache) RegisterInformerForKind(gvk schema.GroupVersionKind) error {
 	return nil
 }
 
+// GetInformer fetches or constructs an informer for the given object.
+func (c *ViewCache) GetInformer(ctx context.Context, obj client.Object, opts ...cache.InformerGetOption) (cache.Informer, error) {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	return c.GetInformerForKind(ctx, gvk, opts...)
+}
+
+// GetInformerForKind is similar to GetInformer, except that it takes a group-version-kind, instead
+// of the underlying object.
 func (c *ViewCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind, _ ...cache.InformerGetOption) (cache.Informer, error) {
 	c.mu.RLock()
 	informer, exists := c.informers[gvk]
@@ -138,11 +153,7 @@ func (c *ViewCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVers
 	return informer, nil
 }
 
-func (c *ViewCache) GetInformer(ctx context.Context, obj client.Object, opts ...cache.InformerGetOption) (cache.Informer, error) {
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	return c.GetInformerForKind(ctx, gvk, opts...)
-}
-
+// RemoveInformer removes an informer entry and stops it if it was running.
 func (c *ViewCache) RemoveInformer(ctx context.Context, obj client.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
@@ -157,7 +168,7 @@ func (c *ViewCache) RemoveInformer(ctx context.Context, obj client.Object) error
 	return nil
 }
 
-// Add can manually insert objects into the cache.
+// Add inserts an object into the cache.
 func (c *ViewCache) Add(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
@@ -185,7 +196,7 @@ func (c *ViewCache) Add(obj object.Object) error {
 	return nil
 }
 
-// Update can manually modify objects in the cache.
+// Update modifies the object stored in the cache.
 func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 	gvk := newObj.GetObjectKind().GroupVersionKind()
 
@@ -218,7 +229,7 @@ func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 	return nil
 }
 
-// Delete can manually remove objects from the cache.
+// Delete removes an object from the cache.
 func (c *ViewCache) Delete(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
@@ -261,12 +272,14 @@ func (c *ViewCache) Delete(obj object.Object) error {
 	return nil
 }
 
+// IndexField adds an index with the given field name on the given object type.
 func (c *ViewCache) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	c.log.Info("IndexField called on ViewCache", "gvk", gvk)
 	return errors.New("field indexing is not supported for ViewCache")
 }
 
+// Get retrieves an obj for the given object key from the cache.
 func (c *ViewCache) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	target, ok := obj.(object.Object)
 	if !ok {
@@ -298,6 +311,7 @@ func (c *ViewCache) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 	return nil
 }
 
+// List retrieves a list of objects for a given namespace and list options from the cache.
 func (c *ViewCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	listGVK := list.GetObjectKind().GroupVersionKind()
 	objGVK := c.discovery.ObjectGVKFromListGVK(listGVK)
@@ -360,7 +374,7 @@ func (c *ViewCache) List(ctx context.Context, list client.ObjectList, opts ...cl
 	return nil
 }
 
-// Helper function to match field selectors
+// matchesFieldSelector is a helper function to match field selectors.
 func matchesFieldSelector(obj object.Object, selector fields.Selector) bool {
 	fieldSet := fields.Set{}
 
@@ -380,6 +394,8 @@ func matchesFieldSelector(obj object.Object, selector fields.Selector) bool {
 	return selector.Matches(fieldSet)
 }
 
+// Dump returns a string representation of all objects stored in a cache given a GVK. Used mostly
+// for testing and debugging.
 func (c *ViewCache) Dump(ctx context.Context, gvk schema.GroupVersionKind) []string {
 	ret := []string{}
 	cache, err := c.GetCacheForKind(gvk)
@@ -396,6 +412,7 @@ func (c *ViewCache) Dump(ctx context.Context, gvk schema.GroupVersionKind) []str
 	return ret
 }
 
+// Watch lets clients to wait for events occurring in the cache.
 func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
 	listGVK := list.GetObjectKind().GroupVersionKind()
 	objGVK := c.discovery.ObjectGVKFromListGVK(listGVK)
@@ -493,11 +510,12 @@ func (c *ViewCache) Start(ctx context.Context) error {
 	return nil
 }
 
+// WaitForCacheSync waits for all the caches to sync. Returns false if it could not sync a cache.
 func (c *ViewCache) WaitForCacheSync(_ context.Context) bool { return true }
 
-// watcher: the thingie that is returned for callers of Watch
 var _ watch.Interface = &ViewCacheWatcher{}
 
+// ViewCacheWatcher is a watcher specialized tof the view cache.
 type ViewCacheWatcher struct {
 	eventChan chan watch.Event
 	stopCh    chan struct{}
@@ -511,7 +529,7 @@ type ViewCacheWatcher struct {
 	logger logr.Logger
 }
 
-// shouldIncludeObject determines if an object should be included based on selectors
+// shouldIncludeObject determines if an object should be included based on selectors.
 func (w *ViewCacheWatcher) shouldIncludeObject(o any) bool {
 	obj, ok := o.(object.Object)
 	if !ok {
@@ -537,15 +555,15 @@ func (w *ViewCacheWatcher) shouldIncludeObject(o any) bool {
 	return true
 }
 
-// matchesFieldSelector checks if object matches field selector (reuse logic from List method)
+// matchesFieldSelector checks if object matches field selector.
 func (w *ViewCacheWatcher) matchesFieldSelector(obj object.Object, selector fields.Selector) bool {
 	fieldSet := fields.Set{}
 
-	// Always include standard metadata fields
+	// Always include standard metadata fields.
 	fieldSet["metadata.name"] = obj.GetName()
 	fieldSet["metadata.namespace"] = obj.GetNamespace()
 
-	// Add some domain-specific fields
+	// Add some domain-specific fields.
 	if status, found, _ := unstructured.NestedString(obj.Object, "status", "phase"); found {
 		fieldSet["status.phase"] = status
 	}
@@ -557,6 +575,7 @@ func (w *ViewCacheWatcher) matchesFieldSelector(obj object.Object, selector fiel
 	return selector.Matches(fieldSet)
 }
 
+// sendEvent sends a watch event on the event channel.
 func (w *ViewCacheWatcher) sendEvent(eventType watch.EventType, o any) {
 	obj, ok := o.(object.Object)
 	if !ok {
@@ -583,6 +602,7 @@ func (w *ViewCacheWatcher) sendEvent(eventType watch.EventType, o any) {
 	}
 }
 
+// Stop stops the watcher.
 func (w *ViewCacheWatcher) Stop() {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
@@ -594,6 +614,7 @@ func (w *ViewCacheWatcher) Stop() {
 	}
 }
 
+// ResultChan returns the event channel of the watcher.
 func (w *ViewCacheWatcher) ResultChan() <-chan watch.Event {
 	return w.eventChan
 }

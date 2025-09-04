@@ -43,7 +43,8 @@ type Aggregation struct {
 
 // Resource specifies a resource by the GVK.
 type Resource struct {
-	// Group is the API group. Default is "view.dcontroller.io".
+	// Group is the API group. Default is "<operator-name>.view.dcontroller.io", where
+	// <operator-name> is the name of the operator that manages the object.
 	Group *string `json:"apiGroup,omitempty"`
 	// Version is the version of the resource. Optional.
 	Version *string `json:"version,omitempty"`
@@ -58,7 +59,7 @@ type Source struct {
 	Namespace *string `json:"namespace,omitempty"`
 	// LabelSelector is an optional label selector to filter events on this source.
 	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
-	// Predicate is a controller runtime predicate for filtering events on this source..
+	// Predicate is a controller runtime predicate for filtering events on this source.
 	//
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:pruning:PreserveUnknownFields

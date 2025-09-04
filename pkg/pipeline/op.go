@@ -11,8 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// //////////////////////
-// Selection
+// Selection operator.
 type SelectionOp struct {
 	e   *expression.Expression
 	log logr.Logger
@@ -49,8 +48,7 @@ func (p *Pipeline) NewSelectionOp(e *expression.Expression) dbsp.Operator {
 	return dbsp.NewSelection(eval)
 }
 
-// //////////////////////
-// Projection
+// Projection operator.
 type ProjectionOp struct {
 	e   *expression.Expression
 	log logr.Logger
@@ -93,8 +91,7 @@ func (p *Pipeline) NewProjectionOp(e *expression.Expression) dbsp.Operator {
 	return dbsp.NewProjection(eval)
 }
 
-// //////////////////////
-// Unwind
+// Unwind operator.
 type UnwindOp struct {
 	e   *expression.Expression
 	log logr.Logger
@@ -174,8 +171,7 @@ func (p *Pipeline) NewUnwindOp(e *expression.Expression) (dbsp.Operator, error) 
 	return dbsp.NewUnwind(eval, eval), nil
 }
 
-// //////////////////////
-// Gather
+// Gather operator.
 type GatherOp struct {
 	e                            *expression.Expression // for the transformer
 	keyExtractor, valueExtractor *gatherExtractor
@@ -237,8 +233,7 @@ func (p *Pipeline) NewGatherOp(e *expression.Expression) (dbsp.Operator, error) 
 	return dbsp.NewIncrementalGather(eval.keyExtractor, eval.valueExtractor, eval), nil
 }
 
-// //////////////////////
-// Join
+// Join operator.
 type JoinOp struct {
 	e   *expression.Expression
 	log logr.Logger

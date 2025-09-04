@@ -7,6 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
+// MatchLabels implements a Kubernetes style label matcher.
 func MatchLabels(labelMap map[string]any, selectorMap map[string]any) (bool, error) {
 	// Convert labelMap to labels.Set
 	set := labels.Set{}
@@ -30,6 +31,7 @@ func MatchLabels(labelMap map[string]any, selectorMap map[string]any) (bool, err
 	return selector.Matches(set), nil
 }
 
+// convertToLabelSelector converts a selector into a standard label-selector.
 func convertToLabelSelector(selectorMap map[string]any) (*metav1.LabelSelector, error) {
 	labelSelector := &metav1.LabelSelector{
 		MatchLabels:      make(map[string]string),

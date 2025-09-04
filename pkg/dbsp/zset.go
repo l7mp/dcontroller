@@ -4,20 +4,21 @@ import (
 	"fmt"
 )
 
-// DocumentZSet implements Z-sets for atomic documents
-// Documents are treated as opaque units - no internal structure operations
+// DocumentZSet implements Z-sets for atomic documents.  Documents are treated as opaque units - no
+// internal structure operations are considered.
 type DocumentZSet struct {
 	// Use JSON representation as key since documents aren't directly comparable
 	docs   map[string]Document // JSON key -> original document
 	counts map[string]int      // JSON key -> multiplicity
 }
 
-// Error type for better error handling
+// Error type for better error handling.
 type ZSetError struct {
 	Message string
 	Cause   error
 }
 
+// Error implements the error interface.
 func (e *ZSetError) Error() string {
 	if e.Cause != nil {
 		return fmt.Sprintf("%s: %v", e.Message, e.Cause)
@@ -29,7 +30,7 @@ func newZSetError(message string, cause error) error {
 	return &ZSetError{Message: message, Cause: cause}
 }
 
-// NewDocumentZSet creates an empty DocumentZSet
+// NewDocumentZSet creates an empty DocumentZSet.
 func NewDocumentZSet() *DocumentZSet {
 	return &DocumentZSet{
 		docs:   make(map[string]Document),
@@ -37,8 +38,8 @@ func NewDocumentZSet() *DocumentZSet {
 	}
 }
 
-// AddDocument adds a document to the ZSet with given multiplicity by creating a new ZSet. This is
-// the core operation for building Z-sets.
+// AddDocument adds a document to the ZSet with given multiplicity and creates a new ZSet. This is
+// the core operation for building Z-sets. It copies the added doc.
 func (dz *DocumentZSet) AddDocument(doc Document, count int) (*DocumentZSet, error) {
 	result := dz.ShallowCopy()
 	err := result.AddDocumentMutate(doc, count)
@@ -72,7 +73,7 @@ func (dz *DocumentZSet) AddDocumentMutate(doc Document, count int) error {
 	return nil
 }
 
-// Add performs Z-set addition (union with multiplicity)
+// Add performs Z-set addition (union with multiplicity).
 func (dz *DocumentZSet) Add(other *DocumentZSet) (*DocumentZSet, error) {
 	if other == nil {
 		return dz.DeepCopy(), nil
@@ -91,7 +92,7 @@ func (dz *DocumentZSet) Add(other *DocumentZSet) (*DocumentZSet, error) {
 	return result, nil
 }
 
-// Subtract performs Z-set subtraction
+// Subtract performs Z-set subtraction.
 func (dz *DocumentZSet) Subtract(other *DocumentZSet) (*DocumentZSet, error) {
 	if other == nil {
 		return dz.DeepCopy(), nil
@@ -110,8 +111,8 @@ func (dz *DocumentZSet) Subtract(other *DocumentZSet) (*DocumentZSet, error) {
 	return result, nil
 }
 
-// Distinct converts Z-set to set semantics (all multiplicities become 1)
-// This is crucial for converting from multiset to set semantics
+// Distinct converts Z-set to set semantics (all multiplicities become 1). This is crucial for
+// converting from multiset to set semantics
 func (dz *DocumentZSet) Distinct() (*DocumentZSet, error) {
 	result := NewDocumentZSet()
 
@@ -128,7 +129,7 @@ func (dz *DocumentZSet) Distinct() (*DocumentZSet, error) {
 	return result, nil
 }
 
-// Unique converts Z-set to set semantics preserving multiplicity sign (all multiplicities become +/-1)
+// Unique converts a Z-set to set semantics preserving multiplicity sign (all multiplicities become +/-1).
 func (dz *DocumentZSet) Unique() (*DocumentZSet, error) {
 	result := NewDocumentZSet()
 
@@ -147,7 +148,6 @@ func (dz *DocumentZSet) Unique() (*DocumentZSet, error) {
 }
 
 // ShallowCopy creates a shallow copy of the DocumentZSet.
-// Safe because documents are treated as immutable atomic units.
 func (dz *DocumentZSet) ShallowCopy() *DocumentZSet {
 	result := &DocumentZSet{
 		docs:   make(map[string]Document, len(dz.docs)),
@@ -166,7 +166,7 @@ func (dz *DocumentZSet) ShallowCopy() *DocumentZSet {
 	return result
 }
 
-// DeepCopy creates a deep copy of the DocumentZSet
+// DeepCopy creates a deep copy of the DocumentZSet.
 func (dz *DocumentZSet) DeepCopy() *DocumentZSet {
 	result := &DocumentZSet{
 		docs:   make(map[string]Document),
@@ -201,8 +201,8 @@ func (dz *DocumentZSet) List() ([]DocumentEntry, error) {
 	return result, nil
 }
 
-// GetDocuments returns all documents as a slice (with multiplicities)
-// Documents with multiplicity n appear n times in the result
+// GetDocuments returns all documents as a slice (with multiplicities). Documents with multiplicity
+// n appear n times in the result.
 func (dz *DocumentZSet) GetDocuments() ([]Document, error) {
 	var result []Document
 
@@ -220,7 +220,7 @@ func (dz *DocumentZSet) GetDocuments() ([]Document, error) {
 	return result, nil
 }
 
-// GetUniqueDocuments returns all unique documents (ignoring multiplicities)
+// GetUniqueDocuments returns all unique documents (ignoring multiplicities).
 func (dz *DocumentZSet) GetUniqueDocuments() ([]Document, error) {
 	var result []Document
 
@@ -234,7 +234,7 @@ func (dz *DocumentZSet) GetUniqueDocuments() ([]Document, error) {
 	return result, nil
 }
 
-// IsZero checks if the Z-set is empty (no documents with positive multiplicity)
+// IsZero checks if the Z-set is empty (no documents with positive multiplicity).
 func (dz *DocumentZSet) IsZero() bool {
 	return len(dz.counts) == 0
 }
@@ -263,7 +263,7 @@ func (dz *DocumentZSet) TotalSize() int {
 	return total
 }
 
-// UniqueCount returns number of unique documents (ignoring multiplicities)
+// UniqueCount returns number of unique documents (ignoring multiplicities).
 func (dz *DocumentZSet) UniqueCount() int {
 	count := 0
 	for _, multiplicity := range dz.counts {
@@ -274,7 +274,7 @@ func (dz *DocumentZSet) UniqueCount() int {
 	return count
 }
 
-// GetMultiplicity returns the multiplicity of a specific document
+// GetMultiplicity returns the multiplicity of a specific document.
 func (dz *DocumentZSet) GetMultiplicity(doc Document) (int, error) {
 	key, err := computeJSONKey(doc)
 	if err != nil {
@@ -288,7 +288,7 @@ func (dz *DocumentZSet) GetMultiplicity(doc Document) (int, error) {
 	return 0, nil // Document not in Z-set
 }
 
-// Contains checks if a document exists in the Z-set (with positive multiplicity)
+// Contains checks if a document exists in the Z-set with positive multiplicity.
 func (dz *DocumentZSet) Contains(doc Document) (bool, error) {
 	multiplicity, err := dz.GetMultiplicity(doc)
 	if err != nil {
@@ -297,7 +297,7 @@ func (dz *DocumentZSet) Contains(doc Document) (bool, error) {
 	return multiplicity > 0, nil
 }
 
-// Helper functions for creating documents and Z-sets
+// NewDocument creates a new document and wraps it to be added to a Z-sets.
 func NewDocument() Document { return make(Document) }
 
 // newDocumentFromPairs creates a new document from key-value pairs
@@ -319,13 +319,13 @@ func newDocumentFromPairs(pairs ...any) (Document, error) {
 	return doc, nil
 }
 
-// SingletonZSet creates a Z-set containing a single document with multiplicity 1
+// SingletonZSet creates a Z-set containing a single document with multiplicity 1.
 func SingletonZSet(doc Document) (*DocumentZSet, error) {
 	zset := NewDocumentZSet()
 	return zset.AddDocument(doc, 1)
 }
 
-// FromDocuments creates a Z-set from a slice of documents (each with multiplicity 1)
+// FromDocuments creates a Z-set from a slice of documents (each with multiplicity 1).
 func FromDocuments(docs []Document) (*DocumentZSet, error) {
 	result := NewDocumentZSet()
 
@@ -340,7 +340,7 @@ func FromDocuments(docs []Document) (*DocumentZSet, error) {
 	return result, nil
 }
 
-// String returns a string representation of the Z-set for debugging
+// String returns a string representation of the Z-set for debugging.
 func (dz *DocumentZSet) String() string {
 	if dz.IsZero() {
 		return "∅"

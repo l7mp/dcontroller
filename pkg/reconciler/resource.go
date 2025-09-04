@@ -11,8 +11,10 @@ import (
 	"github.com/l7mp/dcontroller/pkg/util"
 )
 
+// Resource defines a generic resource, either a source or a target.
 type Resource interface {
 	fmt.Stringer
+	// GetGVK returns the GVK for a resource.
 	GetGVK() (schema.GroupVersionKind, error)
 }
 
@@ -22,6 +24,7 @@ type resource struct {
 	resource opv1a1.Resource
 }
 
+// NewResource creates a new resource.
 func NewResource(mgr runtimeManager.Manager, operator string, r opv1a1.Resource) Resource {
 	return &resource{
 		mgr:      mgr,
@@ -30,6 +33,7 @@ func NewResource(mgr runtimeManager.Manager, operator string, r opv1a1.Resource)
 	}
 }
 
+// String stringifies the resource.
 func (r *resource) String() string {
 	gvk, err := r.GetGVK()
 	if err != nil {
@@ -43,6 +47,7 @@ func (r *resource) String() string {
 	return fmt.Sprintf("%s/%s:%s", gr, gvk.Version, gvk.Kind)
 }
 
+// GetGVK returns the GVK for a resource.
 func (r *resource) GetGVK() (schema.GroupVersionKind, error) {
 	if r.resource.Kind == "" {
 		return schema.GroupVersionKind{}, fmt.Errorf("empty Kind in %s", util.Stringify(*r))

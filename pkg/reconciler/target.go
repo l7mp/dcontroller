@@ -33,6 +33,7 @@ type target struct {
 	log    logr.Logger
 }
 
+// NewTarget creates a new target resource.
 func NewTarget(mgr runtimeManager.Manager, operator string, t opv1a1.Target) Target {
 	target := &target{
 		Resource: NewResource(mgr, operator, t.Resource),
@@ -46,12 +47,13 @@ func NewTarget(mgr runtimeManager.Manager, operator string, t opv1a1.Target) Tar
 	return target
 }
 
+// String stringifies a target.
 func (t *target) String() string {
 	return fmt.Sprintf("%s<type:%s>", t.Resource.String(), t.target.Type)
 }
 
 // Write enforces a delta on a target. The behavior depends on the target type:
-//   - For Updaters the delta is enforced as is to the target
+//   - For Updaters the delta is enforced as is to the target.
 //   - For Patchers the delta object is applied as a strategic merge patch: for Add and Update
 //     deltas the target is patched with the delta object, while for Delete the delta object
 //     content is removed from the target using a strategic merge patch.

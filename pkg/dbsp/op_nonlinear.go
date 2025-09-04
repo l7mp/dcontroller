@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// Snapshot Gather Operation (stateless)
+// Snapshot Gather Operation (stateless).
 type GatherOp struct {
 	BaseOp
 	keyExtractor   Extractor   // Extracts grouping key from document
@@ -12,6 +12,7 @@ type GatherOp struct {
 	aggregator     Transformer // Creates result document from key and aggregated values
 }
 
+// NewGather creates a new snapshot gather op.
 func NewGather(keyExtractor, valueExtractor Extractor, aggregator Transformer) *GatherOp {
 	return &GatherOp{
 		BaseOp:         NewBaseOp("gather", 1),
@@ -21,7 +22,7 @@ func NewGather(keyExtractor, valueExtractor Extractor, aggregator Transformer) *
 	}
 }
 
-// GatherOp processes each group and preserves input document content.
+// Process evaluates the op.
 func (op *GatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := op.validateInputs(inputs); err != nil {
 		return nil, err
@@ -102,13 +103,14 @@ func (op *GatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	return result, nil
 }
 
-// Helper structs
+// GroupData is helper struct for gather.
 type GroupData struct {
 	Key      any
 	Values   []any
 	Document Document
 }
 
+// AggregateInput is helper struct for gather.
 type AggregateInput struct {
 	Key    any
 	Values []any
@@ -120,7 +122,6 @@ func (op *GatherOp) HasZeroPreservationProperty() bool { return true }
 
 // Incremental Gather Operation (stateful)
 // Implements optimized gather^Δ with O(|delta|) complexity
-// Incremental Gather Operation (stateful)
 type IncrementalGatherOp struct {
 	BaseOp
 	keyExtractor   Extractor
@@ -131,6 +132,7 @@ type IncrementalGatherOp struct {
 	currentGroups map[string]*GroupData // groupKey -> current group data
 }
 
+// NewIncrementalGather returns a new incremental gather Operation.
 func NewIncrementalGather(keyExtractor, valueExtractor Extractor, aggregator Transformer) *IncrementalGatherOp {
 	return &IncrementalGatherOp{
 		BaseOp:         NewBaseOp("gather^Δ", 1),
@@ -141,7 +143,7 @@ func NewIncrementalGather(keyExtractor, valueExtractor Extractor, aggregator Tra
 	}
 }
 
-// IncrementalGatherOp processes deltas and preserves input document content.
+// Process evaluates the op.
 func (op *IncrementalGatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := op.validateInputs(inputs); err != nil {
 		return nil, err
@@ -267,7 +269,6 @@ func (op *IncrementalGatherOp) Reset() {
 	op.currentGroups = map[string]*GroupData{}
 }
 
-// Helper functions
 func abs(x int) int {
 	if x < 0 {
 		return -x

@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// Snapshot N-ary join (non-incremental)
+// Snapshot N-ary join (non-incremental).
 type JoinOp struct {
 	BaseOp
 	eval   Evaluator
@@ -12,6 +12,7 @@ type JoinOp struct {
 	n      int
 }
 
+// NewJoin returns a new snapshop join op.
 func NewJoin(eval Evaluator, inputs []string) *JoinOp {
 	return &JoinOp{
 		BaseOp: NewBaseOp(fmt.Sprintf("snapshot_⋈_%d", len(inputs)), len(inputs)),
@@ -25,6 +26,7 @@ func (op *JoinOp) OpType() OperatorType              { return OpTypeBilinear }
 func (op *JoinOp) IsTimeInvariant() bool             { return true }
 func (op *JoinOp) HasZeroPreservationProperty() bool { return true }
 
+// Process evaluates the op.
 func (op *JoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := op.validateInputs(inputs); err != nil {
 		return nil, err
@@ -33,6 +35,7 @@ func (op *JoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	return cartesianJoin(op.eval, op.inputs, inputs, 0, make([]Document, op.n), make([]int, op.n))
 }
 
+// IncrementalJoinOp implements an incremental n-ary join.
 type IncrementalJoinOp struct {
 	BaseOp
 	eval   Evaluator
@@ -42,6 +45,7 @@ type IncrementalJoinOp struct {
 	prevStates []*DocumentZSet
 }
 
+// NewIncrementalJoinOp creates a new incremental n-ary join.
 func NewIncrementalJoin(eval Evaluator, inputs []string) *IncrementalJoinOp {
 	return &IncrementalJoinOp{
 		BaseOp:     NewBaseOp(fmt.Sprintf("⋈_%d", len(inputs)), len(inputs)),
@@ -56,6 +60,7 @@ func (op *IncrementalJoinOp) OpType() OperatorType              { return OpTypeB
 func (op *IncrementalJoinOp) IsTimeInvariant() bool             { return true }
 func (op *IncrementalJoinOp) HasZeroPreservationProperty() bool { return true }
 
+// Process evaluates the op.
 func (op *IncrementalJoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := op.validateInputs(inputs); err != nil {
 		return nil, err
@@ -162,13 +167,14 @@ func cartesianJoin(eval Evaluator, inputNames []string, inputs []*DocumentZSet, 
 	return result, nil
 }
 
-// Binary join
+// BinaryJoinOp is a snapshot binary join op.
 type BinaryJoinOp struct {
 	BaseOp
 	inputs []string
 	eval   Evaluator
 }
 
+// NewBinaryJoinOp creates a new snapshot binary join op.
 func NewBinaryJoin(eval Evaluator, inputs []string) *BinaryJoinOp {
 	return &BinaryJoinOp{
 		BaseOp: NewBaseOp("⋈", 2),
@@ -181,6 +187,7 @@ func (n *BinaryJoinOp) OpType() OperatorType              { return OpTypeBilinea
 func (n *BinaryJoinOp) IsTimeInvariant() bool             { return true }
 func (n *BinaryJoinOp) HasZeroPreservationProperty() bool { return true }
 
+// Process evaluates the op.
 func (n *BinaryJoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err
@@ -222,7 +229,7 @@ func (n *BinaryJoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	return result, nil
 }
 
-// New stateful incremental join that composes 3 snapshot joins
+// IncrementalBinaryJoinOp implements an incremental binary join.
 type IncrementalBinaryJoinOp struct {
 	BaseOp
 	eval   Evaluator
@@ -238,6 +245,7 @@ type IncrementalBinaryJoinOp struct {
 	join3 *BinaryJoinOp // ΔL ⋈ prev_R
 }
 
+// NewIncrementalBinaryJoinOp creates a new incremental binary join.
 func NewIncrementalBinaryJoin(eval Evaluator, inputs []string) *IncrementalBinaryJoinOp {
 	return &IncrementalBinaryJoinOp{
 		BaseOp:    NewBaseOp("incremental_join", 2),
@@ -251,6 +259,7 @@ func NewIncrementalBinaryJoin(eval Evaluator, inputs []string) *IncrementalBinar
 	}
 }
 
+// Process evaluates the op.
 func (op *IncrementalBinaryJoinOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := op.validateInputs(inputs); err != nil {
 		return nil, err
@@ -304,7 +313,7 @@ func (op *IncrementalBinaryJoinOp) OpType() OperatorType              { return O
 func (op *IncrementalBinaryJoinOp) IsTimeInvariant() bool             { return true }
 func (op *IncrementalBinaryJoinOp) HasZeroPreservationProperty() bool { return true }
 
-// Reset method for testing
+// Reset method for testing.
 func (op *IncrementalBinaryJoinOp) Reset() {
 	op.prevLeft = NewDocumentZSet()
 	op.prevRight = NewDocumentZSet()

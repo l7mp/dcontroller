@@ -12,13 +12,13 @@ import (
 var _ runtime.Serializer = &CompositeCodec{}
 var _ runtime.NegotiatedSerializer = &CompositeCodecFactory{}
 
-// CompositeCodec embeds a runtime.Codec and only overrides Encode for view objects
+// CompositeCodec embeds a runtime.Codec and overrides Encode for view objects.
 type CompositeCodec struct {
 	runtime.Codec                 // embed the default codec
 	encoder       runtime.Encoder // an encoder we will override
 }
 
-// NewCompositeCodec creates a new composite codec
+// NewCompositeCodec creates a new composite codec.
 func NewCompositeCodec(defaultCodec runtime.Codec, encoder runtime.Encoder) *CompositeCodec {
 	return &CompositeCodec{
 		Codec:   defaultCodec,
@@ -26,7 +26,7 @@ func NewCompositeCodec(defaultCodec runtime.Codec, encoder runtime.Encoder) *Com
 	}
 }
 
-// Encode overrides the embedded codec's Encode method
+// Encode overrides the embedded codec's Encode method.
 func (c *CompositeCodec) Encode(obj runtime.Object, w io.Writer) error {
 	// Check if object is a View or a ViewList
 	if !viewv1a1.IsViewKind(obj.GetObjectKind().GroupVersionKind()) {
@@ -38,13 +38,13 @@ func (c *CompositeCodec) Encode(obj runtime.Object, w io.Writer) error {
 	return c.encoder.Encode(obj, w)
 }
 
-// CompositeCodecFactory implements a factory that creates composite codecs
+// CompositeCodecFactory implements a factory that creates composite codecs.
 type CompositeCodecFactory struct {
 	defaultFactory serializer.CodecFactory
 	scheme         *runtime.Scheme
 }
 
-// NewCompositeCodecFactory creates a new composite codec factory
+// NewCompositeCodecFactory creates a new composite codec factory.
 func NewCompositeCodecFactory(defaultFactory serializer.CodecFactory, scheme *runtime.Scheme) *CompositeCodecFactory {
 	return &CompositeCodecFactory{
 		defaultFactory: defaultFactory,
@@ -52,7 +52,7 @@ func NewCompositeCodecFactory(defaultFactory serializer.CodecFactory, scheme *ru
 	}
 }
 
-// CodecForVersions implements serializer.CodecFactory
+// CodecForVersions implements serializer.CodecFactory.
 func (f *CompositeCodecFactory) CodecForVersions(encoder runtime.Encoder, decoder runtime.Decoder, encode runtime.GroupVersioner, decode runtime.GroupVersioner) runtime.Codec {
 	defaultCodec := f.defaultFactory.CodecForVersions(encoder, decoder, encode, decode)
 	return NewCompositeCodec(defaultCodec, encoder)

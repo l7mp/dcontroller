@@ -28,6 +28,7 @@ type source struct {
 	log    logr.Logger
 }
 
+// NewSource creates a new source resource.
 func NewSource(mgr runtimeManager.Manager, operator string, s opv1a1.Source) Source {
 	src := &source{
 		mgr:      mgr,
@@ -41,8 +42,10 @@ func NewSource(mgr runtimeManager.Manager, operator string, s opv1a1.Source) Sou
 	return src
 }
 
+// String stringifies a source.
 func (s *source) String() string { return s.Resource.String() }
 
+// GetSource generates a controller-runtime source.
 func (s *source) GetSource() (runtimeSource.TypedSource[Request], error) {
 	// gvk to watch
 	gvk, err := s.GetGVK()

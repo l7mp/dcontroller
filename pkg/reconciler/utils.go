@@ -20,11 +20,10 @@ import (
 // It returns the executed operation and an error.
 //
 // Note: this version differs from default controllerutil.CreateOrUpdate in two subtle ways
-//   - it uses the unstructured API via object.Object
+//   - it uses the unstructured API via object.Object,
 //   - changes made by MutateFn to the status subresource will be handled, changes to any other
-//     sub-resource will be discarded
-//   - errors produced by the `Create` branch (after a failed `Get`) will be ignored: this is to
-//     make the function usable with spl// it clients in tests where updates to dot appear in Get
+//     sub-resource will be discarded,
+//   - errors produced by the `Create` branch (after a failed `Get`) will be ignored.
 func CreateOrUpdate(ctx context.Context, c client.Client, obj object.Object, f controllerutil.MutateFn) (controllerutil.OperationResult, error) {
 	key := client.ObjectKeyFromObject(obj)
 	if err := c.Get(ctx, key, obj); err != nil {

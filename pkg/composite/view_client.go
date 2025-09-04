@@ -18,29 +18,29 @@ import (
 
 var _ client.WithWatch = &viewClient{}
 
-// viewClient implements client.WithWatch by delegating to ViewCache
+// viewClient implements client.WithWatch by delegating to ViewCache.
 type viewClient struct {
 	cache *ViewCache
 }
 
-// GetClient returns a controller-runtime client backed by this ViewCache
+// GetClient returns a controller-runtime client backed by this ViewCache.
 func (vc *ViewCache) GetClient() client.WithWatch {
 	return &viewClient{cache: vc}
 }
 
-// Client interface implementation
+// Client interface implementation.
 
-// Get retrieves an obj for the given object key from the ViewCache
+// Get retrieves an obj for the given object key from the ViewCache.
 func (c *viewClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	return c.cache.Get(ctx, key, obj, opts...)
 }
 
-// List retrieves list of objects from the ViewCache
+// List retrieves list of objects from the ViewCache.
 func (c *viewClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	return c.cache.List(ctx, list, opts...)
 }
 
-// Create saves the object obj in the ViewCache
+// Create saves the object obj in the ViewCache.
 func (c *viewClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	viewObj, ok := obj.(object.Object)
 	if !ok {
@@ -49,7 +49,7 @@ func (c *viewClient) Create(ctx context.Context, obj client.Object, opts ...clie
 	return c.cache.Add(viewObj)
 }
 
-// Delete deletes the given obj from the ViewCache
+// Delete deletes the given obj from the ViewCache.
 func (c *viewClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	viewObj, ok := obj.(object.Object)
 	if !ok {
@@ -58,7 +58,7 @@ func (c *viewClient) Delete(ctx context.Context, obj client.Object, opts ...clie
 	return c.cache.Delete(viewObj)
 }
 
-// Update updates the given obj in the ViewCache
+// Update updates the given obj in the ViewCache.
 func (c *viewClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	newObj, ok := obj.(object.Object)
 	if !ok {
@@ -77,7 +77,7 @@ func (c *viewClient) Update(ctx context.Context, obj client.Object, opts ...clie
 	return c.cache.Update(oldObj, newObj)
 }
 
-// Patch patches the given obj in the ViewCache. Note that obj is NOT updated to the new content
+// Patch patches the given obj in the ViewCache. Note that obj is NOT updated to the new content.
 func (c *viewClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	o, ok := obj.(object.Object)
 	if !ok {
@@ -109,7 +109,7 @@ func (c *viewClient) Patch(ctx context.Context, obj client.Object, patch client.
 	return c.cache.Update(current, newObj)
 }
 
-// DeleteAllOf deletes all objects of the given type matching the given options
+// DeleteAllOf deletes all objects of the given type matching the given options.
 func (c *viewClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
 	// Convert delete options to list options
 	var listOpts []client.ListOption
@@ -149,7 +149,7 @@ func (c *viewClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ..
 	return nil
 }
 
-// Status returns a client which can update status subresource
+// Status returns a client which can update status subresource.
 func (c *viewClient) Status() client.StatusWriter {
 	return &viewSubResourceClient{
 		client: c,
@@ -157,17 +157,17 @@ func (c *viewClient) Status() client.StatusWriter {
 	}
 }
 
-// Scheme returns the scheme this client is using (ViewCache doesn't have a scheme)
+// Scheme returns the scheme this client is using (ViewCache doesn't have a scheme).
 func (c *viewClient) Scheme() *runtime.Scheme {
 	return nil
 }
 
-// RESTMapper returns the rest mapper (ViewCache doesn't have a REST mapper)
+// RESTMapper returns the rest mapper (ViewCache doesn't have a REST mapper).
 func (c *viewClient) RESTMapper() meta.RESTMapper {
 	return nil
 }
 
-// GroupVersionKindFor returns the GroupVersionKind for the given object
+// GroupVersionKindFor returns the GroupVersionKind for the given object.
 func (c *viewClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
 	if gvkObj, ok := obj.(schema.ObjectKind); ok {
 		if gvk := gvkObj.GroupVersionKind(); !gvk.Empty() {
@@ -177,13 +177,13 @@ func (c *viewClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersio
 	return schema.GroupVersionKind{}, fmt.Errorf("unable to determine GroupVersionKind for object type %T", obj)
 }
 
-// IsObjectNamespaced returns true if the object is namespaced
+// IsObjectNamespaced returns true if the object is namespaced.
 func (c *viewClient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
 	// All view objects are namespaced
 	return true, nil
 }
 
-// SubResource returns a client for the specified subresource
+// SubResource returns a client for the specified subresource.
 func (c *viewClient) SubResource(subResource string) client.SubResourceClient {
 	return &viewSubResourceClient{
 		client: c,
@@ -191,20 +191,20 @@ func (c *viewClient) SubResource(subResource string) client.SubResourceClient {
 	}
 }
 
-// Watch interface implementation
+// Watch interface implementation.
 
-// Watch watches objects of type obj and sends events on the returned channel
+// Watch watches objects of type obj and sends events on the returned channel.
 func (c *viewClient) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
 	return c.cache.Watch(ctx, list, opts...)
 }
 
-// viewSubResourceClient implements client.SubResourceClient for ViewCache
+// viewSubResourceClient implements client.SubResourceClient for ViewCache.
 type viewSubResourceClient struct {
 	client *viewClient
 	subres string
 }
 
-// Get retrieves the subresource for the given object
+// Get retrieves the subresource for the given object.
 func (sr *viewSubResourceClient) Get(ctx context.Context, obj, subResource client.Object, _ ...client.SubResourceGetOption) error {
 	o, ok := obj.(object.Object)
 	if !ok {
@@ -233,7 +233,7 @@ func (sr *viewSubResourceClient) Get(ctx context.Context, obj, subResource clien
 	return nil
 }
 
-// Create creates the subresource for the given object
+// Create creates the subresource for the given object.
 func (sr *viewSubResourceClient) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
 	o, ok := obj.(object.Object)
 	if !ok {
@@ -264,7 +264,7 @@ func (sr *viewSubResourceClient) Create(ctx context.Context, obj client.Object, 
 	return sr.client.Update(ctx, current)
 }
 
-// Update updates the subresource for the given object
+// Update updates the subresource for the given object.
 func (sr *viewSubResourceClient) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 	o, ok := obj.(object.Object)
 	if !ok {
@@ -291,7 +291,7 @@ func (sr *viewSubResourceClient) Update(ctx context.Context, obj client.Object, 
 	return sr.client.Update(ctx, obj)
 }
 
-// Patch patches the subresource for the given object
+// Patch patches the subresource for the given object.
 func (sr *viewSubResourceClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 	// For ViewCache, status is just part of the object - patch the whole object
 	return sr.client.Patch(ctx, obj, patch)

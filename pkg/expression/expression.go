@@ -1,3 +1,36 @@
+// Package expression provides a declarative expression language for data transformation
+// and querying within Δ-controller pipelines.
+//
+// The expression system supports JSONPath-based field access, boolean logic,
+// arithmetic operations, string manipulation, and Kubernetes-specific operations
+// like label selectors. Expressions are serialized as JSON and can be embedded
+// in pipeline specifications.
+//
+// Key components:
+//   - Expression: Core expression type with operation and arguments.
+//   - EvalCtx: Evaluation context containing the target object and logger.
+//   - Converter functions: Type conversion and validation utilities.
+//   - JSONPath support: Access nested fields in Kubernetes objects.
+//   - Selector support: Kubernetes label and field selector evaluation.
+//
+// Expression operations include:
+//   - Field access: "$.metadata.name", "$.spec.containers[0].image".
+//   - Boolean logic: @and, @or, @not, @eq, @ne, @lt, @gt.
+//   - String operations: @concat, @split, @replace, @regex.
+//   - Arithmetic: @add, @sub, @mul, @div, @mod.
+//   - Collections: @len, @contains, @in, @keys, @values.
+//   - Kubernetes: @selector for label matching.
+//
+// Example usage:
+//
+//	expr := Expression{
+//	    Op: "@eq",
+//	    Arg: []Expression{
+//	        {Op: "@string", Literal: "$.metadata.labels.app"},
+//	        {Op: "@string", Literal: "nginx"},
+//	    },
+//	}
+//	result, err := expr.Evaluate(EvalCtx{Object: obj})
 package expression
 
 import (
@@ -13,19 +46,20 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
-const ExpressionDumpMaxLevel = 10
-
+// EvalCtx defines the context for a running evaluation.
 type EvalCtx struct {
 	Object, Subject any
 	Log             logr.Logger
 }
 
+// Expression defines a single expression op.
 type Expression struct {
 	Op      string
 	Arg     *Expression
 	Literal any
 }
 
+// Evaluate processes an expression.
 func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 	if len(e.Op) == 0 {
 		return nil, NewInvalidArgumentsError(fmt.Sprintf("empty operator in expession %q", e.String()))

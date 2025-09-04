@@ -1,3 +1,22 @@
+// Package composite provides a unified client, cache, and discovery system that seamlessly
+// handles both native Kubernetes resources and Δ-controller view objects.
+//
+// The composite system creates a transparent abstraction layer that allows controllers to work
+// with view objects using the same APIs as native Kubernetes resources.  View objects are
+// maintained in an in-memory cache with full CRUD and watch capabilities, while native resources
+// are delegated to the standard Kubernetes API server (if available).
+//
+// Key components:
+//   - CompositeClient: Unified client interface for both views and native resources.
+//   - CompositeCache: Split caching system with view cache and native resource cache.
+//   - CompositeDiscoveryClient: Unified API discovery for views and native resources.
+//   - ClientMultiplexer: Routes client operations based on resource type.
+//   - ViewCache: Specialized cache for view objects with informer support.
+//
+// The composite system automatically determines whether a resource is a view or native Kubernetes
+// resource based on its GroupVersionKind and routes operations accordingly.  This enables
+// transparent operation where controllers don't need to distinguish between view and native
+// resources.
 package composite
 
 import (
@@ -11,14 +30,15 @@ import (
 
 type ClientOptions = client.Options
 
-// Options for creating composite API clients
+// Options for creating composite API clients.
 type Options struct {
 	CacheOptions
 	ClientOptions
 	Logger logr.Logger
 }
 
-// APIClient bundles all composite API machinery components
+// APIClient bundles multiple API machinery components into a single client, including a regular
+// client, a discovery client, a cache and a REST mapper.
 type APIClient struct {
 	Client     client.Client
 	Cache      cache.Cache
@@ -27,7 +47,7 @@ type APIClient struct {
 	Log        logr.Logger
 }
 
-// NewCompositeAPIClient creates a complete composite API client with all components
+// NewCompositeAPIClient creates a composite API client with all components.
 func NewCompositeAPIClient(config *rest.Config, opts Options) (*APIClient, error) {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
@@ -80,7 +100,7 @@ func NewCompositeAPIClient(config *rest.Config, opts Options) (*APIClient, error
 	}, nil
 }
 
-// GetDiscovery returns the composite discovery client with view-specific extensions
+// GetDiscovery returns the composite discovery client with view-specific extensions.
 func (c *APIClient) GetDiscovery() *CompositeDiscoveryClient {
 	if cd, ok := c.Discovery.(*CompositeDiscoveryClient); ok {
 		return cd
@@ -88,7 +108,7 @@ func (c *APIClient) GetDiscovery() *CompositeDiscoveryClient {
 	return nil
 }
 
-// GetCache returns the composite cache
+// GetCache returns the cache for the bundle.
 func (c *APIClient) GetCache() *CompositeCache {
 	if cc, ok := c.Cache.(*CompositeCache); ok {
 		return cc
@@ -96,6 +116,7 @@ func (c *APIClient) GetCache() *CompositeCache {
 	return nil
 }
 
+// GetCache returns the client for the bundle.
 func (c *APIClient) GetClient() *CompositeClient {
 	if cc, ok := c.Client.(*CompositeClient); ok {
 		return cc

@@ -15,8 +15,8 @@ import (
 
 type GroupGVKs = map[string]map[schema.GroupVersionKind]bool
 
-// RegisterGVKs registers a set of GVks with the API server. First divides the GVKs per group,
-// checks if none of the groups have already been registered, and then registers each group and the
+// RegisterGVKs registers a set of GVks with the embedded API server. Divides the GVKs per group,
+// checks if none of the groups have already been registered, and registers each group and the
 // corresponding GVKs.
 func (s *APIServer) RegisterGVKs(gvks []schema.GroupVersionKind) error {
 	// Group GVKs by Group for API group registration
@@ -87,7 +87,7 @@ func (s *APIServer) RegisterAPIGroup(group string, gvks []schema.GroupVersionKin
 	return nil
 }
 
-// UnregisterGVK removes a GVK from the server (silently ignores GVK if not registered)
+// UnregisterGVK removes an API group with all its registered GVKs.
 func (s *APIServer) UnregisterAPIGroup(group string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -174,6 +174,7 @@ func (s *APIServer) registerAPIGroup(group string, gvks []schema.GroupVersionKin
 	return nil
 }
 
+// addTypesToScheme adds a set of GVKs to the scheme.
 func (s *APIServer) addTypesToScheme(gvks []schema.GroupVersionKind) error {
 	// Group GVKs by GroupVersion
 	groupVersions := make(map[schema.GroupVersion][]schema.GroupVersionKind)

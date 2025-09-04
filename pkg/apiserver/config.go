@@ -15,12 +15,14 @@ import (
 	"github.com/l7mp/dcontroller/pkg/composite"
 )
 
+// DefaultAPIServerPort defines the default port used for the API server.
 const DefaultAPIServerPort = 18443
 
+// Config defines the configuration for the embedded API server.
 type Config struct {
 	*genericapiserver.RecommendedConfig
 
-	// Addr is the server address
+	// Addr is the server address.
 	Addr *net.TCPAddr
 
 	// UseHTTP switches the API server to insecure serving mode.
@@ -31,15 +33,15 @@ type Config struct {
 	DelegatingClient client.Client
 
 	// DiscoveryClient allows to inject a REST discovery client into the API server. Used
-	// mostly for testing,
+	// mostly for testing.
 	DiscoveryClient composite.ViewDiscoveryInterface
 
 	// Logger provides a logger for the API server.
 	Logger logr.Logger
 }
 
-// NewDefaultConfig creates a RecommendedConfig with sensible defaults, either using secure serving
-// (HTTPS) and insecure serving (HTTP) that can be used for testing.
+// NewDefaultConfig creates an API server configuration with sensible defaults, either using secure
+// serving (HTTPS) or insecure serving (HTTP) that can be used for testing.
 func NewDefaultConfig(addr string, port int, client client.Client, insecure bool, log logr.Logger) (Config, error) {
 	if addr == "" {
 		addr = "localhost"
@@ -79,6 +81,7 @@ func NewDefaultConfig(addr string, port int, client client.Client, insecure bool
 	}, nil
 }
 
+// String returns the status for the API server.
 func (c *Config) String() string {
 	return fmt.Sprintf("{addr:%s:%s,insecure:%t}", c.Addr.Network(), c.Addr.String(), c.UseHTTP)
 }

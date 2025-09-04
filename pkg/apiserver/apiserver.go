@@ -1,3 +1,30 @@
+// Package apiserver implements a Kubernetes API extension server that provides REST endpoints
+// for Δ-controller view resources.
+//
+// The API server extends the Kubernetes API server pattern to serve custom view resources
+// dynamically. It provides a complete REST API implementation with support for standard
+// Kubernetes operations (GET, LIST, CREATE, UPDATE, DELETE, WATCH) on view objects.
+//
+// Key components:
+//   - APIServer: Main server struct that handles HTTP requests and routing.
+//   - ClientDelegatedStorage: Storage implementation that delegates to controller-runtime clients.
+//   - CompositeCodec: Custom encoding/decoding for view objects.
+//   - Registry: Dynamic API group and resource registration.
+//
+// The server supports both secure (HTTPS) and insecure (HTTP) modes, with configurable
+// authentication and authorization. It integrates with the composite client system to
+// serve view objects from the view cache while delegating native Kubernetes resources
+// to the standard API server.
+//
+// Example usage:
+//
+//	config := apiserver.Config{
+//	    DelegatingClient: client,
+//	    UseHTTP: true,
+//	    Logger: logger,
+//	}
+//	server, _ := apiserver.NewAPIServer(config)
+//	return server.Start(ctx)
 package apiserver
 
 import (
@@ -15,9 +42,9 @@ import (
 )
 
 // APIServer manages a Kubernetes API server with dynamic GVK registration. Currently all view
-// resources per each running dcontroller operator are available via the API server. Only view
-// resources can be queries, native Kubernetes API groups (e.g., "core/v1" and "apps/v1") must be
-// queried from the default API server.
+// resources per each running operator are available via the API server. Only view resources can be
+// queried, native Kubernetes API groups (e.g., "core/v1" and "apps/v1") must be queried from the
+// native Kubernetes API server.
 type APIServer struct {
 	// Configuration
 	config           Config
@@ -76,7 +103,7 @@ func (s *APIServer) GetScheme() *runtime.Scheme {
 	return s.scheme
 }
 
-// Start begins the API server lifecycle with automatic restart capability. It blocks.
+// Start initiates the API server lifecycle. It blocks.
 func (s *APIServer) Start(ctx context.Context) error {
 	s.mu.Lock()
 	running := s.running

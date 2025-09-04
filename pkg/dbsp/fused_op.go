@@ -2,13 +2,14 @@ package dbsp
 
 import "fmt"
 
-// ProjectThenSelectOp - True fusion: project then select in single pass
+// ProjectThenSelectOp implements a fused project followed by a select op in single pass.
 type ProjectThenSelectOp struct {
 	BaseOp
 	projEval Evaluator
 	selEval  Evaluator
 }
 
+// NewProjectThenSelectOp create a new fused op for a project followed by a select op.
 func NewProjectThenSelect(projEval, selEval Evaluator) *ProjectThenSelectOp {
 	return &ProjectThenSelectOp{
 		BaseOp:   NewBaseOp("[π→σ]", 1),
@@ -17,6 +18,7 @@ func NewProjectThenSelect(projEval, selEval Evaluator) *ProjectThenSelectOp {
 	}
 }
 
+// Process evaluates the fused op.
 func (op *ProjectThenSelectOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := op.validateInputs(inputs); err != nil {
 		return nil, err
@@ -57,13 +59,14 @@ func (op *ProjectThenSelectOp) OpType() OperatorType              { return OpTyp
 func (op *ProjectThenSelectOp) IsTimeInvariant() bool             { return true }
 func (op *ProjectThenSelectOp) HasZeroPreservationProperty() bool { return true }
 
-// SelectThenProjectionsOp - optional selection + 1+ projections
+// SelectThenProjectionsOp implements a fused optional selection plus one or more projections.
 type SelectThenProjectionsOp struct {
 	BaseOp
 	selEval   Evaluator   // Selection evaluator (can be nil)
 	projEvals []Evaluator // Chain of projection evaluators (1 or more)
 }
 
+// NewSelectThenProjectionsOp creates a new fused selection/projection op.
 func NewSelectThenProjections(selEval Evaluator, projEvals []Evaluator) *SelectThenProjectionsOp {
 	if len(projEvals) == 0 {
 		panic("requires at least one projection evaluator")
@@ -89,6 +92,7 @@ func NewSelectThenProjections(selEval Evaluator, projEvals []Evaluator) *SelectT
 	}
 }
 
+// Process evaluates the fused op.
 func (op *SelectThenProjectionsOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := op.validateInputs(inputs); err != nil {
 		return nil, err
@@ -144,12 +148,14 @@ func (op *SelectThenProjectionsOp) OpType() OperatorType              { return O
 func (op *SelectThenProjectionsOp) IsTimeInvariant() bool             { return true }
 func (op *SelectThenProjectionsOp) HasZeroPreservationProperty() bool { return true }
 
-// FusedOp is a naive fused op that just calls the subsequent nodes process function along the chain. Currently unused.
+// FusedOp is a naive fused op that just calls the subsequent nodes process function along the
+// chain.
 type FusedOp struct {
 	BaseOp
 	nodes []Operator
 }
 
+// NewFusedOp creates a new fused op.
 func NewFusedOp(nodes []Operator, name string) (*FusedOp, error) {
 	if len(nodes) == 0 {
 		return nil, fmt.Errorf("cannot create empty fused node")
@@ -161,6 +167,7 @@ func NewFusedOp(nodes []Operator, name string) (*FusedOp, error) {
 	}, nil
 }
 
+// Process evaluates the fused op.
 func (n *FusedOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err

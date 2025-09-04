@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// ChainGraph represents your specialized graph structure directly
+// ChainGraph represents your specialized graph structure directly.
 // Always: [Inputs] -> [Optional N-ary Join] -> [Chain of Linear Ops] -> [Output]
 type ChainGraph struct {
 	inputs   []string              // Input node IDs
@@ -17,6 +17,7 @@ type ChainGraph struct {
 	nextID   int                   // For generating unique node IDs
 }
 
+// GraphNode is a node on the op chain.
 type GraphNode struct {
 	ID     string
 	Op     Operator
@@ -24,6 +25,7 @@ type GraphNode struct {
 	Output *GraphNode
 }
 
+// NewChainGraph returns a new op chain.
 func NewChainGraph() *ChainGraph {
 	return &ChainGraph{
 		inputs:   make([]string, 0),
@@ -34,9 +36,9 @@ func NewChainGraph() *ChainGraph {
 	}
 }
 
-// AddInput adds an input node
+// AddInput adds an input node.
 func (g *ChainGraph) AddInput(op *InputOp) string {
-	// if input already exists, silently return
+	// If input already exists, silently return.
 	for _, v := range g.inputIdx {
 		if v == op.Name() { // external name equals internal id
 			return ""
@@ -91,7 +93,7 @@ func (g *ChainGraph) GetChain() []Operator {
 	return ret
 }
 
-// AddToChain adds an operation to the linear chain
+// AddToChain adds an operation to the linear chain.
 func (g *ChainGraph) AddToChain(op Operator) string {
 	id := fmt.Sprintf("op_%d", g.nextID)
 	g.nextID++
@@ -104,7 +106,7 @@ func (g *ChainGraph) AddToChain(op Operator) string {
 	return id
 }
 
-// GetStartNode returns the node where the linear chain begins
+// GetStartNode returns the node where the linear chain begins.
 func (g *ChainGraph) GetStartNode() string {
 	if g.joinNode != "" {
 		return g.joinNode
@@ -115,7 +117,7 @@ func (g *ChainGraph) GetStartNode() string {
 	return ""
 }
 
-// Validate checks the graph structure
+// Validate checks the graph structure.
 func (g *ChainGraph) Validate() error {
 	if len(g.inputs) == 0 {
 		return fmt.Errorf("no input nodes")
@@ -139,7 +141,7 @@ func (g *ChainGraph) Validate() error {
 	return nil
 }
 
-// String representation for debugging (horizontal layout)
+// String representation for debugging (horizontal layout).
 func (g *ChainGraph) String() string {
 	parts := []string{}
 

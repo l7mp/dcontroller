@@ -5,6 +5,7 @@ type DistinctOp struct {
 	BaseOp
 }
 
+// NewDistinct creates a new distinct op.
 func NewDistinct() *DistinctOp {
 	return &DistinctOp{
 		BaseOp: NewBaseOp("distinct", 1),
@@ -15,6 +16,7 @@ func (n *DistinctOp) OpType() OperatorType              { return OpTypeNonLinear
 func (n *DistinctOp) IsTimeInvariant() bool             { return true }
 func (n *DistinctOp) HasZeroPreservationProperty() bool { return true }
 
+// Process evaluates the op.
 func (n *DistinctOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err
@@ -26,13 +28,14 @@ func (n *DistinctOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	return res, nil
 }
 
-// IntegratorOp implements the I operator: converts deltas to snapshots
+// IntegratorOp implements the I operator: converts deltas to snapshots.
 // I(s)[t] = Σ(i=0 to t) s[i]
 type IntegratorOp struct {
 	BaseOp
 	state *DocumentZSet // Accumulated state
 }
 
+// NewIntegrator creates a new integrator.
 func NewIntegrator() *IntegratorOp {
 	return &IntegratorOp{
 		BaseOp: NewBaseOp("I", 1),
@@ -40,6 +43,7 @@ func NewIntegrator() *IntegratorOp {
 	}
 }
 
+// Process evaluates the op.
 func (n *IntegratorOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err
@@ -66,13 +70,14 @@ func (n *IntegratorOp) Reset() {
 	n.state = NewDocumentZSet()
 }
 
-// DifferentiatorOp implements the D operator: converts snapshots to deltas
+// DifferentiatorOp implements the D operator: converts snapshots to deltas.
 // D(s)[t] = s[t] - s[t-1]
 type DifferentiatorOp struct {
 	BaseOp
 	prevState *DocumentZSet // Previous snapshot
 }
 
+// NewDifferentiator creates a new D operator.
 func NewDifferentiator() *DifferentiatorOp {
 	return &DifferentiatorOp{
 		BaseOp:    NewBaseOp("D", 1),
@@ -80,6 +85,7 @@ func NewDifferentiator() *DifferentiatorOp {
 	}
 }
 
+// Process evaluates the op.
 func (n *DifferentiatorOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err
@@ -108,13 +114,14 @@ func (n *DifferentiatorOp) Reset() {
 	n.prevState = NewDocumentZSet()
 }
 
-// Input node (source of data)
+// Input node (source of data).
 type InputOp struct {
 	BaseOp
 	data *DocumentZSet
 	name string
 }
 
+// NewInput creates a new input node.
 func NewInput(name string) *InputOp {
 	return &InputOp{
 		BaseOp: NewBaseOp("input:"+name, 0),
@@ -127,6 +134,7 @@ func (n *InputOp) OpType() OperatorType              { return OpTypeLinear }
 func (n *InputOp) IsTimeInvariant() bool             { return true }
 func (n *InputOp) HasZeroPreservationProperty() bool { return true }
 
+// Process evaluates the op.
 func (n *InputOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err
@@ -134,15 +142,19 @@ func (n *InputOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	return n.data.DeepCopy(), nil
 }
 
+// SetData sets the input.
 func (n *InputOp) SetData(data *DocumentZSet) { n.data = data }
-func (n *InputOp) Name() string               { return n.name }
 
-// Constant node
+// Name returns the name of the input.
+func (n *InputOp) Name() string { return n.name }
+
+// Constant node.
 type ConstantOp struct {
 	BaseOp
 	value *DocumentZSet
 }
 
+// NewConstant creates a new constant op.
 func NewConstant(value *DocumentZSet, name string) *ConstantOp {
 	return &ConstantOp{
 		BaseOp: NewBaseOp("const:"+name, 0),
@@ -150,6 +162,7 @@ func NewConstant(value *DocumentZSet, name string) *ConstantOp {
 	}
 }
 
+// Process evaluates the op.
 func (n *ConstantOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err
@@ -162,12 +175,14 @@ type AddOp struct {
 	BaseOp
 }
 
+// NewAdd creates a new Add op.
 func NewAdd() *AddOp {
 	return &AddOp{
 		BaseOp: NewBaseOp("+", 2),
 	}
 }
 
+// Process evaluates the op.
 func (n *AddOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err
@@ -184,12 +199,14 @@ type SubtractOp struct {
 	BaseOp
 }
 
+// NewSubtract creates a new subtract op.
 func NewSubtract() *SubtractOp {
 	return &SubtractOp{
 		BaseOp: NewBaseOp("-", 2),
 	}
 }
 
+// Process evaluates the op.
 func (n *SubtractOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err
@@ -206,12 +223,14 @@ type NegateOp struct {
 	BaseOp
 }
 
+// NewNegate creates a new negation op.
 func NewNegate() *NegateOp {
 	return &NegateOp{
 		BaseOp: NewBaseOp("neg", 1),
 	}
 }
 
+// Process evaluates the op.
 func (n *NegateOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err
@@ -223,13 +242,14 @@ func (n *NegateOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	return res, nil
 }
 
-// DelayOp implements the z^(-1) operator: delays stream by one timestep
-// PROBLEMATIC: This is stateful and needs careful handling in the execution model
+// DelayOp implements the z^(-1) operator: delays stream by one timestep.
+// PROBLEMATIC: This is stateful and needs careful handling in the execution model.
 type DelayOp struct {
 	BaseOp
 	buffer *DocumentZSet // Buffered value from previous timestep
 }
 
+// NewDelay creates a new delay op.
 func NewDelay() *DelayOp {
 	return &DelayOp{
 		BaseOp: NewBaseOp("z^(-1)", 1),
@@ -237,6 +257,7 @@ func NewDelay() *DelayOp {
 	}
 }
 
+// Process evaluates the op.
 func (n *DelayOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	if err := n.validateInputs(inputs); err != nil {
 		return nil, err
@@ -257,6 +278,7 @@ func (n *DelayOp) OpType() OperatorType              { return OpTypeLinear }
 func (n *DelayOp) IsTimeInvariant() bool             { return true }
 func (n *DelayOp) HasZeroPreservationProperty() bool { return true }
 
+// Reset state (useful for testing or restarting computation).
 func (n *DelayOp) Reset() {
 	n.buffer = NewDocumentZSet()
 }

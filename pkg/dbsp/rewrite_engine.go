@@ -4,17 +4,18 @@ import (
 	"fmt"
 )
 
-// LinearChainRewriteEngine works directly on LinearChainGraph
+// LinearChainRewriteEngine rewrites a LinearChainGraph, applying the DBSP rewriter rules.
 type LinearChainRewriteEngine struct {
 	rules []LinearChainRule
 }
 
+// NewLinearChainRewriteEngine creates a new LinearChainRewriteEngine.
 func NewLinearChainRewriteEngine() *LinearChainRewriteEngine {
 	re := &LinearChainRewriteEngine{
 		rules: make([]LinearChainRule, 0),
 	}
 
-	// Add rules in order of application priority
+	// Add rules in order of application priority.
 	re.AddRule(&JoinIncrementalizationRule{})
 	re.AddRule(&LinearChainIncrementalizationRule{})
 	re.AddRule(&IntegrationDifferentiationEliminationRule{})
@@ -24,17 +25,19 @@ func NewLinearChainRewriteEngine() *LinearChainRewriteEngine {
 	return re
 }
 
+// LinearChainRule is the general interface for rewrite rules.
 type LinearChainRule interface {
 	Name() string
 	CanApply(graph *ChainGraph) bool
 	Apply(graph *ChainGraph) error
 }
 
+// AddRule adds a rule to the rewrite engine.
 func (re *LinearChainRewriteEngine) AddRule(rule LinearChainRule) {
 	re.rules = append(re.rules, rule)
 }
 
-// Optimize applies all rules until fixpoint
+// Optimize applies all rules until reaching a fixpoint.
 func (re *LinearChainRewriteEngine) Optimize(graph *ChainGraph) error {
 	if err := graph.Validate(); err != nil {
 		return fmt.Errorf("invalid graph: %w", err)
@@ -68,7 +71,7 @@ func (re *LinearChainRewriteEngine) Optimize(graph *ChainGraph) error {
 	return nil
 }
 
-// Rule 1: Convert N-ary join to incremental version
+// Rule 1: Convert N-ary join to incremental version.
 type JoinIncrementalizationRule struct{}
 
 func (r *JoinIncrementalizationRule) Name() string {
@@ -95,7 +98,7 @@ func (r *JoinIncrementalizationRule) Apply(graph *ChainGraph) error {
 	return nil
 }
 
-// Rule 2: Incrementalize the entire linear chain
+// Rule 2: Incrementalize the entire linear chain.
 type LinearChainIncrementalizationRule struct{}
 
 func (r *LinearChainIncrementalizationRule) Name() string {
@@ -128,7 +131,7 @@ func (r *LinearChainIncrementalizationRule) Apply(graph *ChainGraph) error {
 	return nil
 }
 
-// Rule 3: Remove I->D pairs (they cancel out)
+// Rule 3: Remove I->D pairs (they cancel out).
 type IntegrationDifferentiationEliminationRule struct{}
 
 func (r *IntegrationDifferentiationEliminationRule) Name() string {
@@ -193,7 +196,7 @@ func (r *IntegrationDifferentiationEliminationRule) Apply(graph *ChainGraph) err
 	return nil
 }
 
-// Rule 4: Optimize distinct operations
+// Rule 4: Optimize "distinct" operations.
 type DistinctOptimizationRule struct{}
 
 func (r *DistinctOptimizationRule) Name() string {
@@ -252,7 +255,7 @@ func (r *DistinctOptimizationRule) Apply(graph *ChainGraph) error {
 	return nil
 }
 
-// Rule 5: Fuse adjacent linear operations for efficiency
+// Rule 5: Fuse adjacent linear operations for efficiency.
 type LinearOperatorFusionRule struct{}
 
 func (r *LinearOperatorFusionRule) Name() string {
@@ -445,7 +448,7 @@ func (r *LinearOperatorFusionRule) fuseProjectThenSelect(graph *ChainGraph) erro
 	return nil
 }
 
-// Helper to update output after chain modifications
+// updateOutput is a helper to update output after chain modifications.
 func (r *LinearOperatorFusionRule) updateOutput(graph *ChainGraph) {
 	if len(graph.chain) > 0 {
 		graph.output = graph.chain[len(graph.chain)-1]

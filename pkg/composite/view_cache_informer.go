@@ -18,6 +18,7 @@ import (
 
 var _ toolscache.SharedIndexInformer = &ViewCacheInformer{}
 
+// ViewCacheInformer is an informer for implementing watchers on the view cache.
 type ViewCacheInformer struct {
 	gvk            schema.GroupVersionKind // just for logging
 	cache          toolscache.Indexer
@@ -29,15 +30,18 @@ type ViewCacheInformer struct {
 	log            logr.Logger
 }
 
+// handlerEntry defines a handler.
 type handlerEntry struct {
 	toolscache.ResourceEventHandler
 	id int64
 }
 
+// HasSynced return true if the informers underlying store has synced.
 func (h *handlerEntry) HasSynced() bool {
 	return true
 }
 
+// NewViewCacheInformer returns a new informer for the view cache.
 func NewViewCacheInformer(gvk schema.GroupVersionKind, indexer toolscache.Indexer, logger logr.Logger) *ViewCacheInformer {
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -51,6 +55,9 @@ func NewViewCacheInformer(gvk schema.GroupVersionKind, indexer toolscache.Indexe
 	}
 }
 
+// Implement the cache.Informer interface.
+
+// AddEventHandler adds an event handler to the shared informer.
 func (c *ViewCacheInformer) AddEventHandler(handler toolscache.ResourceEventHandler) (toolscache.ResourceEventHandlerRegistration, error) {
 	c.mutex.Lock()
 
@@ -97,17 +104,22 @@ func (c *ViewCacheInformer) AddEventHandler(handler toolscache.ResourceEventHand
 	return &he, nil
 }
 
+// AddEventHandlerWithResyncPeriod adds an event handler to the shared informer informer using the
+// specified resync period.
 func (c *ViewCacheInformer) AddEventHandlerWithResyncPeriod(handler toolscache.ResourceEventHandler, resyncPeriod time.Duration) (toolscache.ResourceEventHandlerRegistration, error) {
 	// Ignore custom resyncPeriod as we're not actually syncing with an API server
 	return c.AddEventHandler(handler)
 }
 
+// AddEventHandlerWithOptions is a variant of AddEventHandlerWithResyncPeriod where
+// all optional parameters are passed in as a struct.
 func (c *ViewCacheInformer) AddEventHandlerWithOptions(handler toolscache.ResourceEventHandler, _ toolscache.HandlerOptions) (toolscache.ResourceEventHandlerRegistration, error) {
 	// Ignore handler options: this would be useful to change the resync period that we do not
-	// need anyway and change the logger which we do not support either
+	// need anyway and change the logger which we do not support either.
 	return c.AddEventHandler(handler)
 }
 
+// RemoveEventHandler removes a previously added event handler given by its registration handle.
 func (c *ViewCacheInformer) RemoveEventHandler(registration toolscache.ResourceEventHandlerRegistration) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -177,19 +189,24 @@ func (c *ViewCacheInformer) TriggerEvent(eventType toolscache.DeltaType, oldObj,
 	}
 }
 
+// GetStore returns the informer's local cache as a Store.
 func (c *ViewCacheInformer) GetStore() toolscache.Store {
 	return c.cache
 }
 
+// GetIndexer returns the indexer for a view cache.
 func (c *ViewCacheInformer) GetIndexer() toolscache.Indexer {
 	return c.cache
 }
 
+// GetController is deprecated, it does nothing useful.
 func (c *ViewCacheInformer) GetController() toolscache.Controller {
 	// We don't have a real controller, so we return nil
 	return nil
 }
 
+// Run starts and runs the shared informer, returning after it stops.  The informer will be stopped
+// when stopCh is closed.
 func (c *ViewCacheInformer) Run(stopCh <-chan struct{}) {
 	defer c.stopped.Store(true)
 
@@ -197,6 +214,8 @@ func (c *ViewCacheInformer) Run(stopCh <-chan struct{}) {
 	<-stopCh
 }
 
+// RunWithContext starts and runs the shared informer, returning after it stops. The informer will
+// be stopped when the context is canceled.
 func (c *ViewCacheInformer) RunWithContext(ctx context.Context) {
 	defer c.stopped.Store(true)
 
@@ -204,30 +223,42 @@ func (c *ViewCacheInformer) RunWithContext(ctx context.Context) {
 	<-ctx.Done()
 }
 
+// HasSynced returns true if the shared informer's store has been informed by at least one full
+// LIST of the authoritative state of the informer's object collection.
 func (c *ViewCacheInformer) HasSynced() bool {
 	// Since we're not syncing with an API server, we can consider it always synced
 	return true
 }
 
+// LastSyncResourceVersion is the resource version observed when last synced with the underlying
+// store.
 func (c *ViewCacheInformer) LastSyncResourceVersion() string {
 	// We're not tracking resource versions, so we return an empty string
 	return ""
 }
 
+// AddIndexers adds more indexers to this store. This supports adding indexes after the store
+// already has items.
 func (c *ViewCacheInformer) AddIndexers(indexers toolscache.Indexers) error {
 	return c.cache.AddIndexers(indexers)
 }
 
+// The WatchErrorHandler is called whenever ListAndWatch drops the connection with an error. After
+// calling this handler, the informer will backoff and retry.
 func (c *ViewCacheInformer) SetWatchErrorHandler(_ toolscache.WatchErrorHandler) error {
 	c.log.Info("SetWatchErrorHandler: not implemented")
 	return nil
 }
 
+// SetWatchErrorHandlerWithContext is a variant of SetWatchErrorHandler where the handler is passed
+// an additional context parameter.
 func (c *ViewCacheInformer) SetWatchErrorHandlerWithContext(_ toolscache.WatchErrorHandlerWithContext) error {
 	c.log.Info("SetWatchErrorHandlerWithContext: not implemented")
 	return nil
 }
 
+// SetTransform create a transformer with a given TransformFunc that is called for each object
+// which is about to be stored.
 func (c *ViewCacheInformer) SetTransform(transform toolscache.TransformFunc) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -235,6 +266,8 @@ func (c *ViewCacheInformer) SetTransform(transform toolscache.TransformFunc) err
 	return nil
 }
 
+// IsStopped reports whether the informer has already been stopped. An informer already stopped
+// will never be started again.
 func (c *ViewCacheInformer) IsStopped() bool {
 	return c.stopped.Load()
 }

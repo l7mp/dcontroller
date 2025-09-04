@@ -1,3 +1,22 @@
+// Package object extends the Kubernetes unstructured object API with enhanced support for
+// Δ-controller view objects and delta operations.
+//
+// Key components:
+//   - Object: Enhanced Kubernetes unstructured object interface with view support.
+//   - Delta: Represents changes to objects (Added, Updated, Deleted, etc.).
+//   - Patch utilities: JSON patch implementation.
+//   - View object constructors: Create view objects with proper GVK.
+//   - Object utilities: Deep copy, comparison, content manipulation.
+//
+// Example usage:
+//
+//	obj := object.NewViewObject("test", "MyView")
+//	object.SetName(obj, "default", "my-instance")
+//	object.SetContent(obj, map[string]any{"spec": data})
+//	delta := object.Delta{
+//	    Type: object.Added,
+//	    Object: obj,
+//	}
 package object
 
 import (

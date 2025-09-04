@@ -1271,7 +1271,7 @@ func newAggregation(data string) (Evaluator, error) {
 	if err != nil {
 		return nil, err
 	}
-	p, err := NewPipeline("test", gvk.Kind, []schema.GroupVersionKind{gvk}, opv1a1.Pipeline{Aggregation: &a}, logger)
+	p, err := New("test", gvk.Kind, []schema.GroupVersionKind{gvk}, opv1a1.Pipeline{Aggregation: &a}, logger)
 	if err != nil {
 		return nil, err
 	}

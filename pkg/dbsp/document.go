@@ -5,12 +5,12 @@ import (
 	"fmt"
 )
 
-// Document represents an unstructured document as map[string]any
-// Can contain embedded maps, slices, and primitives (int64, float64, string, bool)
+// Document represents an unstructured document as map[string]any.  Can contain embedded maps,
+// slices, and primitives (int64, float64, string, bool).
 type Document = map[string]any
 
-// computeJSONKey creates a deterministic JSON representation for document identity
-// This is the key function that defines document equality
+// computeJSONKey creates a deterministic JSON representation for document identity. This is the
+// key function that defines document equality.
 func computeJSONKey(doc Document) (string, error) {
 	// Convert to canonical form for deterministic JSON
 	canonical, err := toCanonicalForm(doc)
@@ -26,8 +26,8 @@ func computeJSONKey(doc Document) (string, error) {
 	return string(bytes), nil
 }
 
-// toCanonicalForm ensures deterministic JSON representation
-// Recursively processes nested structures while preserving semantics
+// toCanonicalForm ensures deterministic JSON representation. Recursively processes nested
+// structures while preserving semantics.
 func toCanonicalForm(val any) (any, error) {
 	switch v := val.(type) {
 	case map[string]any:
@@ -64,7 +64,7 @@ func toCanonicalForm(val any) (any, error) {
 	}
 }
 
-// DeepEqual checks if two documents are equal using JSON comparison
+// DeepEqual checks if two documents are equal using JSON comparison.
 func DeepEqual(a, b Document) (bool, error) {
 	keyA, err := computeJSONKey(a)
 	if err != nil {
@@ -79,7 +79,7 @@ func DeepEqual(a, b Document) (bool, error) {
 	return keyA == keyB, nil
 }
 
-// DeepCopyAny creates a deep copy of a document or any nested structure
+// DeepCopyAny creates a deep copy of a document or any nested structure.
 func DeepCopyAny(val any) any {
 	switch v := val.(type) {
 	case map[string]any:
@@ -112,7 +112,7 @@ func DeepCopyDocument(val any) Document {
 	return c.(Document)
 }
 
-// computeJSONAny creates a deterministic JSON representation for an arbitrary any value
+// computeJSONAny creates a deterministic JSON representation for an arbitrary any value.
 func computeJSONAny(doc any) (string, error) {
 	bytes, err := json.Marshal(doc)
 	if err != nil {

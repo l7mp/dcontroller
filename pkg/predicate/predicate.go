@@ -1,3 +1,39 @@
+// Package predicate provides serializable predicate support for filtering Kubernetes resources in
+// Δ-controller source specifications.
+//
+// Predicates allow controllers to selectively watch and process resource changes that match
+// specific criteria, improving performance and reducing unnecessary reconciliation work.
+//
+// Key components:
+//   - Predicate: Serializable predicate interface.
+//   - BasicPredicate: Simple predicate types (GenerationChanged, etc.).
+//   - BoolPredicate: Boolean logic combinators (And, Or, Not).
+//   - Interface: Conversion to controller-runtime predicates.
+//
+// Supported predicate types:
+//   - GenerationChanged: Triggers on metadata.generation changes.
+//   - ResourceVersionChanged: Triggers on any resource changes.
+//   - LabelChanged: Triggers on label modifications.
+//   - AnnotationChanged: Triggers on annotation modifications.
+//
+// Boolean combinators allow complex predicate logic:
+//   - And: All predicates must be true.
+//   - Or: Any predicate must be true.
+//   - Not: Inverts predicate result.
+//
+// Predicates are JSON-serializable and can be embedded in Operator
+// specifications to control source resource filtering behavior.
+//
+// Example usage:
+//
+//	predicate := Predicate{
+//	    BoolPredicate: BoolPredicate{
+//	        "And": []Predicate{
+//	            {BasicPredicate: &BasicPredicate("GenerationChanged")},
+//	            {BasicPredicate: &BasicPredicate("LabelChanged")},
+//	        },
+//	    },
+//	}
 package predicate
 
 import (

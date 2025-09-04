@@ -11,15 +11,15 @@ import (
 
 var _ meta.RESTMapper = &CompositeRESTMapper{}
 
-// CompositeRESTMapper implements meta.RESTMapper by routing view groups to ViewRESTMapper
-// and native groups to native RESTMapper
+// CompositeRESTMapper implements meta.RESTMapper by routing view groups to ViewRESTMapper and
+// native groups to native RESTMapper.
 type CompositeRESTMapper struct {
 	viewMapper   *ViewRESTMapper
 	nativeMapper meta.RESTMapper
 	discovery    discovery.DiscoveryInterface
 }
 
-// NewCompositeRESTMapper creates a new composite REST mapper
+// NewCompositeRESTMapper creates a new composite REST mapper.
 func NewCompositeRESTMapper(compositeDiscovery discovery.DiscoveryInterface) *CompositeRESTMapper {
 	// Create native RESTMapper from discovery if available
 	var nativeMapper meta.RESTMapper
@@ -41,7 +41,7 @@ func NewCompositeRESTMapper(compositeDiscovery discovery.DiscoveryInterface) *Co
 	}
 }
 
-// KindFor returns the Kind for the given resource
+// KindFor returns the Kind for the given resource.
 func (m *CompositeRESTMapper) KindFor(resource schema.GroupVersionResource) (schema.GroupVersionKind, error) {
 	if m.isViewGroup(resource.Group) {
 		return m.viewMapper.KindFor(resource)
@@ -54,7 +54,7 @@ func (m *CompositeRESTMapper) KindFor(resource schema.GroupVersionResource) (sch
 	return schema.GroupVersionKind{}, fmt.Errorf("no RESTMapper available for resource %s", resource)
 }
 
-// KindsFor returns all Kinds for the given resource
+// KindsFor returns all Kinds for the given resource.
 func (m *CompositeRESTMapper) KindsFor(resource schema.GroupVersionResource) ([]schema.GroupVersionKind, error) {
 	if m.isViewGroup(resource.Group) {
 		return m.viewMapper.KindsFor(resource)
@@ -67,7 +67,7 @@ func (m *CompositeRESTMapper) KindsFor(resource schema.GroupVersionResource) ([]
 	return nil, fmt.Errorf("no RESTMapper available for resource %s", resource)
 }
 
-// ResourceFor returns the Resource for the given input
+// ResourceFor returns the Resource for the given input.
 func (m *CompositeRESTMapper) ResourceFor(input schema.GroupVersionResource) (schema.GroupVersionResource, error) {
 	if m.isViewGroup(input.Group) {
 		return m.viewMapper.ResourceFor(input)
@@ -80,7 +80,7 @@ func (m *CompositeRESTMapper) ResourceFor(input schema.GroupVersionResource) (sc
 	return schema.GroupVersionResource{}, fmt.Errorf("no RESTMapper available for resource %s", input)
 }
 
-// ResourcesFor returns all Resources for the given input
+// ResourcesFor returns all Resources for the given input.
 func (m *CompositeRESTMapper) ResourcesFor(input schema.GroupVersionResource) ([]schema.GroupVersionResource, error) {
 	if m.isViewGroup(input.Group) {
 		return m.viewMapper.ResourcesFor(input)
@@ -93,7 +93,7 @@ func (m *CompositeRESTMapper) ResourcesFor(input schema.GroupVersionResource) ([
 	return nil, fmt.Errorf("no RESTMapper available for resource %s", input)
 }
 
-// RESTMapping returns the RESTMapping for the given GroupKind
+// RESTMapping returns the RESTMapping for the given GroupKind.
 func (m *CompositeRESTMapper) RESTMapping(gk schema.GroupKind, versions ...string) (*meta.RESTMapping, error) {
 	if m.isViewGroup(gk.Group) {
 		return m.viewMapper.RESTMapping(gk, versions...)
@@ -106,7 +106,7 @@ func (m *CompositeRESTMapper) RESTMapping(gk schema.GroupKind, versions ...strin
 	return nil, fmt.Errorf("no RESTMapper available for GroupKind %s", gk)
 }
 
-// RESTMappings returns all RESTMappings for the given GroupKind
+// RESTMappings returns all RESTMappings for the given GroupKind.
 func (m *CompositeRESTMapper) RESTMappings(gk schema.GroupKind, versions ...string) ([]*meta.RESTMapping, error) {
 	if m.isViewGroup(gk.Group) {
 		return m.viewMapper.RESTMappings(gk, versions...)
@@ -119,7 +119,7 @@ func (m *CompositeRESTMapper) RESTMappings(gk schema.GroupKind, versions ...stri
 	return nil, fmt.Errorf("no RESTMapper available for GroupKind %s", gk)
 }
 
-// ResourceSingularizer returns the singular form of the resource
+// ResourceSingularizer returns the singular form of the resource.
 func (m *CompositeRESTMapper) ResourceSingularizer(resource string) (string, error) {
 	// For views, singular == plural (both lowercase kind)
 	// For native resources, delegate to native mapper
@@ -134,7 +134,7 @@ func (m *CompositeRESTMapper) ResourceSingularizer(resource string) (string, err
 	return resource, nil
 }
 
-// isViewGroup checks if a group is a view group
+// isViewGroup checks if a group is a view group.
 func (m *CompositeRESTMapper) isViewGroup(group string) bool {
 	if cd, ok := m.discovery.(*CompositeDiscoveryClient); ok {
 		return cd.IsViewGroup(group)

@@ -1,3 +1,34 @@
+// Package manager provides an enhanced Kubernetes controller-runtime manager
+// with integrated support for Δ-controller's composite client and cache system.
+//
+// The manager wraps the standard controller-runtime Manager to provide seamless
+// integration with the composite client system, enabling controllers to work
+// with both native Kubernetes resources and view objects through a unified interface.
+//
+// Key components:
+//   - Manager: Enhanced manager with composite client integration.
+//   - FakeManager: Testing implementation with mock clients and caches.
+//
+// Features:
+//   - Automatic composite client and cache setup.
+//   - Transparent view object support.
+//   - Compatible with standard controller-runtime patterns.
+//   - Enhanced testing utilities with fake implementations.
+//   - Support for both native and view resource types.
+//
+// The manager automatically configures the composite client as the default
+// client, ensuring that all controllers receive the enhanced client capabilities
+// without requiring code changes.
+//
+// Example usage:
+//
+//	mgr, _ := manager.New(cfg, manager.Options{
+//	    Options: ctrl.Options{
+//	        Scheme: scheme,
+//	    },
+//	    Logger: logger,
+//	})
+//	return mgr.Start(ctx)
 package manager
 
 import (
@@ -53,6 +84,7 @@ func New(config *rest.Config, opts Options) (*Manager, error) {
 	return newManager(config, opts)
 }
 
+// newHeadlessManager creates a new headless manager.
 func newHeadlessManager(opts Options) (*Manager, error) {
 	logger := opts.Logger
 
@@ -79,6 +111,7 @@ func newHeadlessManager(opts Options) (*Manager, error) {
 	return &Manager{Manager: mgr}, nil
 }
 
+// newManager creates a new manager backed by a Kubernetes API server.
 func newManager(config *rest.Config, opts Options) (*Manager, error) {
 	logger := opts.Logger
 	if opts.NewCache == nil {

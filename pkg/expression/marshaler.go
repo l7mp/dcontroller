@@ -6,6 +6,7 @@ import (
 	"reflect"
 )
 
+// UnmarshalJSON de-serializes an expression from JSON.
 func (e *Expression) UnmarshalJSON(b []byte) error {
 	// cut raw content
 	// try to unmarshal as a bool terminal expression
@@ -68,6 +69,7 @@ func (e *Expression) UnmarshalJSON(b []byte) error {
 	return NewUnmarshalError("expression", string(b))
 }
 
+// UnmarshalJSON serializes an expression into JSON.
 func (e *Expression) MarshalJSON() ([]byte, error) {
 	switch e.Op {
 	case "@any":
@@ -161,6 +163,7 @@ func (e *Expression) MarshalJSON() ([]byte, error) {
 	// return []byte(""), fmt.Errorf("failed to JSON marshal expression %#v", e)
 }
 
+// String stringifies an expression.
 func (e *Expression) String() string {
 	b, err := json.Marshal(e)
 	if err != nil {
@@ -169,6 +172,7 @@ func (e *Expression) String() string {
 	return string(b)
 }
 
+// DeepCopyInto deep-copies an expression.
 func (e *Expression) DeepCopyInto(out *Expression) {
 	if e == nil || out == nil {
 		return
@@ -185,7 +189,7 @@ func (e *Expression) DeepCopyInto(out *Expression) {
 	}
 }
 
-// unpacks the first-level list if any
+// unpackList unpacks the first-level list, if any.
 func unpackList(a any) []any {
 	v := reflect.ValueOf(a)
 
