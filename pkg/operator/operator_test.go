@@ -181,6 +181,11 @@ var _ = Describe("Headless Operator", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}()
 
+		Expect(op.ListControllers()).To(HaveLen(1))
+		ctrl := op.GetController("test-controller")
+		Expect(ctrl).NotTo(BeNil())
+		Expect(ctrl.GetName()).To(Equal("test-controller"))
+
 		c, ok := mgr.GetClient().(client.WithWatch)
 		Expect(ok).To(BeTrue())
 		Expect(c).NotTo(BeNil())

@@ -123,6 +123,13 @@ func NewFromFile(name string, mgr runtimeMgr.Manager, file string, opts Options)
 	return New(name, mgr, &spec, opts), nil
 }
 
+// ListControllers lists the controllers for the operator.
+func (op *Operator) ListControllers() []*dcontroller.Controller {
+	ret := make([]*dcontroller.Controller, len(op.controllers))
+	copy(ret, op.controllers)
+	return ret
+}
+
 // GetController returns the controller with the given name or nil if no controller with that name
 // exists.
 func (op *Operator) GetController(name string) *dcontroller.Controller {
