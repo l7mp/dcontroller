@@ -244,7 +244,7 @@ use a kubectl port-forward to reach it:
 1. Start a port-forward in background:
 
 ```console
-kubectl port-forward deployment/dcontroller-manager 8443:8443 &
+kubectl -n dcontroller-system port-forward deployment/dcontroller-manager 8443:8443 &
 ```
 
 2. Use the default dcontroller kubeconfig pointing to forwarded port:
@@ -286,6 +286,6 @@ kubectl delete operators.dcontroller.io pod-container-num-annotator
 
 ## License
 
-Copyright 2024 by its authors. Some rights reserved. See [AUTHORS](AUTHORS).
+Copyright 2024-2025 by its authors. Some rights reserved. See [AUTHORS](AUTHORS).
 
 Apache License - see [LICENSE](LICENSE) for full text.
