@@ -119,11 +119,17 @@ func main() {
 		}
 
 		c.SetAPIServer(apiServer)
+
+		go func() {
+			if err := apiServer.Start(ctx); err != nil {
+				setupLog.Error(err, "embedded API server error")
+			}
+		}()
 	}
 
 	setupLog.Info("starting operator")
 	if err := c.Start(ctx); err != nil {
-		setupLog.Error(err, "problem running operator")
+		setupLog.Error(err, "operator error")
 		os.Exit(1)
 	}
 }

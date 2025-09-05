@@ -39,7 +39,7 @@ type Controller interface {
 	reconcile.Reconciler
 	GetManager() runtimeManager.Manager
 	GetClient() client.Client
-	SetAPIServer(*apiserver.APIServer)
+	SetAPIServer(apiServer *apiserver.APIServer)
 }
 
 type opEntry struct {
@@ -53,10 +53,10 @@ type controller struct {
 	mgr         runtimeManager.Manager
 	operators   map[types.NamespacedName]*opEntry
 	clientMpx   composite.ClientMultiplexer
-	apiServer   *apiserver.APIServer
 	mu          sync.Mutex
 	options     runtimeManager.Options
 	ctx         context.Context
+	apiServer   *apiserver.APIServer
 	started     bool
 	logger, log logr.Logger
 }
@@ -122,6 +122,15 @@ func (c *controller) GetClient() client.Client {
 	return c.clientMpx
 }
 
+// SetAPIServer allows to set the embedded API server. The API server lifecycle is not managed by
+// the operator; make sure to run apiServer.Start before calling Start on the oparator.
+func (c *controller) SetAPIServer(apiServer *apiserver.APIServer) {
+	c.apiServer = apiServer
+	for _, e := range c.operators {
+		e.op.SetAPIServer(apiServer)
+	}
+}
+
 // Reconcile runs the reconciliation logic for the controller
 func (c *controller) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	log := c.log.WithValues("operator", req.String())
@@ -145,11 +154,6 @@ func (c *controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	return reconcile.Result{}, nil
 }
 
-// SetAPIServer allows to set the embedded API server. The API server will be started by Start.
-func (c *controller) SetAPIServer(apiServer *apiserver.APIServer) {
-	c.apiServer = apiServer
-}
-
 // Start starts the operator controller and each operator registered with the controller. It blocks
 func (c *controller) Start(ctx context.Context) error {
 	c.log.Info("starting operators")
@@ -161,14 +165,6 @@ func (c *controller) Start(ctx context.Context) error {
 
 	for k := range c.operators {
 		c.startOp(k)
-	}
-
-	if c.apiServer != nil {
-		go func() {
-			if err := c.apiServer.Start(ctx); err != nil {
-				c.log.Error(err, "embedded API server error")
-			}
-		}()
 	}
 
 	return c.mgr.Start(ctx)

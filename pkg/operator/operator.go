@@ -28,6 +28,7 @@ package operator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -45,15 +46,15 @@ var _ runtimeMgr.Runnable = &Operator{}
 
 // Options can be used to customize the Operator's behavior.
 type Options struct {
-	// API server is an optional extension server that can be used to interact with the view
-	// objects stored in the operator cacache.
-	APIServer *apiserver.APIServer
-
 	// ErrorChannel is a channel to receive errors from the operator. Note that the error
 	// channel is rate limited to at most 3 errors per every 2 seconds. Use ReportErrors on the
 	// individual controllers to get the errors that might have been supporessed by the rate
 	// limiter.
 	ErrorChannel chan error
+
+	// API server is an optional extension server that can be used to interact with the view
+	// objects stored in the operator cacache.
+	APIServer *apiserver.APIServer
 
 	// Logger is a standard logger.
 	Logger logr.Logger
@@ -69,6 +70,7 @@ type Operator struct {
 	ctx         context.Context
 	gvks        []schema.GroupVersionKind
 	errorChan   chan error
+	started     bool
 	logger, log logr.Logger
 }
 
@@ -123,6 +125,12 @@ func NewFromFile(name string, mgr runtimeMgr.Manager, file string, opts Options)
 	return New(name, mgr, &spec, opts), nil
 }
 
+// SetAPIServer allows to set the embedded API server. The API server lifecycle is not managed by
+// the operator; make sure to run apiServer.Start before calling Start on the oparator.
+func (op *Operator) SetAPIServer(apiServer *apiserver.APIServer) {
+	op.apiServer = apiServer
+}
+
 // ListControllers lists the controllers for the operator.
 func (op *Operator) ListControllers() []*dcontroller.Controller {
 	ret := make([]*dcontroller.Controller, len(op.controllers))
@@ -158,8 +166,13 @@ func (op *Operator) AddController(config opv1a1.Controller) error {
 
 // Start starts the operator. It blocks
 func (op *Operator) Start(ctx context.Context) error {
+	if op.started {
+		return errors.New("operator already started")
+	}
+
 	op.log.Info("starting up")
 	op.ctx = ctx
+	op.started = true
 
 	defer func() {
 		if op.errorChan != nil {
