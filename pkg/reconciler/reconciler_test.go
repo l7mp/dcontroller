@@ -940,6 +940,43 @@ var _ = Describe("Reconciler", func() {
 			// Expect(p.Spec.Containers[0].Image).To(Equal("nginx"))
 			// Expect(p.Spec.RestartPolicy).To(Equal(corev1.RestartPolicy("")))
 		})
+
+		It("should be able to write view objects to another operator's cache", func() {
+			// Start manager and push a native object into the runtime client fake
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			// Register target
+			otherOpName := "other-op.view.dcontroller.io"
+			target := NewTarget(mgr, "test", opv1a1.Target{
+				Resource: opv1a1.Resource{
+					Group: &otherOpName,
+					Kind:  "view",
+				},
+			})
+
+			// Start the manager
+			go func() { mgr.Start(ctx) }()
+
+			// Push a view object to the target
+			err = target.Write(ctx, object.Delta{Type: object.Added, Object: view})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Get view cache
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			Expect(vcache).NotTo(BeNil())
+
+			Eventually(func() bool {
+				retrieved := object.NewViewObject("other-op", "view")
+				err := vcache.Get(ctx, client.ObjectKeyFromObject(view), retrieved)
+				if err != nil || retrieved.GetAPIVersion() != "other-op.view.dcontroller.io/v1alpha1" {
+					return false
+				}
+				retrieved.SetAPIVersion("test.view.dcontroller.io/v1alpha1")
+				return object.DeepEqual(retrieved, view)
+			}, timeout, interval).Should(BeTrue())
+		})
 	})
 })
 

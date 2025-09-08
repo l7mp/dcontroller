@@ -53,8 +53,8 @@ func (r *resource) GetGVK() (schema.GroupVersionKind, error) {
 		return schema.GroupVersionKind{}, fmt.Errorf("empty Kind in %s", util.Stringify(*r))
 	}
 
-	if r.resource.Group == nil || viewv1a1.IsViewGroup(*r.resource.Group) {
-		// this will be a View, version is enforced
+	if r.resource.Group == nil || *r.resource.Group == viewv1a1.Group(r.operator) {
+		// this will be our View, version is enforced
 		return r.getGVKByGroupKind(schema.GroupKind{Group: viewv1a1.Group(r.operator), Kind: r.resource.Kind})
 	}
 
