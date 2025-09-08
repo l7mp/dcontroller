@@ -139,7 +139,7 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 		srcs = append(srcs, source.String())
 	}
 
-	c.log.Info("creating", "sources", fmt.Sprintf("[%s]", strings.Join(srcs, ",")))
+	c.log.V(4).Info("creating", "sources", fmt.Sprintf("[%s]", strings.Join(srcs, ",")))
 
 	on := true
 	baseviews := []schema.GroupVersionKind{}
@@ -176,7 +176,7 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 				gvk.String(), err))
 		}
 
-		c.log.V(2).Info("watching resource", "GVK", s.String())
+		c.log.V(4).Info("watching resource", "GVK", s.String())
 
 		baseviews = append(baseviews, gvk)
 	}
@@ -196,6 +196,10 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 		return c, c.PushCriticalError(fmt.Errorf("failed to schedule controller %s: %w",
 			c.name, err))
 	}
+
+	c.log.Info("controller ready", "sources", fmt.Sprintf("[%s]", strings.Join(srcs, ",")),
+		"pipeline", c.pipeline.String(), "target", c.target.String(),
+		"errors", strings.Join(c.ReportErrors(), ","))
 
 	return c, nil
 }

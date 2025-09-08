@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/apiserver"
 	dcontroller "github.com/l7mp/dcontroller/pkg/controller"
 )
@@ -222,6 +223,8 @@ func (op *Operator) RegisterGVKs() error {
 	if op.apiServer == nil {
 		return nil
 	}
+
+	op.log.V(2).Info("registering GVKs", "API group", viewv1a1.Group(op.name))
 
 	gvks := []schema.GroupVersionKind{}
 	for _, c := range op.controllers {
