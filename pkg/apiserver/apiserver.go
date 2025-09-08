@@ -37,6 +37,7 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	genericapiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/client-go/rest"
 	openapicommon "k8s.io/kube-openapi/pkg/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -101,6 +102,13 @@ func (s *APIServer) GetServerAddress() string {
 // GetScheme returns the scheme used by the API server.
 func (s *APIServer) GetScheme() *runtime.Scheme {
 	return s.scheme
+}
+
+// GetConfig returns a REST config for accessing the API server.
+func (s *APIServer) GetConfig() *rest.Config {
+	return &rest.Config{
+		Host: fmt.Sprintf("http://%s", s.GetServerAddress()),
+	}
 }
 
 // Start initiates the API server lifecycle. It blocks.
