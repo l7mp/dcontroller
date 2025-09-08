@@ -2,6 +2,7 @@ package composite
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -134,6 +135,12 @@ func (m *clientMultiplexer) List(ctx context.Context, list client.ObjectList, op
 	}
 
 	return c.List(ctx, list, opts...)
+}
+
+// Apply applies the given apply configuration.
+func (m *clientMultiplexer) Apply(_ context.Context, _ runtime.ApplyConfiguration, _ ...client.ApplyOption) error {
+	m.log.V(3).Info("APPLY")
+	return errors.New("not implemented")
 }
 
 // Create saves the object obj.

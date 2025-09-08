@@ -40,6 +40,11 @@ func (c *viewClient) List(ctx context.Context, list client.ObjectList, opts ...c
 	return c.cache.List(ctx, list, opts...)
 }
 
+// Apply applies the given apply configuration.
+func (c *viewClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	return errors.New("Apply: not implemented")
+}
+
 // Create saves the object obj in the ViewCache.
 func (c *viewClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	viewObj, ok := obj.(object.Object)

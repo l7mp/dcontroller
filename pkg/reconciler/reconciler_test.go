@@ -224,10 +224,9 @@ var _ = Describe("Reconciler", func() {
 				"apiVersion": "v1",
 				"kind":       "Pod",
 				"metadata": map[string]any{
-					"namespace":         "default",
-					"name":              "podname",
-					"resourceVersion":   "999",
-					"creationTimestamp": nil,
+					"namespace":       "default",
+					"name":            "podname",
+					"resourceVersion": "999",
 				},
 				"spec":   map[string]any{"containers": nil},
 				"status": map[string]any{},
