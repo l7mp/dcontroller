@@ -115,7 +115,7 @@ var _ = Describe("Reconciler", func() {
 	Describe("with sources", func() {
 		It("should be able to create a watch and emit events for view objects", func() {
 			// Start manager and push a native object into the runtime client fake
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -205,7 +205,7 @@ var _ = Describe("Reconciler", func() {
 		It("should be able to create a watch and emit events for native objects", func() {
 			// Cannot add/remove native objects due to the limitations of the fake
 			// client: use an initial object list only
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger}, pod)
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger}, pod)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -296,7 +296,7 @@ var _ = Describe("Reconciler", func() {
 
 		It("should be able to watch and filter views by a predicate", func() {
 			// Start manager and push a native object into the runtime client fake
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -424,7 +424,7 @@ var _ = Describe("Reconciler", func() {
 		It("should get a watch event on a controller using a labeled watch for a labeled native object", func() {
 			podL := pod.DeepCopy()
 			podL.SetLabels(map[string]string{"app": "test"})
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger}, podL)
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger}, podL)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -480,7 +480,7 @@ var _ = Describe("Reconciler", func() {
 		})
 
 		It("should suppress watch events on a controller using a labeled watch for an un labeled native object", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger}, pod)
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger}, pod)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -529,7 +529,7 @@ var _ = Describe("Reconciler", func() {
 	Describe("with targets", func() {
 		It("should be able to write view objects to Updater targets", func() {
 			// Start manager and push a native object into the runtime client fake
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -585,7 +585,7 @@ var _ = Describe("Reconciler", func() {
 		})
 
 		It("should be able to write native objects to Updater targets", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -699,7 +699,7 @@ var _ = Describe("Reconciler", func() {
 
 		It("should be able to write view objects to Patch targets", func() {
 			// Start manager and push a native object into the runtime client fake
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -782,7 +782,7 @@ var _ = Describe("Reconciler", func() {
 
 		It("should be able to write a new status into view objects via Patch targets", func() {
 			// Start manager and push a native object into the runtime client fake
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -848,7 +848,7 @@ var _ = Describe("Reconciler", func() {
 		})
 
 		It("should be able to write native objects to Patcher targets", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger}, pod2)
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger}, pod2)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -943,7 +943,7 @@ var _ = Describe("Reconciler", func() {
 
 		It("should be able to write view objects to another operator's cache", func() {
 			// Start manager and push a native object into the runtime client fake
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("other-op", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 

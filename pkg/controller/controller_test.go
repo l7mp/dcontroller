@@ -170,7 +170,7 @@ var _ = Describe("Controller", func() {
 				},
 			}
 
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -234,7 +234,7 @@ var _ = Describe("Controller", func() {
 				},
 			}
 
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -298,7 +298,7 @@ var _ = Describe("Controller", func() {
 		})
 
 		It("should implement a basic controller on native objects", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -447,7 +447,7 @@ target:
 		})
 
 		It("should reject a controller with no sources", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -473,7 +473,7 @@ target:
 		})
 
 		It("should reject a controller with no target", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -498,7 +498,7 @@ pipeline:
 		})
 
 		It("should reject a controller with an invalid pipeline", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -523,7 +523,7 @@ target:
 
 	Describe("With complex Controllers", func() {
 		It("should implement a controller with a join pipeline", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -696,7 +696,7 @@ target:
 		})
 
 		It("should implement 2 compex parallel controller pipelines", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 

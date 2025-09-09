@@ -64,7 +64,7 @@ var _ = Describe("Headless Operator", func() {
 	})
 
 	It("should create an empty Operator", func() {
-		mgr, err := dmanager.New(nil, dmanager.Options{Options: manager.Options{
+		mgr, err := dmanager.New(nil, "test", dmanager.Options{Options: manager.Options{
 			Metrics: metrics.Options{
 				BindAddress: ":54322",
 			},
@@ -123,7 +123,7 @@ var _ = Describe("Headless Operator", func() {
 	})
 
 	It("should load an Operator", func() {
-		mgr, err := dmanager.New(nil, dmanager.Options{Options: manager.Options{
+		mgr, err := dmanager.New(nil, "test", dmanager.Options{Options: manager.Options{
 			Metrics: metrics.Options{
 				BindAddress: ":54321",
 			},

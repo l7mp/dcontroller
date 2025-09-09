@@ -68,7 +68,7 @@ func main() {
 	}
 
 	// Create a dmanager
-	mgr, err := dmanager.New(ctrl.GetConfigOrDie(), dmanager.Options{
+	mgr, err := dmanager.New(ctrl.GetConfigOrDie(), OperatorName, dmanager.Options{
 		Options: ctrl.Options{Scheme: scheme},
 	})
 	if err != nil {

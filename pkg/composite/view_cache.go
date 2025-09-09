@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
@@ -30,6 +31,7 @@ const DefaultWatchChannelBuffer = 256
 // per each GVK that can be stored in the cache.
 type ViewCache struct {
 	mu          sync.RWMutex
+	group       string // group for all cached views
 	caches      map[schema.GroupVersionKind]toolscache.Indexer
 	informers   map[schema.GroupVersionKind]*ViewCacheInformer
 	discovery   ViewDiscoveryInterface
@@ -37,13 +39,14 @@ type ViewCache struct {
 }
 
 // NewViewCache creates a new view cache.
-func NewViewCache(opts CacheOptions) *ViewCache {
+func NewViewCache(group string, opts CacheOptions) *ViewCache {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
 	}
 
 	c := &ViewCache{
+		group:     group,
 		caches:    make(map[schema.GroupVersionKind]toolscache.Indexer),
 		informers: make(map[schema.GroupVersionKind]*ViewCacheInformer),
 		discovery: NewViewDiscovery(),
@@ -56,6 +59,10 @@ func NewViewCache(opts CacheOptions) *ViewCache {
 // RegisterCacheForKind registers a new GVK in the cache.
 func (c *ViewCache) RegisterCacheForKind(gvk schema.GroupVersionKind) error {
 	c.log.V(1).Info("registering cache for new GVK", "gvk", gvk)
+
+	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
+		return c.newGroupError(gvk)
+	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -77,6 +84,10 @@ func (c *ViewCache) RegisterCacheForKind(gvk schema.GroupVersionKind) error {
 
 // GetCacheForKind returns the internal cache for a given GVK.
 func (c *ViewCache) GetCacheForKind(gvk schema.GroupVersionKind) (toolscache.Indexer, error) {
+	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
+		return nil, c.newGroupError(gvk)
+	}
+
 	c.mu.RLock()
 	indexer, exists := c.caches[gvk]
 	c.mu.RUnlock()
@@ -99,6 +110,10 @@ func (c *ViewCache) GetCacheForKind(gvk schema.GroupVersionKind) (toolscache.Ind
 
 // RegisterInformerForKind registers an informer for a GVK.
 func (c *ViewCache) RegisterInformerForKind(gvk schema.GroupVersionKind) error {
+	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
+		return c.newGroupError(gvk)
+	}
+
 	c.log.V(4).Info("registering informer for new GVK", "gvk", gvk)
 
 	cache, err := c.GetCacheForKind(gvk)
@@ -129,6 +144,10 @@ func (c *ViewCache) GetInformer(ctx context.Context, obj client.Object, opts ...
 // GetInformerForKind is similar to GetInformer, except that it takes a group-version-kind, instead
 // of the underlying object.
 func (c *ViewCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind, _ ...cache.InformerGetOption) (cache.Informer, error) {
+	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
+		return nil, c.newGroupError(gvk)
+	}
+
 	c.mu.RLock()
 	informer, exists := c.informers[gvk]
 	c.mu.RUnlock()
@@ -172,6 +191,10 @@ func (c *ViewCache) RemoveInformer(ctx context.Context, obj client.Object) error
 func (c *ViewCache) Add(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
+	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
+		return c.newGroupError(gvk)
+	}
+
 	c.log.V(5).Info("add", "gvk", gvk, "key", client.ObjectKeyFromObject(obj).String(),
 		"object", object.Dump(obj))
 
@@ -199,6 +222,10 @@ func (c *ViewCache) Add(obj object.Object) error {
 // Update modifies the object stored in the cache.
 func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 	gvk := newObj.GetObjectKind().GroupVersionKind()
+
+	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
+		return c.newGroupError(gvk)
+	}
 
 	if object.DeepEqual(oldObj, newObj) {
 		c.log.V(4).Info("update: suppressing object update", "gvk", gvk,
@@ -232,6 +259,10 @@ func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 // Delete removes an object from the cache.
 func (c *ViewCache) Delete(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
+
+	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
+		return c.newGroupError(gvk)
+	}
 
 	c.log.V(5).Info("delete", "gvk", gvk, "key", client.ObjectKeyFromObject(obj).String(),
 		"object", object.Dump(obj))
@@ -287,6 +318,11 @@ func (c *ViewCache) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 	}
 
 	gvk := obj.GetObjectKind().GroupVersionKind()
+
+	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
+		return c.newGroupError(gvk)
+	}
+
 	cache, err := c.GetCacheForKind(gvk)
 	if err != nil {
 		return apierrors.NewBadRequest("invalid GVK")
@@ -315,6 +351,11 @@ func (c *ViewCache) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 func (c *ViewCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	listGVK := list.GetObjectKind().GroupVersionKind()
 	objGVK := c.discovery.ObjectGVKFromListGVK(listGVK)
+
+	if !viewv1a1.HasViewGroupVersionKind(c.group, objGVK) {
+		return c.newGroupError(objGVK)
+	}
+
 	cache, err := c.GetCacheForKind(objGVK)
 	if err != nil {
 		return apierrors.NewBadRequest("invalid GVK")
@@ -617,4 +658,8 @@ func (w *ViewCacheWatcher) Stop() {
 // ResultChan returns the event channel of the watcher.
 func (w *ViewCacheWatcher) ResultChan() <-chan watch.Event {
 	return w.eventChan
+}
+
+func (c *ViewCache) newGroupError(gvk schema.GroupVersionKind) error {
+	return fmt.Errorf("unknown view object group %s, expected %s", gvk.Group, c.group)
 }

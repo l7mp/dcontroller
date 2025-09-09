@@ -32,10 +32,10 @@ var _ = Describe("ClientMultiplexer", func() {
 		coreClient = fake.NewClientBuilder().Build()
 
 		// Create ViewCache instances for different view groups
-		testViewCache = NewViewCache(CacheOptions{})
+		testViewCache = NewViewCache(viewv1a1.Group("test"), CacheOptions{})
 		testViewClient = testViewCache.GetClient()
 
-		anotherViewCache = NewViewCache(CacheOptions{})
+		anotherViewCache = NewViewCache(viewv1a1.Group("another"), CacheOptions{})
 		anotherViewClient = anotherViewCache.GetClient()
 
 		multiplexer = NewClientMultiplexer(logger)

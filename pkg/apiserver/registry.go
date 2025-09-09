@@ -26,6 +26,7 @@ func (s *APIServer) RegisterGVKs(gvks []schema.GroupVersionKind) error {
 	}
 
 	for group, gvkList := range groupGVKs {
+		fmt.Println("UUUUUUUUUUUUUUUUUUU", group)
 		if err := s.RegisterAPIGroup(group, gvkList); err != nil {
 			return fmt.Errorf("failed to register API group %s: %w", group, err)
 		}

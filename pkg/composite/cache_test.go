@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
@@ -43,7 +44,7 @@ var _ = Describe("CompositeCache", func() {
 		// this is needed: for some unknown reason the converter does not work on the GVK
 		pod.GetObjectKind().SetGroupVersionKind(podn.GetObjectKind().GroupVersionKind())
 		fakeCache = NewFakeRuntimeCache(scheme.Scheme)
-		cache, _ = NewCompositeCache(nil, CacheOptions{
+		cache, _ = NewCompositeCache(nil, viewv1a1.Group("test"), CacheOptions{
 			DefaultCache: fakeCache,
 			Logger:       logger,
 		})
@@ -110,6 +111,13 @@ var _ = Describe("CompositeCache", func() {
 			err := cache.Get(ctx, client.ObjectKeyFromObject(obj), obj)
 			Expect(err).To(HaveOccurred())
 			err = cache.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return an error for an unknown view group", func() {
+			obj := object.NewViewObject("other-op", "view")
+			object.SetName(obj, "default", "view")
+			err := cache.Get(ctx, client.ObjectKeyFromObject(obj), obj)
 			Expect(err).To(HaveOccurred())
 		})
 	})

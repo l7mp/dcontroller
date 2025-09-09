@@ -26,6 +26,8 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 )
 
 type ClientOptions = client.Options
@@ -48,7 +50,7 @@ type APIClient struct {
 }
 
 // NewCompositeAPIClient creates a composite API client with all components.
-func NewCompositeAPIClient(config *rest.Config, opts Options) (*APIClient, error) {
+func NewCompositeAPIClient(config *rest.Config, operator string, opts Options) (*APIClient, error) {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -72,7 +74,7 @@ func NewCompositeAPIClient(config *rest.Config, opts Options) (*APIClient, error
 	compositeRESTMapper := NewCompositeRESTMapper(compositeDiscovery)
 
 	// Create composite cache
-	compositeCache, err := NewCompositeCache(config, CacheOptions{
+	compositeCache, err := NewCompositeCache(config, viewv1a1.Group(operator), CacheOptions{
 		Options:      opts.Options,
 		DefaultCache: opts.DefaultCache,
 		Logger:       logger,
@@ -82,7 +84,7 @@ func NewCompositeAPIClient(config *rest.Config, opts Options) (*APIClient, error
 	}
 
 	// Create composite client
-	compositeClient, err := NewCompositeClient(config, opts.ClientOptions)
+	compositeClient, err := NewCompositeClient(config, viewv1a1.Group(operator), opts.ClientOptions)
 	if err != nil {
 		return nil, err
 	}

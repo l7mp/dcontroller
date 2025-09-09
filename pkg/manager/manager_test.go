@@ -82,7 +82,7 @@ var _ = Describe("Startup", func() {
 
 	Describe("Basics", func() {
 		It("Manager created", func() {
-			mgr, err := NewFakeManager(manager.Options{Logger: logger})
+			mgr, err := NewFakeManager("test", manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -103,7 +103,7 @@ var _ = Describe("Startup", func() {
 
 	Describe("Cache operation", func() {
 		It("should retrieve a native object", func() {
-			mgr, err := NewFakeManager(manager.Options{Logger: logger})
+			mgr, err := NewFakeManager("test", manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			go mgr.Start(ctx)
@@ -129,7 +129,7 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should retrieve an added view object", func() {
-			mgr, err := NewFakeManager(manager.Options{Logger: logger})
+			mgr, err := NewFakeManager("test", manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			go mgr.Start(ctx)
@@ -156,7 +156,7 @@ var _ = Describe("Startup", func() {
 
 	Describe("Client operation", func() {
 		It("should retrieve a native object", func() {
-			mgr, err := NewFakeManager(manager.Options{Logger: logger})
+			mgr, err := NewFakeManager("test", manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			go mgr.Start(ctx)
@@ -180,7 +180,7 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should retrieve an added view object", func() {
-			mgr, err := NewFakeManager(manager.Options{Logger: logger})
+			mgr, err := NewFakeManager("test", manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			go mgr.Start(ctx)
@@ -208,7 +208,7 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should patch a view object", func() {
-			mgr, err := NewFakeManager(manager.Options{Logger: logger})
+			mgr, err := NewFakeManager("test", manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			go mgr.Start(ctx)
@@ -247,7 +247,7 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should write and retrieve a native object", func() {
-			mgr, err := NewFakeManager(manager.Options{Logger: logger})
+			mgr, err := NewFakeManager("test", manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			go mgr.Start(ctx)
@@ -303,7 +303,7 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should patch a native object", func() {
-			mgr, err := NewFakeManager(manager.Options{Logger: logger})
+			mgr, err := NewFakeManager("test", manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			go mgr.Start(ctx)
@@ -360,7 +360,7 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should write and watch a native object", func() {
-			mgr, err := NewFakeManager(manager.Options{Logger: logger})
+			mgr, err := NewFakeManager("test", manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			go mgr.Start(ctx)
@@ -401,7 +401,7 @@ var _ = Describe("Startup", func() {
 
 	Describe("StatusClient operation", func() {
 		It("should create status on a view object", func() {
-			mgr, err := NewFakeManager(manager.Options{Logger: logger})
+			mgr, err := NewFakeManager("test", manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			go mgr.Start(ctx)
@@ -444,7 +444,7 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should update status on a view object", func() {
-			mgr, err := NewFakeManager(manager.Options{Logger: logger})
+			mgr, err := NewFakeManager("test", manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			go mgr.Start(ctx)
@@ -476,7 +476,7 @@ var _ = Describe("Startup", func() {
 		})
 
 		It("should patch status on a view object", func() {
-			mgr, err := NewFakeManager(manager.Options{Logger: logger})
+			mgr, err := NewFakeManager("test", manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			go mgr.Start(ctx)

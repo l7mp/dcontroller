@@ -88,6 +88,18 @@ func IsViewKind(gvk schema.GroupVersionKind) bool {
 	return IsViewGroupVersion(gvk.GroupVersion())
 }
 
+// HasViewGroupVersion checks whether a group-version belongs to a view resource for a particular
+// group.
+func HasViewGroupVersion(group string, gv schema.GroupVersion) bool {
+	return gv.Group == group && gv.Version == Version
+}
+
+// HasViewGroupVersionKind checks whether a group-version-kind belongs to a view resource for a
+// particular group.
+func HasViewGroupVersionKind(group string, gvk schema.GroupVersionKind) bool {
+	return HasViewGroupVersion(group, gvk.GroupVersion())
+}
+
 // // Scheme
 // func AddGroupToScheme(operator string, s *runtime.Scheme) error {
 // 	schemeBuilder := &scheme.Builder{GroupVersion: GroupVersion(operator)}

@@ -65,10 +65,6 @@ func (d *ViewDiscovery) ServerResourcesForGroupVersion(groupVersion string) (*me
 	}
 
 	return &metav1.APIResourceList{
-		// TypeMeta: metav1.TypeMeta{
-		// 	Kind:       "APIResourceList",
-		// 	APIVersion: "v1",
-		// },
 		GroupVersion: groupVersion,
 		APIResources: resources,
 	}, nil

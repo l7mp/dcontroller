@@ -39,7 +39,7 @@ var _ = Describe("APIServerUnitTest", func() {
 
 		// Create mock manager
 		var err error
-		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Set API server logger

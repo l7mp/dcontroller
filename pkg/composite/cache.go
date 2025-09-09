@@ -20,6 +20,7 @@ var _ cache.Cache = &CompositeCache{}
 // CompositeCache is a cache for storing view objects. It delegates native objects to a default
 // cache.
 type CompositeCache struct {
+	group        string // group for all cached views
 	defaultCache cache.Cache
 	viewCache    *ViewCache
 	logger, log  logr.Logger
@@ -34,9 +35,9 @@ type CacheOptions struct {
 	Logger logr.Logger
 }
 
-// NewCompositeCache creates a new composite cache. If the config is not nil it also creates a
-// controller-runtime for storing native resources.
-func NewCompositeCache(config *rest.Config, opts CacheOptions) (*CompositeCache, error) {
+// NewCompositeCache creates a new composite cache for the griven group. If the config is not nil
+// it also creates a controller-runtime for storing native resources.
+func NewCompositeCache(config *rest.Config, group string, opts CacheOptions) (*CompositeCache, error) {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -52,8 +53,9 @@ func NewCompositeCache(config *rest.Config, opts CacheOptions) (*CompositeCache,
 	}
 
 	return &CompositeCache{
+		group:        group,
 		defaultCache: defaultCache,
-		viewCache:    NewViewCache(opts),
+		viewCache:    NewViewCache(group, opts),
 		logger:       logger,
 		log:          logger.WithName("cache"),
 	}, nil
@@ -80,7 +82,7 @@ func (cc *CompositeCache) GetInformer(ctx context.Context, obj client.Object, op
 
 	cc.log.V(6).Info("get-informer", "gvk", gvk)
 
-	if viewv1a1.IsViewKind(gvk) {
+	if viewv1a1.HasViewGroupVersionKind(cc.group, gvk) {
 		return cc.viewCache.GetInformer(ctx, obj)
 	}
 	return cc.defaultCache.GetInformer(ctx, obj)
@@ -91,7 +93,7 @@ func (cc *CompositeCache) GetInformer(ctx context.Context, obj client.Object, op
 func (cc *CompositeCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind, opts ...cache.InformerGetOption) (cache.Informer, error) {
 	cc.log.V(6).Info("get-informer-for-kind", "gvk", gvk)
 
-	if viewv1a1.IsViewKind(gvk) {
+	if viewv1a1.HasViewGroupVersionKind(cc.group, gvk) {
 		return cc.viewCache.GetInformerForKind(ctx, gvk)
 	}
 	return cc.defaultCache.GetInformerForKind(ctx, gvk)
@@ -103,7 +105,7 @@ func (cc *CompositeCache) RemoveInformer(ctx context.Context, obj client.Object)
 
 	cc.log.V(6).Info("remove-informer", "gvk", gvk)
 
-	if viewv1a1.IsViewKind(gvk) {
+	if viewv1a1.HasViewGroupVersionKind(cc.group, gvk) {
 		return cc.viewCache.RemoveInformer(ctx, obj)
 	}
 	return cc.defaultCache.RemoveInformer(ctx, obj)
@@ -128,7 +130,7 @@ func (cc *CompositeCache) WaitForCacheSync(ctx context.Context) bool {
 // IndexField adds an index with the given field name on the given object type.
 func (cc *CompositeCache) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	if viewv1a1.IsViewKind(gvk) {
+	if viewv1a1.HasViewGroupVersionKind(cc.group, gvk) {
 		return cc.viewCache.IndexField(ctx, obj, field, extractValue)
 	}
 	return cc.defaultCache.IndexField(ctx, obj, field, extractValue)
@@ -140,7 +142,7 @@ func (cc *CompositeCache) Get(ctx context.Context, key client.ObjectKey, obj cli
 
 	cc.log.V(5).Info("get", "gvk", gvk, "key", key)
 
-	if viewv1a1.IsViewKind(gvk) {
+	if viewv1a1.HasViewGroupVersionKind(cc.group, gvk) {
 		return cc.viewCache.Get(ctx, key, obj, opts...)
 	}
 	return cc.defaultCache.Get(ctx, key, obj, opts...)
@@ -152,7 +154,7 @@ func (cc *CompositeCache) List(ctx context.Context, list client.ObjectList, opts
 
 	cc.log.V(5).Info("list", "gvk", gvk)
 
-	if viewv1a1.IsViewKind(gvk) {
+	if viewv1a1.HasViewGroupVersionKind(cc.group, gvk) {
 		return cc.viewCache.List(ctx, list, opts...)
 	}
 	return cc.defaultCache.List(ctx, list, opts...)

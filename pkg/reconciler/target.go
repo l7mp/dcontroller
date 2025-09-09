@@ -62,7 +62,6 @@ func (t *target) Write(ctx context.Context, delta object.Delta) error {
 		return errors.New("write: empty object in delta")
 	}
 
-	// gvk to watch
 	gvk, err := t.GetGVK()
 	if err != nil {
 		return err

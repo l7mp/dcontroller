@@ -142,8 +142,6 @@ The pipeline is as follows.
      kind: EndpointView
    ```
 
-
-
 ### The endoint-discovery operator
 
 The endoint-discovery operator will process the events on the EndpointView view. Since the reconciliation logic often needs to interact with an imperative API (say, to program a service-mesh proxy), this part will be written in Go. Recall, the idea is that we don't want to write the tedious join+aggregation pipeline in imperative Go; rather we implement just a minimal part in Go while the complex data manipulation logic will be handled in a purely declarative style (see above).
@@ -152,10 +150,10 @@ The Go code itself will not differ too much from a standard [Kubernetes operator
 
 1. Define the usual boilerplate: import  packages, define constants, parse command line arguments, and set up a logger.
    
-2. Create a Δ-controller manager:
+2. Create a Δ-controller manager for the operator that we will call `endpointslice-operator`:
 
    ```go
-   mgr, err := dmanager.New(ctrl.GetConfigOrDie(), dmanager.Options{
+   mgr, err := dmanager.New(ctrl.GetConfigOrDie(), "endpointslice-operator", dmanager.Options{
        Options: ctrl.Options{Scheme: scheme},
    })
    if err != nil { ... }

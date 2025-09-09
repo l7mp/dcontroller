@@ -29,7 +29,7 @@ var _ = Describe("ViewCache", func() {
 	)
 
 	BeforeEach(func() {
-		cache = NewViewCache(CacheOptions{Logger: logger})
+		cache = NewViewCache(viewv1a1.Group("test"), CacheOptions{Logger: logger})
 		ctx, cancel = context.WithCancel(context.Background())
 	})
 
@@ -41,6 +41,11 @@ var _ = Describe("ViewCache", func() {
 		It("should allow a view to be registered", func() {
 			err := cache.RegisterCacheForKind(viewv1a1.GroupVersionKind("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should refuse to register foreign view", func() {
+			err := cache.RegisterCacheForKind(viewv1a1.GroupVersionKind("other-op", "view"))
+			Expect(err).To(HaveOccurred())
 		})
 	})
 
@@ -62,6 +67,14 @@ var _ = Describe("ViewCache", func() {
 		It("should return an error for non-existent object", func() {
 			obj := object.NewViewObject("test", "view")
 			object.SetName(obj, "", "non-existent")
+
+			err := cache.Get(ctx, client.ObjectKeyFromObject(obj), obj)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return an error for unknown group", func() {
+			obj := object.NewViewObject("other-op", "view")
+			object.SetName(obj, "default", "view")
 
 			err := cache.Get(ctx, client.ObjectKeyFromObject(obj), obj)
 			Expect(err).To(HaveOccurred())

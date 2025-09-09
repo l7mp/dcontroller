@@ -126,7 +126,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 		It("should create and start the API server", func() {
 			suite.Log.Info("creating a dmanager")
 			var err error
-			mgr, err = dmanager.New(suite.Cfg, dmanager.Options{
+			mgr, err = dmanager.New(suite.Cfg, OperatorName, dmanager.Options{
 				Options: ctrl.Options{Scheme: scheme, Logger: suite.Log},
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -534,7 +534,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 
 		It("should create and start the controller", func() {
 			// Create a dmanager
-			mgr, err := dmanager.New(suite.Cfg, dmanager.Options{
+			mgr, err := dmanager.New(suite.Cfg, OperatorName, dmanager.Options{
 				Options: ctrl.Options{Scheme: scheme},
 			})
 			Expect(err).NotTo(HaveOccurred())

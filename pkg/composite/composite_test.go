@@ -60,7 +60,7 @@ var _ = Describe("NewCompositeAPIClient", func() {
 				Logger:        logger,
 			}
 
-			apiClient, err := NewCompositeAPIClient(nil, opts)
+			apiClient, err := NewCompositeAPIClient(nil, "test", opts)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(apiClient).NotTo(BeNil())
 
@@ -99,7 +99,7 @@ var _ = Describe("NewCompositeAPIClient", func() {
 				Logger:        logger,
 			}
 
-			apiClient, err := NewCompositeAPIClient(config, opts)
+			apiClient, err := NewCompositeAPIClient(config, "test", opts)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(apiClient).NotTo(BeNil())
 			Expect(apiClient.Client).NotTo(BeNil())
@@ -119,7 +119,7 @@ var _ = Describe("NewCompositeAPIClient", func() {
 				Logger:        logger,
 			}
 
-			apiClient, err := NewCompositeAPIClient(nil, opts)
+			apiClient, err := NewCompositeAPIClient(nil, "test", opts)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Test that discovery client is used by REST mapper
@@ -157,7 +157,7 @@ var _ = Describe("NewCompositeAPIClient", func() {
 			}
 
 			var err error
-			apiClient, err = NewCompositeAPIClient(nil, opts)
+			apiClient, err = NewCompositeAPIClient(nil, "test", opts)
 			Expect(err).NotTo(HaveOccurred())
 		})
 

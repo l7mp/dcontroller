@@ -81,7 +81,7 @@ var _ = Describe("APIServerUnitTest", func() {
 		test2ViewGVK = viewv1a1.GroupVersionKind("test2", "TestView")
 
 		var err error
-		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
 		port = rand.IntN(5000) + (32768) //nolint:gosec
@@ -261,7 +261,7 @@ var _ = Describe("APIServer Integration", func() {
 
 		// Create mock manager
 		var err error
-		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Add a view object and a native resource to the manager cache

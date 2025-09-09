@@ -116,8 +116,7 @@ func NewController(config *rest.Config, options runtimeManager.Options) (Control
 // GetManager returns the manager associated with a controller.
 func (c *controller) GetManager() runtimeManager.Manager { return c.mgr }
 
-// GetClient returns a controller runtime client that multiplexes the all operator clients
-// associated with the operator.
+// GetClient returns a controller runtime client that multiplexes all registered operator clients.
 func (c *controller) GetClient() client.Client {
 	return c.clientMpx
 }
@@ -225,7 +224,7 @@ func (c *controller) addOperator(spec *opv1a1.Operator) (*Operator, error) {
 	opts.Logger = c.options.Logger
 
 	// First create a manager for this operator
-	mgr, err := manager.New(c.mgr.GetConfig(), manager.Options{Options: opts})
+	mgr, err := manager.New(c.mgr.GetConfig(), opName, manager.Options{Options: opts})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create manager for operator %s: %w",
 			opName, err)
@@ -244,7 +243,7 @@ func (c *controller) addOperator(spec *opv1a1.Operator) (*Operator, error) {
 	c.mu.Unlock()
 
 	// register the operator in the client multiplexer
-	if err := c.clientMpx.RegisterClient(viewv1a1.Group(opName), operator.mgr.GetClient()); err != nil {
+	if err := c.clientMpx.RegisterClient(viewv1a1.Group(opName), mgr.GetClient()); err != nil {
 		c.log.Error(err, "failed to register operator in the multiplex client", "operator", opName)
 	}
 
