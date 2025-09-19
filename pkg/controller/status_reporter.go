@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -22,8 +24,15 @@ func getDefaultRateLimiter() rate.Sometimes {
 	return rate.Sometimes{First: 3, Interval: 2 * time.Second}
 }
 
+// Error is a error wrapped with an operator and a controller name.
+type Error struct {
+	error
+	Operator, Controller string
+}
+
 // errorReporter is the error stack implementation.
 type errorReporter struct {
+	c           *Controller
 	errorStack  []error
 	ratelimiter rate.Sometimes
 	errorChan   chan error
@@ -31,37 +40,62 @@ type errorReporter struct {
 }
 
 // NewErrorReporter creates a new error reporter.
-func NewErrorReporter(errorChan chan error) *errorReporter {
-	return &errorReporter{errorStack: []error{}, ratelimiter: getDefaultRateLimiter(), errorChan: errorChan}
+func NewErrorReporter(c *Controller, errorChan chan error) *errorReporter {
+	return &errorReporter{c: c, errorStack: []error{}, ratelimiter: getDefaultRateLimiter(), errorChan: errorChan}
 }
 
-// PushError pushes an error to the error stack.
-func (s *errorReporter) PushError(err error) error {
-	return s.Push(err, false)
+// Push pushes a noncritical error to the error stack.
+func (s *errorReporter) Push(err error) error {
+	return s.push(err)
+}
+
+// PushError pushes a simple noncritical error to the error stack.
+func (s *errorReporter) PushError(msg string) error {
+	return s.push(errors.New(msg))
+}
+
+// PushErrorf pushes a formatted noncritical error to the error stack.
+func (s *errorReporter) PushErrorf(format string, a ...any) error {
+	return s.push(fmt.Errorf(format, a...))
+}
+
+// PushCritical pushes a critical error to the error stack.
+func (s *errorReporter) PushCritical(err error) error {
+	s.critical = true
+	return s.push(err)
 }
 
 // PushCriticalError pushes a critical error to the error stack.
-func (s *errorReporter) PushCriticalError(err error) error {
+func (s *errorReporter) PushCriticalError(msg string) error {
 	s.critical = true
-	return s.Push(err, true)
+	return s.push(errors.New(msg))
+}
+
+// PushCriticalErrorf pushes a formatted critical error to the error stack.
+func (s *errorReporter) PushCriticalErrorf(format string, a ...any) error {
+	s.critical = true
+	return s.push(fmt.Errorf(format, a...))
 }
 
 // Push pushes a critical or non-critical error to the stack.
-func (s *errorReporter) Push(err error, critical bool) error {
+func (s *errorReporter) push(err error) error {
+	ctrlErr := Error{Operator: s.c.op, Controller: s.c.name, error: err}
+
 	// ask a status update if trigger is set
 	defer s.ratelimiter.Do(func() {
 		if s.errorChan != nil {
-			s.errorChan <- err
+			s.errorChan <- ctrlErr
 		}
 	})
 
 	if len(s.errorStack) == ErrorReporterStackSize {
 		copy(s.errorStack, s.errorStack[1:])
-		s.errorStack[len(s.errorStack)-1] = err
-		return err
+		s.errorStack[len(s.errorStack)-1] = ctrlErr
+		return ctrlErr
 	}
-	s.errorStack = append(s.errorStack, err)
-	return err
+	s.errorStack = append(s.errorStack, ctrlErr)
+
+	return ctrlErr
 }
 
 // Pop pops the extra error from the stack.

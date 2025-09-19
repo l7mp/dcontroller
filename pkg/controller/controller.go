@@ -1,10 +1,10 @@
 // Package controller implements the core Δ-controller controller runtime that processes
 // declarative pipeline specifications and manages incremental view reconciliation.
 //
-// This package provides the main controller abstraction that bridges declarative
-// YAML specifications with imperative Go reconciliation logic. Controllers watch
-// source Kubernetes resources, process them through declarative pipelines to
-// generate view objects, and manage target resource updates.
+// This package provides the main controller abstraction that bridges declarative YAML
+// specifications with imperative Go reconciliation logic. Controllers watch source Kubernetes
+// resources, process them through declarative pipelines to generate view objects, and manage
+// target resource updates.
 //
 // Key components:
 //   - Controller: Main controller struct that manages the reconciliation lifecycle.
@@ -29,7 +29,6 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -92,30 +91,30 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 	}
 
 	c := &Controller{
-		mgr:           mgr,
-		op:            operator,
-		sources:       []reconciler.Source{},
-		cache:         make(map[schema.GroupVersionKind]*composite.Store),
-		config:        config,
-		watcher:       make(chan reconciler.Request, WatcherBufferSize),
-		errorReporter: NewErrorReporter(opts.ErrorChan),
-		logger:        logger,
+		mgr:     mgr,
+		op:      operator,
+		sources: []reconciler.Source{},
+		cache:   make(map[schema.GroupVersionKind]*composite.Store),
+		config:  config,
+		watcher: make(chan reconciler.Request, WatcherBufferSize),
+		logger:  logger,
 	}
+	c.errorReporter = NewErrorReporter(c, opts.ErrorChan)
 
 	name := config.Name
 	if name == "" {
-		return c, c.PushCriticalError(errors.New("invalid controller configuration: empty name"))
+		return c, c.PushCriticalError("invalid controller configuration: empty name")
 	}
 	c.name = name
 	c.log = logger.WithName("controller").WithValues("name", name)
 
 	if len(config.Sources) == 0 {
-		return c, c.PushCriticalError(errors.New("invalid controller configuration: no source"))
+		return c, c.PushCriticalError("invalid controller configuration: no source")
 	}
 
 	emptyTarget := opv1a1.Target{}
 	if config.Target == emptyTarget {
-		return c, c.PushCriticalError(errors.New("invalid controller configuration: no target"))
+		return c, c.PushCriticalError("invalid controller configuration: no target")
 	}
 
 	processor := processRequest
@@ -146,8 +145,8 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 	for _, s := range c.sources {
 		gvk, err := s.GetGVK()
 		if err != nil {
-			return c, c.PushCriticalError(fmt.Errorf("failed to obtain GVK for source %s: %w",
-				util.Stringify(s), err))
+			return c, c.PushCriticalErrorf("failed to obtain GVK for source %s: %w",
+				util.Stringify(s), err)
 		}
 
 		// Init the cache.
@@ -159,21 +158,21 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 			Reconciler:         controllerReconciler,
 		})
 		if err != nil {
-			return c, c.PushCriticalError(fmt.Errorf("failed to create runtime controller "+
-				"for resource %s: %w", gvk.String(), err))
+			return c, c.PushCriticalErrorf("failed to create runtime controller "+
+				"for resource %s: %w", gvk.String(), err)
 		}
 
 		// Set up the watch.
 		src, err := s.GetSource()
 		if err != nil {
-			return c, c.PushCriticalError(fmt.Errorf("failed to create runtime source for "+
-				"resource %s: %w", gvk.String(), err))
+			return c, c.PushCriticalErrorf("failed to create runtime source for "+
+				"resource %s: %w", gvk.String(), err)
 		}
 
 		// Create the watch for the source.
 		if err := ctrl.Watch(src); err != nil {
-			return c, c.PushCriticalError(fmt.Errorf("failed to watch resource %s: %w",
-				gvk.String(), err))
+			return c, c.PushCriticalErrorf("failed to watch resource %s: %w",
+				gvk.String(), err)
 		}
 
 		c.log.V(4).Info("watching resource", "GVK", s.String())
@@ -185,16 +184,16 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 	pipeline, err := pipeline.New(c.op, c.kind, baseviews, c.config.Pipeline,
 		logger.WithName("pipeline").WithValues("controller", c.name, "target-kind", c.kind))
 	if err != nil {
-		return c, c.PushCriticalError(fmt.Errorf("failed to create pipleline for controller %s: %w",
-			c.name, err))
+		return c, c.PushCriticalErrorf("failed to create pipleline for controller %s: %w",
+			c.name, err)
 	}
 	c.pipeline = pipeline
 
 	// Add the controller to the manager (this will automatically start it when Start is called
 	// on the manager, but the reconciler must still be explicitly started).
 	if err := mgr.Add(c); err != nil {
-		return c, c.PushCriticalError(fmt.Errorf("failed to schedule controller %s: %w",
-			c.name, err))
+		return c, c.PushCriticalErrorf("failed to schedule controller %s: %w",
+			c.name, err)
 	}
 
 	c.log.Info("controller ready", "sources", fmt.Sprintf("[%s]", strings.Join(srcs, ",")),
@@ -248,7 +247,7 @@ func (c *Controller) Start(ctx context.Context) error {
 
 			if err := c.processor(ctx, c, req); err != nil {
 				err = fmt.Errorf("error processing watch event: %w", err)
-				c.log.Error(c.PushError(err), "error", "request", req)
+				c.log.Error(c.Push(err), "error", "request", req)
 			}
 		case <-ctx.Done():
 			c.log.V(2).Info("controller terminating")

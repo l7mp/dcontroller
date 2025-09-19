@@ -2,7 +2,6 @@ package controller
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -11,11 +10,16 @@ import (
 
 var _ = Describe("StatusReporter", func() {
 	It("should be able to push errors and return the last", func() {
+		c := &Controller{name: "test-ctrl", op: "test-op"}
 		ch := make(chan error, 1)
-		r := NewErrorReporter(ch)
+		r := NewErrorReporter(c, ch)
 
-		err := errors.New("1")
-		Expect(r.PushError(err)).To(Equal(err))
+		err := r.PushError("1")
+		var operr Error
+		ok := errors.As(err, &operr)
+		Expect(ok).To(BeTrue())
+		Expect(operr.Operator).To(Equal("test-op"))
+		Expect(operr.Controller).To(Equal("test-ctrl"))
 		Expect(r.Top()).To(Equal(err))
 		Expect(r.Size()).To(Equal(1))
 		Expect(r.HasCritical()).To(BeFalse())
@@ -23,8 +27,11 @@ var _ = Describe("StatusReporter", func() {
 		Expect(ok).To(BeTrue())
 		Expect(err2).To(Equal(err))
 
-		err = errors.New("2")
-		Expect(r.PushError(err)).To(Equal(err))
+		err = r.Push(errors.New("2"))
+		ok = errors.As(err, &operr)
+		Expect(ok).To(BeTrue())
+		Expect(operr.Operator).To(Equal("test-op"))
+		Expect(operr.Controller).To(Equal("test-ctrl"))
 		Expect(r.Top()).To(Equal(err))
 		Expect(r.Size()).To(Equal(2))
 		Expect(r.HasCritical()).To(BeFalse())
@@ -32,26 +39,35 @@ var _ = Describe("StatusReporter", func() {
 		Expect(ok).To(BeTrue())
 		Expect(err2).To(Equal(err))
 
-		err = errors.New("3")
-		Expect(r.PushError(err)).To(Equal(err))
+		err = r.PushErrorf("3")
+		ok = errors.As(err, &operr)
+		Expect(ok).To(BeTrue())
+		Expect(operr.Operator).To(Equal("test-op"))
+		Expect(operr.Controller).To(Equal("test-ctrl"))
 		Expect(r.Top()).To(Equal(err))
 		Expect(r.Size()).To(Equal(3))
 		Expect(r.HasCritical()).To(BeFalse())
 		err2, ok = tryReadErrorChannel(ch, interval)
 		Expect(ok).To(BeTrue())
 		Expect(err2).To(Equal(err))
+		ok = errors.As(err, &operr)
+		Expect(ok).To(BeTrue())
+		Expect(operr.Operator).To(Equal("test-op"))
+		Expect(operr.Controller).To(Equal("test-ctrl"))
 
-		err = errors.New("4")
-		Expect(r.PushError(err)).To(Equal(err))
+		err = r.PushError("4")
 		Expect(r.Top()).To(Equal(err))
 		Expect(r.Size()).To(Equal(4))
 		Expect(r.HasCritical()).To(BeFalse())
 		_, ok = tryReadErrorChannel(ch, interval)
 		// the rate limiter let's only the first 3 errors through
 		Expect(ok).To(BeFalse())
+		ok = errors.As(err, &operr)
+		Expect(ok).To(BeTrue())
+		Expect(operr.Operator).To(Equal("test-op"))
+		Expect(operr.Controller).To(Equal("test-ctrl"))
 
-		err = errors.New("5")
-		Expect(r.PushCriticalError(err)).To(Equal(err))
+		err = r.PushCriticalError("5")
 		Expect(r.Top()).To(Equal(err))
 		Expect(r.Size()).To(Equal(5))
 		Expect(r.HasCritical()).To(BeTrue())
@@ -61,15 +77,22 @@ var _ = Describe("StatusReporter", func() {
 
 	It("should hold the last 10 errors", func() {
 		ch := make(chan error, ErrorReporterStackSize+11)
-		r := NewErrorReporter(ch)
+		c := &Controller{name: "test-ctrl", op: "test-op"}
+		r := NewErrorReporter(c, ch)
 
 		errs := [ErrorReporterStackSize + 10]error{}
 		for i := 0; i < ErrorReporterStackSize+10; i++ {
-			errs[i] = fmt.Errorf("%d", i)
-			Expect(r.PushError(errs[i])).To(Equal(errs[i]))
+			errs[i] = r.PushErrorf("%d", i)
 		}
 		Expect(r.Size()).To(Equal(ErrorReporterStackSize))
-		Expect(r.Top()).To(Equal(errs[ErrorReporterStackSize+9]))
+
+		err := r.Top()
+		Expect(err).To(Equal(errs[ErrorReporterStackSize+9]))
+		var operr Error
+		ok := errors.As(err, &operr)
+		Expect(ok).To(BeTrue())
+		Expect(operr.Operator).To(Equal("test-op"))
+		Expect(operr.Controller).To(Equal("test-ctrl"))
 	})
 })
 

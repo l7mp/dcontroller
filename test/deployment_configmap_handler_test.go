@@ -15,14 +15,15 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
 	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
-	"github.com/l7mp/dcontroller/pkg/operator"
 )
 
 const (
@@ -37,6 +38,7 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 			ctx          context.Context
 			cancel       context.CancelFunc
 			dp1, dp2, cm object.Object
+			off          = true
 		)
 
 		BeforeAll(func() {
@@ -61,12 +63,15 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 
 		It("should create and start the operator controller", func() {
 			setupLog.Info("setting up operator controller")
-			c, err := operator.NewController(cfg, ctrl.Options{
+			c, err := controllers.NewOpController(cfg, ctrl.Options{
 				Scheme:                 scheme,
 				LeaderElection:         false, // disable leader-election
 				HealthProbeBindAddress: "0",   // disable health-check
 				Metrics: metricsserver.Options{
 					BindAddress: "0", // disable the metrics server
+				},
+				Controller: config.Controller{
+					SkipNameValidation: &off,
 				},
 				Logger: logger,
 			})

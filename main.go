@@ -28,14 +28,13 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/l7mp/dcontroller/internal/buildinfo"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/apiserver"
-	"github.com/l7mp/dcontroller/pkg/operator"
+	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 )
 
 const APIServerPort = 8443
@@ -79,35 +78,28 @@ func main() {
 	buildInfo := buildinfo.BuildInfo{Version: version, CommitHash: commitHash, BuildDate: buildDate}
 	setupLog.Info(fmt.Sprintf("starting the dcontroller %s", buildInfo.String()))
 
-	c, err := operator.NewController(ctrl.GetConfigOrDie(), ctrl.Options{
+	// Create an operator controller to watch and reconcile Operator CRDs
+	c, err := controllers.NewOpController(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
 		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "92062b70.dcontroller.io",
+		LeaderElectionID:       "92062b70.l7mp.io",
 		Logger:                 logger,
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to set up dcontroller")
-		os.Exit(1)
-	}
-
-	mgr := c.GetManager()
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
-		os.Exit(1)
-	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
+		setupLog.Error(err, "unable to create an operator controller")
 		os.Exit(1)
 	}
 
 	ctx := ctrl.SetupSignalHandler()
 
 	if !disableAPIServer {
-		apiServerConfig, err := apiserver.NewDefaultConfig("0.0.0.0", APIServerPort, c.GetClient(), true, logger)
+		clientMpx := c.GetOperatorGroup().GetClient()
+		apiServerConfig, err := apiserver.NewDefaultConfig("0.0.0.0", APIServerPort,
+			clientMpx, true, logger)
 		if err != nil {
 			setupLog.Error(err, "failed to create the config for the embedded API server")
 			os.Exit(1)
@@ -127,9 +119,8 @@ func main() {
 		}()
 	}
 
-	setupLog.Info("starting operator")
+	setupLog.Info("starting the operator controller")
 	if err := c.Start(ctx); err != nil {
 		setupLog.Error(err, "operator error")
-		os.Exit(1)
 	}
 }

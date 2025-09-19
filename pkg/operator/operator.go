@@ -122,7 +122,6 @@ func NewFromFile(name string, mgr runtimeMgr.Manager, file string, opts Options)
 	if err := yaml.Unmarshal(b, &spec); err != nil {
 		return nil, fmt.Errorf("failed to parse operator spec: %w", err)
 	}
-
 	return New(name, mgr, &spec, opts), nil
 }
 
@@ -192,16 +191,6 @@ func (op *Operator) GetManager() runtimeMgr.Manager {
 // GetName returns the name of the operator.
 func (op *Operator) GetName() string {
 	return op.name
-}
-
-// Trigger can be used to ask a status update trigger on the operator.
-func (op *Operator) Trigger(err error) {
-	if op.errorChan != nil {
-		// this should be async so that we won't block the controller - if someone passed
-		// an errorchannel to the constructor we expect them to actually read what we write
-		// there
-		op.errorChan <- err
-	}
 }
 
 // GetStatus populates the operator status with the controller statuses.

@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -52,12 +53,16 @@ var _ = Describe("Controller test:", Ordered, func() {
 
 		It("should create and start a manager succcessfully", func() {
 			setupLog.Info("setting up controller manager")
+			off := true
 			m, err := manager.New(cfg, "service-type-op", manager.Options{
 				Options: runtimeManager.Options{
 					LeaderElection:         false, // disable leader-election
 					HealthProbeBindAddress: "0",   // disable health-check
 					Metrics: metricsserver.Options{
 						BindAddress: "0", // disable the metrics server
+					},
+					Controller: config.Controller{
+						SkipNameValidation: &off,
 					},
 					Logger: logger,
 				},

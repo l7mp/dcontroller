@@ -11,20 +11,22 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
 	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
-	"github.com/l7mp/dcontroller/pkg/operator"
 	"github.com/l7mp/dcontroller/pkg/util"
 )
 
 var _ = Describe("Operator status report test:", Ordered, func() {
 	Context("When creating a controller with an invalid config", Ordered, Label("controller"), func() {
 		var (
+			off        = true
 			ctrlCtx    context.Context
 			ctrlCancel context.CancelFunc
 		)
@@ -39,12 +41,15 @@ var _ = Describe("Operator status report test:", Ordered, func() {
 
 		It("should create and start the operator controller", func() {
 			setupLog.Info("setting up operator controller")
-			c, err := operator.NewController(cfg, ctrl.Options{
+			c, err := controllers.NewOpController(cfg, ctrl.Options{
 				Scheme:                 scheme,
 				LeaderElection:         false, // disable leader-election
 				HealthProbeBindAddress: "0",   // disable health-check
 				Metrics: metricsserver.Options{
 					BindAddress: "0", // disable the metrics server
+				},
+				Controller: config.Controller{
+					SkipNameValidation: &off,
 				},
 				Logger: logger,
 			})
@@ -135,12 +140,16 @@ spec:
 
 		It("should create and start the operator controller", func() {
 			setupLog.Info("setting up operator controller")
-			c, err := operator.NewController(cfg, ctrl.Options{
+			off := true
+			c, err := controllers.NewOpController(cfg, ctrl.Options{
 				Scheme:                 scheme,
 				LeaderElection:         false, // disable leader-election
 				HealthProbeBindAddress: "0",   // disable health-check
 				Metrics: metricsserver.Options{
 					BindAddress: "0", // disable the metrics server
+				},
+				Controller: config.Controller{
+					SkipNameValidation: &off,
 				},
 				Logger: logger,
 			})
@@ -174,9 +183,7 @@ spec:
                 namespace: "$.metadata.namespace"      
                 annotations:                           
                   "dcontroller.io/container-num":      # add a new annotation indicating the number of containers
-                    '@len': ["$.spec.containers"]      # value is the length of .spec.containers
-        #            '@string':                        # should explicitly force string conversion
-        #              '@len': ["$.spec.containers"]
+                    '@len': ["$.spec.containers"]      # this is deliberately wrong (needs string coercion)
       target:
         apiGroup: ""
         kind: Pod

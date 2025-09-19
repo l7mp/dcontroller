@@ -28,8 +28,8 @@ import (
 
 	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
-	"github.com/l7mp/dcontroller/pkg/operator"
 )
 
 const (
@@ -135,7 +135,7 @@ var _ = Describe("Service health monitor controller test:", Ordered, func() {
 
 	It("should create and start the operator controller", func() {
 		setupLog.Info("setting up operator controller")
-		c, err := operator.NewController(cfg, ctrl.Options{
+		c, err := controllers.NewOpController(cfg, ctrl.Options{
 			Scheme:                 scheme,
 			LeaderElection:         false, // disable leader-election
 			HealthProbeBindAddress: "0",   // disable health-check
@@ -147,7 +147,7 @@ var _ = Describe("Service health monitor controller test:", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		setupLog.Info("obtaining operator client")
-		opClient = c.GetClient()
+		opClient = c.GetOperatorGroup().GetClient()
 		Expect(opClient).NotTo(BeNil())
 
 		setupLog.Info("starting operator controller")
