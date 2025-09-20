@@ -1,5 +1,5 @@
-// Package dbsp implements Database Stream Processing (DBSP) operators for incremental computation
-// on Z-sets (multisets with integer multiplicities). See detailed documentation in
+// Package dbsp (partially) implements Database Stream Processing (DBSP) operators for incremental
+// computation on Z-sets (multisets with integer multiplicities). See detailed documentation in
 // https://mihaibudiu.github.io/work/dbsp-spec.pdf.
 //
 // DBSP provides the theoretical foundation for Δ-controller's incremental view maintenance.
@@ -18,11 +18,8 @@
 //   - Bilinear: Join operations (multiplication-like semantics).
 //   - Nonlinear: Complex transformations that don't preserve linearity.
 //
-// The DBSP implementation supports:
-//   - Incremental view maintenance with O(|changes|) complexity.
-//   - Operator fusion for performance optimization.
-//   - Mathematical correctness based on DBSP theory.
-//   - Support for complex relational operations.
+// The DBSP implementation supports incremental view maintenance (IVM) with O(|changes|) complexity
+// and operator fusion for performance optimization.
 //
 // Example usage:
 //

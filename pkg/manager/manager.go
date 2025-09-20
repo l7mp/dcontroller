@@ -5,17 +5,6 @@
 // integration with the composite client system, enabling controllers to work
 // with both native Kubernetes resources and view objects through a unified interface.
 //
-// Key components:
-//   - Manager: Enhanced manager with composite client integration.
-//   - FakeManager: Testing implementation with mock clients and caches.
-//
-// Features:
-//   - Automatic composite client and cache setup.
-//   - Transparent view object support.
-//   - Compatible with standard controller-runtime patterns.
-//   - Enhanced testing utilities with fake implementations.
-//   - Support for both native and view resource types.
-//
 // The manager automatically configures the composite client as the default
 // client, ensuring that all controllers receive the enhanced client capabilities
 // without requiring code changes.

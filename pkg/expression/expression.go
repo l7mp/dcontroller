@@ -6,13 +6,6 @@
 // like label selectors. Expressions are serialized as JSON and can be embedded
 // in pipeline specifications.
 //
-// Key components:
-//   - Expression: Core expression type with operation and arguments.
-//   - EvalCtx: Evaluation context containing the target object and logger.
-//   - Converter functions: Type conversion and validation utilities.
-//   - JSONPath support: Access nested fields in Kubernetes objects.
-//   - Selector support: Kubernetes label and field selector evaluation.
-//
 // Expression operations include:
 //   - Field access: "$.metadata.name", "$.spec.containers[0].image".
 //   - Boolean logic: @and, @or, @not, @eq, @ne, @lt, @gt.

@@ -5,12 +5,6 @@
 // aggregated to produce target view objects. They support complex relational
 // operations while maintaining incremental update semantics for efficiency.
 //
-// Key components:
-//   - Pipeline: Main pipeline processor with DBSP executor integration.
-//   - Evaluator: Interface for pipeline evaluation.
-//   - Pipeline operators: Selection, projection, join, aggregation operations.
-//   - ZSet adaptors: Convert between Kubernetes objects and DBSP Z-sets.
-//
 // Pipeline operations:
 //   - @join: Combine multiple resource types with boolean conditions.
 //   - @select: Filter objects based on boolean expressions.

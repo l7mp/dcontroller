@@ -1,21 +1,9 @@
-// Package operator implements the top-level Operator controller that manages
-// the lifecycle of declarative controller specifications.
+// Package operator is the top-level Operator abstraction that implement the declarative controller
+// specifications.
 //
-// The operator watches Operator custom resources and creates/manages the
-// corresponding Δ-controllers based on their specifications. It provides
-// the bridge between declarative YAML specifications and the imperative
-// controller runtime.
-//
-// Key components:
-//   - Operator: Main operator that manages controller lifecycles.
-//   - OperatorController: Kubernetes controller that reconciles Operator CRs.
-//
-// The operator supports:
-//   - Dynamic controller creation from Operator CRs.
-//   - Lifecycle management (create, update, delete controllers).
-//   - Status reporting for managed controllers.
-//   - Optional API server integration for view object access.
-//   - Error handling and recovery.
+// The operator creates/manages the corresponding Δ-controllers based on their specifications. It
+// provides the bridge between declarative YAML specifications and the imperative controller
+// runtime.
 //
 // Example usage:
 //
@@ -23,7 +11,6 @@
 //	    APIServer: server,
 //	    Logger: logger,
 //	})
-//	return mgr.Add(op)
 package operator
 
 import (

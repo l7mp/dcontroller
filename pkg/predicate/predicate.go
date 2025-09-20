@@ -4,12 +4,6 @@
 // Predicates allow controllers to selectively watch and process resource changes that match
 // specific criteria, improving performance and reducing unnecessary reconciliation work.
 //
-// Key components:
-//   - Predicate: Serializable predicate interface.
-//   - BasicPredicate: Simple predicate types (GenerationChanged, etc.).
-//   - BoolPredicate: Boolean logic combinators (And, Or, Not).
-//   - Interface: Conversion to controller-runtime predicates.
-//
 // Supported predicate types:
 //   - GenerationChanged: Triggers on metadata.generation changes.
 //   - ResourceVersionChanged: Triggers on any resource changes.

@@ -13,13 +13,13 @@
 //   - Resource: Base abstraction for Kubernetes resource types.
 //   - Request: Reconciliation request with event metadata.
 //
-// Source features:
+// Sources support:
 //   - Multiple resource types (native Kubernetes and views).
 //   - Label and field selectors for filtering.
 //   - Configurable predicates for change detection.
 //   - Namespace-scoped and cluster-scoped resources.
 //
-// Target types:
+// Targets support:
 //   - Updater: Replaces target object content completely.
 //   - Patcher: Applies strategic merge patches to target objects.
 //

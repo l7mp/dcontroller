@@ -6,15 +6,10 @@
 // resources, process them through declarative pipelines to generate view objects, and manage
 // target resource updates.
 //
-// Key components:
-//   - Controller: Main controller struct that manages the reconciliation lifecycle.
-//   - StatusReporter: Handles controller status reporting and error management.
-//   - ProcessorFunc: Interface for pluggable request processing logic.
-//
 // Controllers support:
 //   - multiple source resource types with optional label selectors,
 //   - declarative pipeline processing with joins and aggregations,
-//   - incremental reconciliation using DBSP (Database Stream Processing),
+//   - incremental reconciliation using DBSP,
 //   - configurable error handling and status reporting, and
 //   - integration with the composite client system.
 //

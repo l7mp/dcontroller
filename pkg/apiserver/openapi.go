@@ -47,7 +47,7 @@ func (s *APIServer) generateOpenAPIDefs(ref openapicommon.ReferenceCallback) map
 		}
 	}
 
-	// Base definitions from Kubernetes for common types
+	// Obtain the base OpenAPI defs from Kubernetes
 	defs := generatedopenapi.GetOpenAPIDefinitions(ref)
 
 	unstructuredDefName := "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.Unstructured"
