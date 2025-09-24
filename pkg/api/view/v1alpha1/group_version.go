@@ -43,7 +43,7 @@ func MapIntoView(operator string, gvk schema.GroupVersionKind) schema.GroupVersi
 	}
 }
 
-// MapIntoView restores a native object back from an operator view into its native GVK.
+// MapFromView restores a native object from an operator view into its native GVK.
 func MapFromView(gvk schema.GroupVersionKind) (schema.GroupVersionKind, error) {
 	if !IsViewGroup(gvk.Group) {
 		return schema.GroupVersionKind{}, errors.New("not a view resource")
