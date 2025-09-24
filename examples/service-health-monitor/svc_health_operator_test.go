@@ -147,7 +147,7 @@ var _ = Describe("Service health monitor controller test:", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		setupLog.Info("obtaining operator client")
-		opClient = c.GetOperatorGroup().GetClient()
+		opClient = c.GetClient()
 		Expect(opClient).NotTo(BeNil())
 
 		setupLog.Info("starting operator controller")

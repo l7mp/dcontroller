@@ -97,7 +97,7 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 
 	if !disableAPIServer {
-		clientMpx := c.GetOperatorGroup().GetClient()
+		clientMpx := c.GetClient()
 		apiServerConfig, err := apiserver.NewDefaultConfig("0.0.0.0", APIServerPort,
 			clientMpx, true, logger)
 		if err != nil {

@@ -21,17 +21,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/apiserver"
 	"github.com/l7mp/dcontroller/pkg/controller"
 	"github.com/l7mp/dcontroller/pkg/operator"
 	"github.com/l7mp/dcontroller/pkg/util"
 )
 
 type OpController struct {
-	client.Client
-	mgr     runtimeMgr.Manager
-	opgroup *operator.Group
-	log     logr.Logger
+	*operator.Group
+	k8sClient client.Client
+	mgr       runtimeMgr.Manager
+	log       logr.Logger
 }
 
 // NewOpController creates a new Kubernetes controller that handles the Operator CRDs. OpController
@@ -61,10 +60,10 @@ func NewOpController(config *rest.Config, opts runtimeMgr.Options) (*OpControlle
 	}
 
 	ctrl := &OpController{
-		mgr:     mgr,
-		Client:  mgr.GetClient(),
-		opgroup: operator.NewGroup(config, logger),
-		log:     logger.WithName("op-ctrl"),
+		mgr:       mgr,
+		k8sClient: mgr.GetClient(),
+		Group:     operator.NewGroup(config, logger),
+		log:       logger.WithName("op-ctrl"),
 	}
 
 	// Create a OpController to watch and reconcile the Operator CRD.
@@ -91,14 +90,10 @@ func NewOpController(config *rest.Config, opts runtimeMgr.Options) (*OpControlle
 	return ctrl, nil
 }
 
-// GetOperatorGroup returns the operator group that handles the reconciled operators.
-func (c *OpController) GetOperatorGroup() *operator.Group { return c.opgroup }
-
-// SetAPIServer allows to set the embedded API server uf the underlying operator group. The API
-// server lifecycle is not managed by the operator; make sure to run apiServer.Start before calling
-// Start on the oparator.
-func (c *OpController) SetAPIServer(apiServer *apiserver.APIServer) {
-	c.opgroup.SetAPIServer(apiServer)
+// GetK8sClient returns the native Kubernetes client for the operator. To get the client-multiplex
+// for the operator group of the operator use GetClient().
+func (c *OpController) GetK8sClient() client.Client {
+	return c.k8sClient
 }
 
 // Reconcile runs the reconciliation logic for the OpController
@@ -109,17 +104,17 @@ func (c *OpController) Reconcile(ctx context.Context, req reconcile.Request) (re
 
 	opName := req.Name
 	spec := opv1a1.Operator{}
-	err := c.Get(ctx, req.NamespacedName, &spec)
+	err := c.k8sClient.Get(ctx, req.NamespacedName, &spec)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			c.opgroup.DeleteOperator(opName)
+			c.DeleteOperator(opName)
 			return reconcile.Result{}, nil
 		}
 		log.Error(err, "failed to get Operator")
 		return reconcile.Result{}, err
 	}
 
-	op, err := c.opgroup.UpsertOperator(opName, &spec.Spec)
+	op, err := c.UpsertOperator(opName, &spec.Spec)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -132,7 +127,7 @@ func (c *OpController) Reconcile(ctx context.Context, req reconcile.Request) (re
 func (c *OpController) Start(ctx context.Context) error {
 	// Start the operator group.
 	go func() {
-		if err := c.opgroup.Start(ctx); err != nil {
+		if err := c.Group.Start(ctx); err != nil {
 			c.log.Error(err, "operator exited with an error")
 		}
 	}()
@@ -147,13 +142,13 @@ func (c *OpController) Start(ctx context.Context) error {
 	// Surface errors from the operator group and generate CRD statuses.
 	for {
 		select {
-		case err := <-c.opgroup.GetErrorChannel():
+		case err := <-c.GetErrorChannel():
 			var operr controller.Error
 			if errors.As(err, &operr) {
 				c.log.Error(err, "controller error", "operator", operr.Operator,
 					"controller", operr.Controller)
 
-				if op := c.opgroup.GetOperator(operr.Operator); op == nil {
+				if op := c.GetOperator(operr.Operator); op == nil {
 					c.log.Error(err, "spurious controller error: operator no longer avalialble",
 						"operator", operr.Operator, "controller", operr.Controller)
 				} else {
@@ -176,7 +171,7 @@ func (c *OpController) updateStatus(ctx context.Context, op *operator.Operator) 
 		attempt++
 
 		spec := opv1a1.Operator{}
-		if err := c.Get(ctx, key, &spec); err != nil {
+		if err := c.k8sClient.Get(ctx, key, &spec); err != nil {
 			return err
 		}
 
@@ -184,7 +179,7 @@ func (c *OpController) updateStatus(ctx context.Context, op *operator.Operator) 
 
 		c.log.V(2).Info("updating status", "attempt", attempt, "status", util.Stringify(spec.Status))
 
-		if err := c.Status().Update(ctx, &spec); err != nil {
+		if err := c.k8sClient.Status().Update(ctx, &spec); err != nil {
 			c.log.Error(err, "failed to update status", "attempt", attempt)
 			return err
 		}
