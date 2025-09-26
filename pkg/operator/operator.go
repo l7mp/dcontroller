@@ -180,6 +180,12 @@ func (op *Operator) GetName() string {
 	return op.name
 }
 
+// GetErrorChannel returns the channel that can be used to retrieve the runtime errors from the
+// operator.
+func (op *Operator) GetErrorChannel() chan error {
+	return op.errorChan
+}
+
 // GetStatus populates the operator status with the controller statuses.
 func (op *Operator) GetStatus(gen int64) opv1a1.OperatorStatus {
 	cs := []opv1a1.ControllerStatus{}

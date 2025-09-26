@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -11,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/yaml"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
@@ -85,27 +87,25 @@ func (g *Group) GetOperator(name string) *Operator {
 	return op.op
 }
 
+// NewFromFile creates a new operator from a serialized operator spec.
+func (g *Group) AddOperatorFromFile(name string, file string) (*Operator, error) {
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+	var spec opv1a1.OperatorSpec
+	if err := yaml.Unmarshal(b, &spec); err != nil {
+		return nil, fmt.Errorf("failed to parse operator spec: %w", err)
+	}
+	return g.AddOperator(name, &spec)
+}
+
 // AddOperator registers an operator with the group.
 func (g *Group) AddOperator(name string, spec *opv1a1.OperatorSpec) (*Operator, error) {
 	g.log.V(4).Info("adding operator", "name", name)
 
-	// disable leader-election, health-check and the metrics server on the embedded manager
-	off := true
-	opts := runtimeManager.Options{
-		LeaderElection:         false,
-		HealthProbeBindAddress: "0",
-		// Disable global controller name uniquness test
-		Controller: config.Controller{
-			SkipNameValidation: &off,
-		},
-		Metrics: metricsserver.Options{
-			BindAddress: "0",
-		},
-		Logger: g.logger,
-	}
-
 	// First create a manager for this operator
-	mgr, err := manager.New(g.config, name, manager.Options{Options: opts})
+	mgr, err := manager.New(g.config, name, manager.Options{Options: g.newDefaultOpts()})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create manager for operator %s: %w",
 			name, err)
@@ -213,4 +213,21 @@ func (g *Group) getOperatorEntry(name string) *opEntry {
 	op := g.operators[name]
 	g.mu.Unlock()
 	return op
+}
+
+func (g *Group) newDefaultOpts() runtimeManager.Options {
+	// disable leader-election, health-check and the metrics server on the embedded manager
+	off := true
+	return runtimeManager.Options{
+		LeaderElection:         false,
+		HealthProbeBindAddress: "0",
+		// Disable global controller name uniquness test
+		Controller: config.Controller{
+			SkipNameValidation: &off,
+		},
+		Metrics: metricsserver.Options{
+			BindAddress: "0",
+		},
+		Logger: g.logger,
+	}
 }
