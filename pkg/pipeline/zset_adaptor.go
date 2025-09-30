@@ -164,18 +164,73 @@ func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, view string) ([]o
 // results. To remove this ambiguity, we maintain a target cache that contains the latest known
 // state of the target view and we take the (doc->+/-1) pairs in any order from the zset result
 // set. The rules are as follows:
-//   - additions (doc->+1): we extract the primary key from doc and immediately upsert the doc into
-//     the cache with that key and add the upsert delta to our result set, possibly overwriting any
-//     previous delta for the same key.
-//   - deletions (doc->-1): we again extract the primary key from doc and first we fetch the
-//     current entry from the cache and check if doc==doc. If there is no entry in the cache for the
-//     key or the latest state equals the doc to be deleted, we add the delete to the cache and the
-//     result delta, otherwise we drop the delete event and move on.
+//  1. If there is only a single add/delete for the same primary key, we add/delete is to the cache
+//     and the target delta.
+//  2. If there are at least 2 adds/deletes to the same key:
+//     - additions (doc->+1): we extract the primary key from doc and immediately upsert the doc
+//     into the cache with that key and add the upsert delta to our result set, possibly
+//     overwriting any previous delta for the same key.
+//     - deletions (doc->-1): we again extract the primary key from doc and first we fetch the
+//     current entry from the cache and check if doc==doc. If there is no entry in the cache for
+//     the key or the latest state equals the doc to be deleted, we add the delete to the cache
+//     and the result delta, otherwise we drop the delete event and move on.
+//
+// NOTE: this heuristics may still lead to problems, e.g., if there is a delete followed by an add
+// to an object that contains a dynami field (e.g., @now), in which case the delete will fail to
+// find the exact same object in the target cache (since the timestamps differ)
+type deltaCounter struct {
+	count int
+	delta object.Delta
+}
+
 func (p *Pipeline) Reconcile(ds []object.Delta) ([]object.Delta, error) {
 	deltaCache := map[string]object.Delta{}
+	uniqueDeltaList := map[string]deltaCounter{}
 
 	for _, d := range ds {
 		key := client.ObjectKeyFromObject(d.Object).String()
+		dc, ok := uniqueDeltaList[key]
+		if ok {
+			dc.count += 1
+		} else {
+			dc.count = 1
+			dc.delta = d
+		}
+		uniqueDeltaList[key] = dc
+	}
+
+	// If there is a single add/delete for the same primary key, we add/delete is to the cache
+	// and the target delta.
+	for key, dc := range uniqueDeltaList {
+		if dc.count == 1 {
+			d := dc.delta
+			switch d.Type {
+			case object.Added:
+				if err := p.targetCache.Add(d.Object); err != nil {
+					return nil, err
+				}
+				d.Type = object.Upserted
+				deltaCache[key] = d
+
+			case object.Deleted:
+				if err := p.targetCache.Delete(d.Object); err != nil {
+					return nil, err
+				}
+				d.Type = object.Deleted
+				deltaCache[key] = d
+
+			default:
+				return nil, fmt.Errorf("unknown delta in zset: %s", d.Type)
+			}
+		}
+	}
+
+	// If there are at least 2 adds/deletes to the same key
+	for _, d := range ds {
+		key := client.ObjectKeyFromObject(d.Object).String()
+		if uniqueDeltaList[key].count == 1 {
+			continue
+		}
 
 		switch d.Type {
 		case object.Added:
