@@ -95,6 +95,8 @@ func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, e
 	// Create the HTTP middleware for the inecure HTTP server.
 	config.BuildHandlerChainFunc = func(apiHandler http.Handler, c *genericapiserver.Config) http.Handler {
 		handler := genericfilters.WithWaitGroup(apiHandler, c.LongRunningFunc, c.NonLongRunningRequestWaitGroup)
+		handler = genericapifilters.WithAudit(handler, c.AuditBackend, c.AuditPolicyRuleEvaluator, c.LongRunningFunc)
+		handler = genericapifilters.WithAuditInit(handler)
 		middleware := genericapifilters.WithRequestInfo(handler, c.RequestInfoResolver)
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			dump, err := httputil.DumpRequest(r, true) // true = include body

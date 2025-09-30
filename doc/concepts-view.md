@@ -36,6 +36,8 @@ The GVK for a view is determined dynamically based on the name of the `Operator`
 
 Note that you don't have to specify the API group, the version and the kind in the pipeline: Δ-controller is smart enough to deduce that from the context. However, for a controller to create or update a view object its pipeline **must** produce an object that adheres to the above rules.
 
+Note further that views whose Kind starts with 2 underscores (i.e., `__`) are considered internal: they behave in exactly the same way as ordinary views but you cannot create or update them via the extension API server.
+
 ## Example: A Two-Stage Controller Chain
 
 Let's build an operator that creates a `ConfigMap` alert whenever a `Deployment` is scaled above 3 replicas. We'll use a view to decouple the logic for monitoring replica counts from the logic for creating the alert.

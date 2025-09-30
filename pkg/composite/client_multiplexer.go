@@ -116,7 +116,7 @@ func (m *clientMultiplexer) getClientForGroup(group, kind string) (client.Client
 
 // Get retrieves an obj for the given object key.
 func (m *clientMultiplexer) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	m.log.V(3).Info("GET", "GVK", client.ObjectKeyFromObject(obj).String())
+	m.log.V(3).Info("GET", "GVK", obj.GetObjectKind().GroupVersionKind().String(), "key", key.String())
 
 	c, err := m.getClientForObject(obj)
 	if err != nil {
@@ -145,7 +145,8 @@ func (m *clientMultiplexer) Apply(_ context.Context, _ runtime.ApplyConfiguratio
 
 // Create saves the object obj.
 func (m *clientMultiplexer) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-	m.log.V(3).Info("CREATE", "GVK", client.ObjectKeyFromObject(obj).String())
+	m.log.V(3).Info("CREATE", "GVK", obj.GetObjectKind().GroupVersionKind().String(),
+		"key", client.ObjectKeyFromObject(obj).String())
 
 	c, err := m.getClientForObject(obj)
 	if err != nil {
@@ -156,7 +157,8 @@ func (m *clientMultiplexer) Create(ctx context.Context, obj client.Object, opts 
 
 // Delete deletes the given obj.
 func (m *clientMultiplexer) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
-	m.log.V(3).Info("DELETE", "GVK", client.ObjectKeyFromObject(obj).String())
+	m.log.V(3).Info("DELETE", "GVK", obj.GetObjectKind().GroupVersionKind().String(),
+		"key", client.ObjectKeyFromObject(obj).String())
 
 	c, err := m.getClientForObject(obj)
 	if err != nil {
@@ -167,7 +169,8 @@ func (m *clientMultiplexer) Delete(ctx context.Context, obj client.Object, opts 
 
 // Update updates the given obj.
 func (m *clientMultiplexer) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-	m.log.V(3).Info("UPDATE", "GVK", client.ObjectKeyFromObject(obj).String())
+	m.log.V(3).Info("UPDATE", "GVK", obj.GetObjectKind().GroupVersionKind().String(),
+		"key", client.ObjectKeyFromObject(obj).String())
 
 	c, err := m.getClientForObject(obj)
 	if err != nil {
@@ -178,7 +181,8 @@ func (m *clientMultiplexer) Update(ctx context.Context, obj client.Object, opts 
 
 // Patch patches the given obj.
 func (m *clientMultiplexer) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-	m.log.V(3).Info("PATCH", "GVK", client.ObjectKeyFromObject(obj).String())
+	m.log.V(3).Info("PATCH", "GVK", obj.GetObjectKind().GroupVersionKind().String(),
+		"key", client.ObjectKeyFromObject(obj).String())
 
 	c, err := m.getClientForObject(obj)
 	if err != nil {
@@ -189,7 +193,7 @@ func (m *clientMultiplexer) Patch(ctx context.Context, obj client.Object, patch 
 
 // DeleteAllOf deletes all objects of the given type matching the given options.
 func (m *clientMultiplexer) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
-	m.log.V(3).Info("DELETE-ALL", "GVK", client.ObjectKeyFromObject(obj).String())
+	m.log.V(3).Info("DELETE-ALL", "GVK", obj.GetObjectKind().GroupVersionKind().String())
 
 	c, err := m.getClientForObject(obj)
 	if err != nil {

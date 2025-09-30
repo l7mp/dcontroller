@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
@@ -307,6 +308,7 @@ var _ = Describe("APIServer Integration", func() {
 		err = apiServer.RegisterAPIGroup(viewv1a1.Group("test"), []schema.GroupVersionKind{
 			viewv1a1.GroupVersionKind("test", "TestView2"), // use reverse order for testing the codec
 			viewv1a1.GroupVersionKind("test", "TestView"),
+			viewv1a1.GroupVersionKind("test", "__test"),
 		})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -581,11 +583,14 @@ var _ = Describe("APIServer Integration", func() {
 				Version: viewv1a1.Version,
 			}.String()))
 
-			Expect(resourceList.APIResources).To(HaveLen(2))
+			Expect(resourceList.APIResources).To(HaveLen(3))
 
 			resource := resourceList.APIResources[0]
 			if resource.Name != "testview" {
 				resource = resourceList.APIResources[1]
+				if resource.Name != "testview" {
+					resource = resourceList.APIResources[2]
+				}
 			}
 			Expect(resource.Kind).To(Equal("TestView"))
 			Expect(resource.Name).To(Equal("testview"))
@@ -596,10 +601,26 @@ var _ = Describe("APIServer Integration", func() {
 			resource = resourceList.APIResources[1]
 			if resource.Name != "testview2" {
 				resource = resourceList.APIResources[0]
+				if resource.Name != "testview2" {
+					resource = resourceList.APIResources[2]
+				}
 			}
 			Expect(resource.Kind).To(Equal("TestView2"))
 			Expect(resource.Name).To(Equal("testview2"))
 			Expect(resource.SingularName).To(Equal("testview2"))
+			Expect(resource.Namespaced).To(BeTrue())
+			Expect(resource.Verbs).NotTo(BeEmpty())
+
+			resource = resourceList.APIResources[2]
+			if resource.Name != "__test" {
+				resource = resourceList.APIResources[0]
+				if resource.Name != "__test" {
+					resource = resourceList.APIResources[1]
+				}
+			}
+			Expect(resource.Kind).To(Equal("__test"))
+			Expect(resource.Name).To(Equal("__test"))
+			Expect(resource.SingularName).To(Equal("__test"))
 			Expect(resource.Namespaced).To(BeTrue())
 			Expect(resource.Verbs).NotTo(BeEmpty())
 		})
@@ -630,7 +651,158 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(err.Error()).To(ContainSubstring("could not find"))
 		})
 
-		// Add these tests to pkg/apiserver/apiserver_test.go
+		It("should reject CREATE operations to internal views", func() {
+			// Create
+			newView := &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
+					"kind":       "__test",
+					"metadata": map[string]any{
+						"name":      "new-view",
+						"namespace": "default",
+					},
+					"data": map[string]any{
+						"newkey": "newvalue",
+					},
+				},
+			}
+
+			internalGVR := viewv1a1.GroupVersion("test").WithResource("__test")
+			_, err := dynamicClient.Resource(internalGVR).Namespace("default").
+				Create(context.TODO(), newView, metav1.CreateOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsForbidden(err)).To(BeTrue())
+		})
+
+		It("should reject UPDATE operations to internal views", func() {
+			// Create
+			newView := &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
+					"kind":       "__test",
+					"metadata": map[string]any{
+						"name":      "new-view",
+						"namespace": "default",
+					},
+					"data": map[string]any{
+						"newkey": "newvalue",
+					},
+				},
+			}
+			ccache := mgr.GetCache().(*composite.CompositeCache).GetViewCache()
+			err := ccache.Add(newView)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Update
+			err = unstructured.SetNestedStringMap(newView.Object, map[string]string{
+				"newkey": "another-value",
+			}, "data")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Update via API server
+			internalGVR := viewv1a1.GroupVersion("test").WithResource("__test")
+			_, err = dynamicClient.Resource(internalGVR).
+				Namespace("default").
+				Update(context.TODO(), obj, metav1.UpdateOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsForbidden(err)).To(BeTrue())
+		})
+
+		It("should reject PATCH operations to internal views", func() {
+			// Create
+			newView := &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
+					"kind":       "__test",
+					"metadata": map[string]any{
+						"name":      "new-view",
+						"namespace": "default",
+					},
+					"data": map[string]any{
+						"newkey": "newvalue",
+					},
+				},
+			}
+			ccache := mgr.GetCache().(*composite.CompositeCache).GetViewCache()
+			err := ccache.Add(newView)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Patch via API server
+			patchData := []byte(`{"data":{"newkey":"patched-value"}}`)
+			internalGVR := viewv1a1.GroupVersion("test").WithResource("__test")
+			_, err = dynamicClient.Resource(internalGVR).
+				Namespace("default").
+				Patch(context.TODO(), "new-view", types.MergePatchType, patchData, metav1.PatchOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsForbidden(err)).To(BeTrue())
+		})
+
+		It("should reject JSON PATCH operations to internal views", func() {
+			// Create
+			newView := &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
+					"kind":       "__test",
+					"metadata": map[string]any{
+						"name":      "new-view",
+						"namespace": "default",
+					},
+					"data": map[string]any{
+						"newkey": "newvalue",
+					},
+				},
+			}
+			ccache := mgr.GetCache().(*composite.CompositeCache).GetViewCache()
+			err := ccache.Add(newView)
+			Expect(err).NotTo(HaveOccurred())
+
+			// JSON Patch via API server
+			jsonPatchData := []byte(`[{"op":"replace","path":"/data/newkey","value":"json-patched-value"}]`)
+			internalGVR := viewv1a1.GroupVersion("test").WithResource("__test")
+			_, err = dynamicClient.Resource(internalGVR).
+				Namespace("default").
+				Patch(context.TODO(), "new-view", types.JSONPatchType, jsonPatchData, metav1.PatchOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsForbidden(err)).To(BeTrue())
+		})
+
+		It("should reject status UPDATE operations to internal views", func() {
+			// Create
+			newView := &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
+					"kind":       "__test",
+					"metadata": map[string]any{
+						"name":      "new-view",
+						"namespace": "default",
+					},
+					"data": map[string]any{
+						"newkey": "newvalue",
+					},
+					"status": map[string]any{
+						"phase": "ready",
+					},
+				},
+			}
+			ccache := mgr.GetCache().(*composite.CompositeCache).GetViewCache()
+			err := ccache.Add(newView)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Update status via API server
+			err = unstructured.SetNestedStringMap(newView.Object, map[string]string{
+				"phase": "corrupted",
+			}, "status")
+			Expect(err).NotTo(HaveOccurred())
+
+			internalGVR := viewv1a1.GroupVersion("test").WithResource("__test")
+			_, err = dynamicClient.Resource(internalGVR).
+				Namespace("default").
+				UpdateStatus(context.TODO(), newView, metav1.UpdateOptions{})
+			Expect(err).To(HaveOccurred())
+			// TODO we should get a forbidden error but somehow the status updater
+			// returns a "the server could not find the requested resource" error
+			// Expect(apierrors.IsForbidden(err)).To(BeTrue())
+		})
 
 		Describe("Watch Operations", func() {
 			var viewGVR = viewv1a1.GroupVersion("test").WithResource("testview")

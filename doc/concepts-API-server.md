@@ -59,3 +59,4 @@ The below will set up a watch for all changes to `HealthView` objects:
 ```bash
 kubectl get healthview.svc-health-operator.view.dcontroller.io --watch
 ```
+

@@ -3,6 +3,7 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -207,6 +208,13 @@ func (s *ClientDelegatedStorage) Create(ctx context.Context, obj runtime.Object,
 		}
 	}
 
+	// Check for read-only kinds (those starting with "__")
+	if strings.HasPrefix(s.gvk.Kind, "__") {
+		return nil, apierrors.NewForbidden(
+			s.gvr.GroupResource(), "", // no name yet since we're creating
+			fmt.Errorf("view Kind %q is read-only (kinds starting with '__' cannot be created)", s.gvk.Kind))
+	}
+
 	unstructuredObj, ok := obj.(*unstructured.Unstructured)
 	if !ok {
 		return nil, apierrors.NewBadRequest("object is not unstructured")
@@ -239,6 +247,13 @@ func (s *ClientDelegatedStorage) Create(ctx context.Context, obj runtime.Object,
 // Update updates an existing object.
 func (s *ClientDelegatedStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	s.log.V(4).Info("UPDATE", "GVR", s.gvr.String(), "name", name)
+
+	// Check for read-only kinds (those starting with "__")
+	if strings.HasPrefix(s.gvk.Kind, "__") {
+		return nil, false, apierrors.NewForbidden(
+			s.gvr.GroupResource(), name,
+			fmt.Errorf("view Kind %q is read-only (kinds starting with '__' cannot be modified)", s.gvk.Kind))
+	}
 
 	// Get current object.
 	currentObj, err := s.Get(ctx, name, &metav1.GetOptions{})
