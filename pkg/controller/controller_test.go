@@ -252,6 +252,7 @@ var _ = Describe("Controller", func() {
 			// Push a view object via the view cache
 			err = vcache.Add(view)
 			Expect(err).NotTo(HaveOccurred())
+			object.WithUID(view)
 
 			res := view.DeepCopy()
 			anns := res.GetAnnotations()
@@ -604,6 +605,7 @@ target:
 			}, timeout, retryInterval).Should(BeTrue())
 
 			// Should obtain one object in the rs view: pod1-dep1
+			object.RemoveUID(rs1)
 			Expect(rs1).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
 					"apiVersion": "test.view.dcontroller.io/v1alpha1",
@@ -676,6 +678,7 @@ target:
 				return err == nil
 			}, timeout, retryInterval).Should(BeTrue())
 
+			object.RemoveUID(rs3)
 			Expect(rs3).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
 					"apiVersion": "test.view.dcontroller.io/v1alpha1",

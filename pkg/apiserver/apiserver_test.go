@@ -555,6 +555,48 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(list.Items).To(BeEmpty())
 		})
 
+		It("should handle JSON PATCH operations", func() {
+			// Patch via the API server
+			patchData := []byte(`{"a":"y"}`)
+			_, err := dynamicClient.Resource(viewGVR).
+				Namespace("default").
+				Patch(context.TODO(), "test-view", types.MergePatchType,
+					patchData, metav1.PatchOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Wait until the update has been safely applied
+			Eventually(func() bool {
+				updatedView := object.NewViewObject("test", "TestView")
+				err = cacheClient.Get(context.TODO(), client.ObjectKey{
+					Name:      "test-view",
+					Namespace: "default",
+				}, updatedView)
+				if err != nil {
+					return false
+				}
+
+				if updatedView.GetName() != "test-view" {
+					return false
+				}
+
+				data, found, err := unstructured.NestedString(updatedView.Object, "a")
+				return err == nil || found && data == "y"
+			}, timeout, interval).Should(BeTrue())
+
+			// Retest via the API server
+			Eventually(func() bool {
+				obj, err := dynamicClient.Resource(viewGVR).
+					Namespace("default").
+					Get(context.TODO(), "test-view", metav1.GetOptions{})
+				if err != nil || obj == nil {
+					return false
+				}
+
+				data, found, err := unstructured.NestedString(obj.Object, "a")
+				return err == nil && found && data == "y"
+			}, timeout, interval).Should(BeTrue())
+		})
+
 		It("should allow an API server discovery client to be created and queried", func() {
 			// Create a discovery client
 			discoveryClient, err := discovery.NewDiscoveryClientForConfig(&rest.Config{

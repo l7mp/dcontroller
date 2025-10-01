@@ -145,6 +145,7 @@ var _ = Describe("Pipelines", func() {
 				Expect(delta.IsUnchanged()).To(BeFalse())
 				Expect(delta.Object.GetName()).To(Equal("dep1--pod1"))
 				Expect(delta.Object.GetNamespace()).To(Equal("default"))
+				object.RemoveUID(delta.Object) // strip uid
 				Expect(delta.Object.UnstructuredContent()).To(Equal(map[string]any{
 					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
@@ -171,6 +172,7 @@ var _ = Describe("Pipelines", func() {
 				Expect(delta.IsUnchanged()).To(BeFalse())
 				Expect(delta.Object.GetName()).To(Equal("pod1"))
 				Expect(delta.Object.GetNamespace()).To(Equal("default"))
+				object.RemoveUID(delta.Object)
 				Expect(delta.Object.UnstructuredContent()).To(Equal(map[string]any{
 					"apiVersion": "test.view.dcontroller.io/v1alpha1",
 					"kind":       "view",
@@ -889,7 +891,7 @@ func newPipeline(data string, srcs []string) (Evaluator, error) {
 	for _, view := range srcs {
 		gvks = append(gvks, opv1a1.GroupVersion.WithKind(view))
 	}
-	p, err := New("test", gvk.Kind, gvks, conf, logger)
+	p, err := New("test", target, gvks, conf, logger)
 	if err != nil {
 		return nil, err
 	}

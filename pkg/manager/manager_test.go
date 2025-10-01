@@ -141,6 +141,7 @@ var _ = Describe("Startup", func() {
 			obj := object.NewViewObject("test", "view")
 			object.SetName(obj, "test-ns", "test-obj")
 			object.SetContent(obj, map[string]any{"x": "y"})
+			object.WithUID(obj)
 
 			// must be added via the view-cache: the default client.Add would go to the fake client
 			err = ccache.GetViewCache().Add(obj)
@@ -188,6 +189,7 @@ var _ = Describe("Startup", func() {
 			obj := object.NewViewObject("test", "view")
 			object.SetContent(obj, map[string]any{"a": int64(1)})
 			object.SetName(obj, "ns", "test-1")
+			object.WithUID(obj)
 
 			cache := mgr.GetCache()
 			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))
@@ -230,6 +232,7 @@ var _ = Describe("Startup", func() {
 			retrieved := object.NewViewObject("test", "view")
 			object.SetContent(retrieved, map[string]any{"a": int64(2)})
 			object.SetName(retrieved, "ns", "test-1")
+			object.WithUID(retrieved)
 
 			patch, err := json.Marshal(object.DeepCopy(retrieved).UnstructuredContent())
 			Expect(err).NotTo(HaveOccurred())
@@ -424,6 +427,7 @@ var _ = Describe("Startup", func() {
 			object.SetContent(retrieved, map[string]any{"a": int64(1), "b": int64(2)})
 			Expect(unstructured.SetNestedMap(retrieved.UnstructuredContent(),
 				map[string]any{"ready": "true"}, "status")).NotTo(HaveOccurred())
+			object.WithUID(retrieved)
 
 			// reset obj
 			obj = object.NewViewObject("test", "view")
@@ -490,6 +494,7 @@ var _ = Describe("Startup", func() {
 				},
 			})
 			object.SetName(obj, "ns", "test-1")
+			object.WithUID(obj)
 
 			cache := mgr.GetCache()
 			Expect(cache).Should(BeAssignableToTypeOf(&composite.CompositeCache{}))

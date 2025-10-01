@@ -64,16 +64,16 @@ type Options struct {
 // Controller is a dcontroller reconciler.
 type Controller struct {
 	*errorReporter
-	name, kind, op string
-	config         opv1a1.Controller
-	sources        []reconciler.Source
-	cache          map[schema.GroupVersionKind]*composite.Store // needed to recover deleted objects
-	target         reconciler.Target
-	mgr            runtimeManager.Manager
-	watcher        chan reconciler.Request
-	pipeline       pipeline.Evaluator
-	processor      ProcessorFunc
-	logger, log    logr.Logger
+	name, op    string
+	config      opv1a1.Controller
+	sources     []reconciler.Source
+	cache       map[schema.GroupVersionKind]*composite.Store // needed to recover deleted objects
+	target      reconciler.Target
+	mgr         runtimeManager.Manager
+	watcher     chan reconciler.Request
+	pipeline    pipeline.Evaluator
+	processor   ProcessorFunc
+	logger, log logr.Logger
 }
 
 // New registers a new controller for an operator, given by the source resource(s) the controller
@@ -119,8 +119,11 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 	c.processor = processor
 
 	// Create the target.
-	c.kind = config.Target.Kind // the kind of the target
 	c.target = reconciler.NewTarget(mgr, c.op, config.Target)
+	targetGVK, err := c.target.GetGVK()
+	if err != nil {
+		return c, c.PushCriticalErrorf("invalid target: %w", err)
+	}
 
 	// Create the reconciler.
 	controllerReconciler := NewControllerReconciler(mgr, c)
@@ -176,8 +179,8 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 	}
 
 	// Create the pipeline.
-	pipeline, err := pipeline.New(c.op, c.kind, baseviews, c.config.Pipeline,
-		logger.WithName("pipeline").WithValues("controller", c.name, "target-kind", c.kind))
+	pipeline, err := pipeline.New(c.op, targetGVK, baseviews, c.config.Pipeline,
+		logger.WithName("pipeline").WithValues("controller", c.name, "target", targetGVK.String()))
 	if err != nil {
 		return c, c.PushCriticalErrorf("failed to create pipleline for controller %s: %w",
 			c.name, err)

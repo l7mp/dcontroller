@@ -56,6 +56,7 @@ var _ = Describe("Headless Operator", func() {
 		obj = object.NewViewObject("test", "view")
 		object.SetName(obj, "test-ns", "test-obj")
 		object.SetContent(obj, map[string]any{"x": "y"})
+		object.WithUID(obj)
 		ctx, cancel = context.WithCancel(context.Background())
 	})
 
@@ -212,6 +213,7 @@ var _ = Describe("Headless Operator", func() {
 				"a": "b",
 			},
 		}
+		object.WithUID(expected)
 
 		event, ok := tryWatch(watcher, interval)
 		Expect(ok).To(BeTrue())

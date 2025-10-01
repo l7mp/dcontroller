@@ -58,6 +58,7 @@ var _ = Describe("ViewCache", func() {
 			err := cache.Add(obj)
 			Expect(err).NotTo(HaveOccurred())
 
+			object.WithUID(obj)
 			retrieved := object.DeepCopy(obj)
 			err = cache.Get(ctx, client.ObjectKeyFromObject(retrieved), retrieved)
 			Expect(err).NotTo(HaveOccurred())
@@ -94,6 +95,7 @@ var _ = Describe("ViewCache", func() {
 			for _, obj := range objects {
 				err := cache.Add(obj)
 				Expect(err).NotTo(HaveOccurred())
+				object.WithUID(obj)
 			}
 
 			list := NewViewObjectList("test", "view")
@@ -116,6 +118,7 @@ var _ = Describe("ViewCache", func() {
 			for _, obj := range objects {
 				err := cache.Add(obj)
 				Expect(err).NotTo(HaveOccurred())
+				object.WithUID(obj)
 			}
 
 			list := NewViewObjectList("test", "view")
@@ -140,6 +143,7 @@ var _ = Describe("ViewCache", func() {
 			for _, obj := range objects {
 				err := cache.Add(obj)
 				Expect(err).NotTo(HaveOccurred())
+				object.WithUID(obj)
 			}
 
 			list := NewViewObjectList("test", "view")
@@ -168,6 +172,7 @@ var _ = Describe("ViewCache", func() {
 			object.SetContent(obj, map[string]any{"data": "watch-data"})
 			object.SetName(obj, "ns", "test-watch")
 			cache.Add(obj)
+			object.WithUID(obj)
 
 			watcher, err := cache.Watch(ctx, NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
@@ -188,6 +193,7 @@ var _ = Describe("ViewCache", func() {
 			go func() {
 				time.Sleep(25 * time.Millisecond)
 				cache.Add(obj)
+				object.WithUID(obj)
 			}()
 
 			event, ok := tryWatch(watcher, interval)
@@ -204,6 +210,7 @@ var _ = Describe("ViewCache", func() {
 			object.SetContent(obj, map[string]any{"data": "original data"})
 			object.SetName(obj, "ns", "test-update")
 			cache.Add(obj)
+			object.WithUID(obj)
 
 			updatedObj := object.NewViewObject("test", "view")
 			object.SetContent(updatedObj, map[string]any{"data": "updated data"})
@@ -211,6 +218,7 @@ var _ = Describe("ViewCache", func() {
 			go func() {
 				time.Sleep(25 * time.Millisecond)
 				cache.Update(obj, updatedObj)
+				object.WithUID(updatedObj)
 			}()
 
 			event, ok := tryWatch(watcher, interval)
@@ -234,6 +242,7 @@ var _ = Describe("ViewCache", func() {
 			object.SetContent(obj, map[string]any{"data": "original data"})
 			object.SetName(obj, "ns", "test-delete")
 			cache.Add(obj)
+			object.WithUID(obj)
 
 			go func() {
 				time.Sleep(25 * time.Millisecond)

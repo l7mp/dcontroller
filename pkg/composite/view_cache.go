@@ -203,8 +203,13 @@ func (c *ViewCache) Add(obj object.Object) error {
 		return err
 	}
 
-	// cache does not apply deepcopy to stored objects
+	// The cache does not apply deepcopy to stored objects.
 	obj = object.DeepCopy(obj)
+
+	// Make sure to have a valid UID.
+	object.WithUID(obj)
+
+	// Add object to the cache.
 	if err := cache.Add(obj); err != nil {
 		return err
 	}
@@ -221,8 +226,13 @@ func (c *ViewCache) Add(obj object.Object) error {
 
 // Update modifies the object stored in the cache.
 func (c *ViewCache) Update(oldObj, newObj object.Object) error {
-	gvk := newObj.GetObjectKind().GroupVersionKind()
+	// The cache does not apply deepcopy to stored objects.
+	newObj = object.DeepCopy(newObj)
 
+	// Make sure to have a valid UID (cached views always have an UID).
+	object.WithUID(newObj)
+
+	gvk := newObj.GetObjectKind().GroupVersionKind()
 	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
 		return c.newGroupError(gvk)
 	}
@@ -241,8 +251,6 @@ func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 		return err
 	}
 
-	// cache does not apply deepcopy to stored objects
-	newObj = object.DeepCopy(newObj)
 	if err := cache.Update(newObj); err != nil {
 		return err
 	}

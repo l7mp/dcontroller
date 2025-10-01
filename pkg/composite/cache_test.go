@@ -73,6 +73,7 @@ var _ = Describe("CompositeCache", func() {
 			err := cache.GetViewCache().Add(obj)
 			Expect(err).NotTo(HaveOccurred())
 
+			object.WithUID(obj)
 			retrieved := object.DeepCopy(obj)
 			err = cache.Get(ctx, client.ObjectKeyFromObject(retrieved), retrieved)
 			Expect(err).NotTo(HaveOccurred())
@@ -86,6 +87,7 @@ var _ = Describe("CompositeCache", func() {
 			err = cache.GetViewCache().Add(obj)
 			Expect(err).NotTo(HaveOccurred())
 
+			object.WithUID(obj)
 			retrieved := object.DeepCopy(obj)
 			err = cache.Get(ctx, client.ObjectKeyFromObject(retrieved), retrieved)
 			Expect(err).NotTo(HaveOccurred())
@@ -145,6 +147,10 @@ var _ = Describe("CompositeCache", func() {
 			err := cache.List(ctx, list)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.Items).To(HaveLen(3))
+			for i := range list.Items {
+				delete(list.Items[i].Object["metadata"].(map[string]any), "uid")
+
+			}
 			Expect(list.Items).To(ContainElement(*objects[0]))
 			Expect(list.Items).To(ContainElement(*objects[1]))
 			Expect(list.Items).To(ContainElement(*objects[2]))

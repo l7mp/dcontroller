@@ -56,14 +56,14 @@ type Pipeline struct {
 	rewriter    *dbsp.LinearChainRewriteEngine
 	sources     []schema.GroupVersionKind
 	sourceCache map[schema.GroupVersionKind]*composite.Store
-	target      string
+	target      schema.GroupVersionKind
 	targetCache *composite.Store
 	log         logr.Logger
 }
 
 // New creates a new pipeline from the set of base objects and a seralized pipeline that writes
 // into a given target.
-func New(operator string, target string, sources []schema.GroupVersionKind, config opv1a1.Pipeline, log logr.Logger) (Evaluator, error) {
+func New(operator string, target schema.GroupVersionKind, sources []schema.GroupVersionKind, config opv1a1.Pipeline, log logr.Logger) (Evaluator, error) {
 	if len(sources) > 1 && config.Join == nil {
 		return nil, errors.New("invalid controller configuration: controllers " +
 			"defined on multiple base resources must specify a Join in the pipeline")

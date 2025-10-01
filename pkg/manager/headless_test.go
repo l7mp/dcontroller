@@ -73,6 +73,7 @@ var _ = Describe("Headless Mode", func() {
 		obj := object.NewViewObject("test", "view")
 		object.SetName(obj, "test-ns", "test-obj")
 		object.SetContent(obj, map[string]any{"x": "y"})
+		object.WithUID(obj)
 
 		// client should allow the viewcache to be directly updated
 		c := mgr.GetClient()
@@ -108,6 +109,7 @@ var _ = Describe("Headless Mode", func() {
 		retrieved := object.NewViewObject("test", "view")
 		object.SetContent(retrieved, map[string]any{"a": int64(2)})
 		object.SetName(retrieved, "ns", "test-1")
+		object.WithUID(retrieved)
 
 		patch, err := json.Marshal(object.DeepCopy(retrieved).UnstructuredContent())
 		Expect(err).NotTo(HaveOccurred())
@@ -147,6 +149,7 @@ var _ = Describe("Headless Mode", func() {
 		obj := object.NewViewObject("test", "view")
 		object.SetName(obj, "test-ns", "test-obj")
 		object.SetContent(obj, map[string]any{"x": "y"})
+		object.WithUID(obj)
 
 		err = c.Create(ctx, obj)
 		Expect(err).NotTo(HaveOccurred())

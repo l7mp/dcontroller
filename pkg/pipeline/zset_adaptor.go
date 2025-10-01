@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/l7mp/dcontroller/pkg/composite"
@@ -13,28 +14,32 @@ import (
 
 // ConvertDeltaToZSet converts a delta into a ZSet that can be passed to DBSP.
 func (p *Pipeline) ConvertDeltaToZSet(delta object.Delta) (*dbsp.DocumentZSet, error) {
-	gvk := delta.Object.GetObjectKind().GroupVersionKind()
+	deltaObj := object.DeepCopy(delta.Object)
+	gvk := deltaObj.GetObjectKind().GroupVersionKind()
 	if _, ok := p.sourceCache[gvk]; !ok {
 		p.sourceCache[gvk] = composite.NewStore()
 	}
 
 	var old object.Object
-	if obj, exists, err := p.sourceCache[gvk].Get(delta.Object); err == nil && exists {
+	if obj, exists, err := p.sourceCache[gvk].Get(deltaObj); err == nil && exists {
 		old = obj
 	}
+
+	// Strip UID (if any)
+	object.RemoveUID(deltaObj)
 
 	zset := dbsp.NewDocumentZSet()
 	switch delta.Type {
 	case object.Added:
-		if err := zset.AddDocumentMutate(delta.Object.UnstructuredContent(), 1); err != nil {
+		if err := zset.AddDocumentMutate(deltaObj.UnstructuredContent(), 1); err != nil {
 			return nil, NewPipelineError(
 				fmt.Errorf("processing event %q: could not add object %s to zset: %w",
-					delta.Type, ObjectKey(delta.Object), err))
+					delta.Type, ObjectKey(deltaObj), err))
 		}
 
-		if err := p.sourceCache[gvk].Add(delta.Object); err != nil {
+		if err := p.sourceCache[gvk].Add(deltaObj); err != nil {
 			return nil, fmt.Errorf("processing event %q: could not add object %s to store: %w",
-				delta.Type, ObjectKey(delta.Object), err)
+				delta.Type, ObjectKey(deltaObj), err)
 		}
 
 	case object.Updated, object.Replaced, object.Upserted:
@@ -43,49 +48,49 @@ func (p *Pipeline) ConvertDeltaToZSet(delta object.Delta) (*dbsp.DocumentZSet, e
 			if err := zset.AddDocumentMutate(old.UnstructuredContent(), -1); err != nil {
 				return nil, NewPipelineError(
 					fmt.Errorf("processing event %q: could not add object %s to zset: %w",
-						delta.Type, ObjectKey(delta.Object), err))
+						delta.Type, ObjectKey(deltaObj), err))
 			}
 		}
 
-		if err := zset.AddDocumentMutate(delta.Object.UnstructuredContent(), 1); err != nil {
+		if err := zset.AddDocumentMutate(deltaObj.UnstructuredContent(), 1); err != nil {
 			return nil, NewPipelineError(
 				fmt.Errorf("processing event %q: could not add object %s to zset: %w",
-					delta.Type, ObjectKey(delta.Object), err))
+					delta.Type, ObjectKey(deltaObj), err))
 		}
 
-		if err := p.sourceCache[gvk].Update(delta.Object); err != nil {
+		if err := p.sourceCache[gvk].Update(deltaObj); err != nil {
 			return nil, fmt.Errorf("processing event %q: could not add object %s to store: %w",
-				delta.Type, ObjectKey(delta.Object), err)
+				delta.Type, ObjectKey(deltaObj), err)
 		}
 
 	case object.Deleted:
 		if old == nil {
 			return nil, NewPipelineError(
 				fmt.Errorf("processing event %q: got delete for a nonexistent object %s",
-					delta.Type, ObjectKey(delta.Object)))
+					delta.Type, ObjectKey(deltaObj)))
 		}
 
-		if err := zset.AddDocumentMutate(delta.Object.UnstructuredContent(), -1); err != nil {
+		if err := zset.AddDocumentMutate(deltaObj.UnstructuredContent(), -1); err != nil {
 			return nil, NewPipelineError(
 				fmt.Errorf("processing event %q: could not add object %s to zset: %w",
-					delta.Type, ObjectKey(delta.Object), err))
+					delta.Type, ObjectKey(deltaObj), err))
 		}
 
 		if err := p.sourceCache[gvk].Delete(old); err != nil {
 			return nil, fmt.Errorf("processing event %q: could not delete object %s from store: %w",
-				delta.Type, ObjectKey(delta.Object), err)
+				delta.Type, ObjectKey(deltaObj), err)
 		}
 
 	default:
 		return nil, NewPipelineError(
-			fmt.Errorf("unknown event %q for object %s", delta.Type, ObjectKey(delta.Object)))
+			fmt.Errorf("unknown event %q for object %s", delta.Type, ObjectKey(deltaObj)))
 	}
 
 	return zset, nil
 }
 
 // ConvertZSetToDelta converts a ZSet as returned by DBSP to a delta.
-func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, view string) ([]object.Delta, error) {
+func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, target schema.GroupVersionKind) ([]object.Delta, error) {
 	ds := []object.Delta{}
 
 	docEntries, err := zset.List()
@@ -143,20 +148,21 @@ func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, view string) ([]o
 		}
 		metaMap["name"] = nameStr
 
-		// encapsulate in an object
-		obj := object.NewViewObject(p.operator, view)
+		// Encapsulate in an object.
+		obj := object.New()
 		object.SetContent(obj, doc)
-		// still needed
+		// Enforce namespace/name.
+		obj.SetGroupVersionKind(target)
 		obj.SetName(nameStr)
 		obj.SetNamespace(namespaceStr)
-
+		// Restore UID.
 		ds = append(ds, object.Delta{Object: obj, Type: deltaType})
 	}
 
 	return ds, nil
 }
 
-// Reconcile processes a delta set containing only unrdered(!) add/delete ops into a proper
+// Reconcile processes a delta set containing only unordered(!) add/delete ops into a proper
 // ordered(!) delete/upsert delta list.
 //
 // DBSP outputs onordered zsets so there is no way to know for documents that map to the same

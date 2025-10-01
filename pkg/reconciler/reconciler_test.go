@@ -93,6 +93,7 @@ var _ = Describe("Reconciler", func() {
 		view = object.NewViewObject("test", "view")
 		object.SetName(view, "default", "viewname")
 		object.SetContent(view, map[string]any{"a": int64(1)})
+		object.WithUID(view)
 
 		pod2 = &unstructured.Unstructured{}
 		content, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(podn)
@@ -567,6 +568,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(event.Type).To(Equal(watch.Modified))
 			res := view.DeepCopy()
 			object.SetContent(res, map[string]any{"b": int64(2)})
+			object.WithUID(res)
 			Expect(object.DeepEqual(res, event.Object.(object.Object))).To(BeTrue())
 			// Expect(res).To(Equal(event.Object.(object.Object)))
 
@@ -737,6 +739,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(event.Type).To(Equal(watch.Modified))
 			res := view.DeepCopy()
 			object.SetContent(res, map[string]any{"a": int64(1), "b": int64(2)})
+			object.WithUID(res)
 			Expect(event.Object.(object.Object)).To(Equal(res))
 
 			// TODO this fails since status updates need a working client with a functional Get...
@@ -772,6 +775,7 @@ var _ = Describe("Reconciler", func() {
 			res = view.DeepCopy()
 			object.SetName(res, "default", "viewname")
 			object.SetContent(res, map[string]any{"b": int64(2)})
+			object.WithUID(res)
 			Expect(event.Object).To(Equal(res))
 
 			// Get should not fail now
@@ -824,6 +828,7 @@ var _ = Describe("Reconciler", func() {
 			object.SetContent(retrieved, map[string]any{"a": int64(1)})
 			Expect(unstructured.SetNestedField(retrieved.UnstructuredContent(),
 				map[string]any{"ready": "true"}, "status")).NotTo(HaveOccurred())
+			object.WithUID(retrieved)
 			Expect(event.Object).To(Equal(retrieved))
 
 			// Push a delete to the target
@@ -839,6 +844,7 @@ var _ = Describe("Reconciler", func() {
 			retrieved = view.DeepCopy()
 			object.SetName(retrieved, "default", "viewname")
 			object.SetContent(retrieved, map[string]any{"a": int64(1)})
+			object.WithUID(retrieved)
 			Expect(event.Object).To(Equal(retrieved))
 
 			// Get should not fail now
@@ -974,6 +980,8 @@ var _ = Describe("Reconciler", func() {
 					return false
 				}
 				retrieved.SetAPIVersion("test.view.dcontroller.io/v1alpha1")
+				object.RemoveUID(retrieved)
+				object.RemoveUID(view)
 				return object.DeepEqual(retrieved, view)
 			}, timeout, interval).Should(BeTrue())
 		})

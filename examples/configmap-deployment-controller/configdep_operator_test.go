@@ -210,7 +210,6 @@ var _ = Describe("Configmap-deployment controller test:", Ordered, func() {
 			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(cm2), cm); err != nil {
 				return false
 			}
-
 			dp := &appsv1.Deployment{}
 			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dp1), dp); err != nil {
 				return false
@@ -219,7 +218,6 @@ var _ = Describe("Configmap-deployment controller test:", Ordered, func() {
 			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dp2), dp); err != nil {
 				return false
 			}
-
 			cd := object.New()
 			cd.SetGroupVersionKind(schema.GroupVersionKind{
 				Group:   "dcontroller.io",

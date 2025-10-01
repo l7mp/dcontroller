@@ -83,7 +83,7 @@ func IsViewGroupVersion(gv schema.GroupVersion) bool {
 	return IsViewGroup(gv.Group) && gv.Version == Version
 }
 
-// IsViewGroupVersion checks whether a group-version-kind belongs to a view resource.
+// IsViewKind checks whether a group-version-kind belongs to a view resource.
 func IsViewKind(gvk schema.GroupVersionKind) bool {
 	return IsViewGroupVersion(gvk.GroupVersion())
 }
