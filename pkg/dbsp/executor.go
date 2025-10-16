@@ -94,36 +94,6 @@ func (e *Executor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet, error) {
 	return currentResult, nil
 }
 
-// isIncrementalGraph checks if the graph has been optimized for incremental execution.
-func isIncrementalGraph(graph *ChainGraph) bool {
-	// Check if join is incremental (if it exists)
-	if graph.joinNode != "" {
-		joinOp := graph.nodes[graph.joinNode].Op
-		switch joinOp.(type) {
-		case *IncrementalBinaryJoinOp, *IncrementalJoinOp:
-			// Good - incremental join
-		case *BinaryJoinOp, *JoinOp:
-			// Bad - non-incremental join
-			return false
-		}
-	}
-
-	// Check if there are any I->D pairs that should have been eliminated
-	for i := 0; i < len(graph.chain)-1; i++ {
-		op1 := graph.nodes[graph.chain[i]].Op
-		op2 := graph.nodes[graph.chain[i+1]].Op
-
-		_, isI := op1.(*IntegratorOp)
-		_, isD := op2.(*DifferentiatorOp)
-		if isI && isD {
-			// Should have been eliminated by rewrite engine
-			return false
-		}
-	}
-
-	return true
-}
-
 // Reset resets all stateful nodes (for incremental computation).
 func (e *Executor) Reset() {
 	// Reset join node if it's stateful
