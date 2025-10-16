@@ -467,29 +467,123 @@ func BenchmarkOptimizedLarge(b *testing.B) {
 	}
 }
 
+// prepopulateJoinState processes baseline data to establish initial state for incremental benchmarks
+func prepopulateJoinState(executor *Executor, graph *ChainGraph, users, projects *DocumentZSet) error {
+	deltaInputs := map[string]*DocumentZSet{
+		graph.inputIdx[graph.inputs[0]]: users,
+		graph.inputIdx[graph.inputs[1]]: projects,
+	}
+	_, err := executor.ProcessDelta(deltaInputs)
+	return err
+}
+
+// createSingleUserDelta creates a delta with a single new user
+func createSingleUserDelta(userID int64) *DocumentZSet {
+	delta := NewDocumentZSet()
+	doc, err := newDocumentFromPairs(
+		"user_id", userID,
+		"name", fmt.Sprintf("User_%d", userID),
+		"department", fmt.Sprintf("Dept_%d", userID%10),
+	)
+	if err != nil {
+		panic(err)
+	}
+	err = delta.AddDocumentMutate(doc, 1)
+	if err != nil {
+		panic(err)
+	}
+	return delta
+}
+
+// createUserUpdateDelta creates a delta that updates an existing user (delete old + add new)
+func createUserUpdateDelta(userID int64, oldDept string, newDept string) *DocumentZSet {
+	delta := NewDocumentZSet()
+
+	// Delete old version (multiplicity -1)
+	oldDoc, err := newDocumentFromPairs(
+		"user_id", userID,
+		"name", fmt.Sprintf("User_%d", userID),
+		"department", oldDept,
+	)
+	if err != nil {
+		panic(err)
+	}
+	err = delta.AddDocumentMutate(oldDoc, -1)
+	if err != nil {
+		panic(err)
+	}
+
+	// Add new version (multiplicity +1)
+	newDoc, err := newDocumentFromPairs(
+		"user_id", userID,
+		"name", fmt.Sprintf("User_%d", userID),
+		"department", newDept,
+	)
+	if err != nil {
+		panic(err)
+	}
+	err = delta.AddDocumentMutate(newDoc, 1)
+	if err != nil {
+		panic(err)
+	}
+
+	return delta
+}
+
+// createUserDeleteDelta creates a delta that deletes a user (multiplicity -1)
+func createUserDeleteDelta(userID int64, dept string) *DocumentZSet {
+	delta := NewDocumentZSet()
+	doc, err := newDocumentFromPairs(
+		"user_id", userID,
+		"name", fmt.Sprintf("User_%d", userID),
+		"department", dept,
+	)
+	if err != nil {
+		panic(err)
+	}
+	err = delta.AddDocumentMutate(doc, -1)
+	if err != nil {
+		panic(err)
+	}
+	return delta
+}
+
 // Benchmark with joins (binary join scenario)
 func BenchmarkJoinScenarios(b *testing.B) {
-	// Setup join benchmark data
-	users := createUserData(1000)
-	projects := createProjectData(500)
+	// Setup join benchmark data - baseline state
+	baselineUsers := createUserData(1000)
+	baselineProjects := createProjectData(500)
 
-	// Test different join implementations
-	b.Run("SnapshotJoin", func(b *testing.B) {
+	// User ID for delta operations (outside existing range)
+	newUserID := int64(10000)
+	// Existing user for update/delete operations
+	existingUserID := int64(42)
+	existingUserDept := fmt.Sprintf("Dept_%d", existingUserID%10)
+
+	// Empty delta for projects (no changes)
+	emptyProjectDelta := NewDocumentZSet()
+
+	// Benchmark: Add single user to existing state
+	b.Run("AddUser_Snapshot", func(b *testing.B) {
 		graph := createJoinGraph(false, false) // snapshot join
 		executor, err := NewExecutor(graph, logger)
 		if err != nil {
 			b.Fatalf("Failed to create executor: %v", err)
 		}
 
-		deltaInputs := map[string]*DocumentZSet{
-			graph.inputs[0]: users,
-			graph.inputs[1]: projects,
-		}
+		// Create single user delta
+		singleUserDelta := createSingleUserDelta(newUserID)
 
 		b.ResetTimer()
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
+			// Snapshot: re-processes entire baseline + delta every time
+			allUsers, _ := baselineUsers.Add(singleUserDelta)
+			deltaInputs := map[string]*DocumentZSet{
+				graph.inputIdx[graph.inputs[0]]: allUsers,
+				graph.inputIdx[graph.inputs[1]]: baselineProjects,
+			}
 			result, err := executor.ProcessDelta(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)
@@ -498,24 +592,30 @@ func BenchmarkJoinScenarios(b *testing.B) {
 		}
 	})
 
-	b.Run("IncrementalJoin", func(b *testing.B) {
+	b.Run("AddUser_Incremental", func(b *testing.B) {
 		graph := createJoinGraph(true, false) // incremental join
 		executor, err := NewExecutor(graph, logger)
 		if err != nil {
 			b.Fatalf("Failed to create executor: %v", err)
 		}
 
-		deltaInputs := map[string]*DocumentZSet{
-			graph.inputs[0]: users,
-			graph.inputs[1]: projects,
+		// Pre-populate state with baseline data (outside timer)
+		if err := prepopulateJoinState(executor, graph, baselineUsers, baselineProjects); err != nil {
+			b.Fatalf("Failed to prepopulate state: %v", err)
 		}
+
+		// Create single user delta
+		singleUserDelta := createSingleUserDelta(newUserID)
 
 		b.ResetTimer()
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
-			executor.Reset()
-
+			// Incremental: only processes delta against existing state
+			deltaInputs := map[string]*DocumentZSet{
+				graph.inputIdx[graph.inputs[0]]: singleUserDelta,
+				graph.inputIdx[graph.inputs[1]]: emptyProjectDelta,
+			}
 			result, err := executor.ProcessDelta(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)
@@ -524,24 +624,202 @@ func BenchmarkJoinScenarios(b *testing.B) {
 		}
 	})
 
-	b.Run("OptimizedJoin", func(b *testing.B) {
+	b.Run("AddUser_Optimized", func(b *testing.B) {
 		graph := createJoinGraph(true, true) // incremental + optimized
 		executor, err := NewExecutor(graph, logger)
 		if err != nil {
 			b.Fatalf("Failed to create executor: %v", err)
 		}
 
-		deltaInputs := map[string]*DocumentZSet{
-			graph.inputs[0]: users,
-			graph.inputs[1]: projects,
+		// Pre-populate state with baseline data
+		if err := prepopulateJoinState(executor, graph, baselineUsers, baselineProjects); err != nil {
+			b.Fatalf("Failed to prepopulate state: %v", err)
 		}
+
+		// Create single user delta
+		singleUserDelta := createSingleUserDelta(newUserID)
 
 		b.ResetTimer()
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
-			executor.Reset()
+			deltaInputs := map[string]*DocumentZSet{
+				graph.inputIdx[graph.inputs[0]]: singleUserDelta,
+				graph.inputIdx[graph.inputs[1]]: emptyProjectDelta,
+			}
+			result, err := executor.ProcessDelta(deltaInputs)
+			if err != nil {
+				b.Fatalf("Processing failed: %v", err)
+			}
+			_ = result
+		}
+	})
 
+	// Benchmark: Update single user in existing state
+	b.Run("UpdateUser_Snapshot", func(b *testing.B) {
+		graph := createJoinGraph(false, false)
+		executor, err := NewExecutor(graph, logger)
+		if err != nil {
+			b.Fatalf("Failed to create executor: %v", err)
+		}
+
+		// Create update delta (old dept -> new dept)
+		updateDelta := createUserUpdateDelta(existingUserID, existingUserDept, "NewDept")
+
+		b.ResetTimer()
+		b.ReportAllocs()
+
+		for i := 0; i < b.N; i++ {
+			// Snapshot: re-processes entire state
+			allUsers, _ := baselineUsers.Add(updateDelta)
+			deltaInputs := map[string]*DocumentZSet{
+				graph.inputIdx[graph.inputs[0]]: allUsers,
+				graph.inputIdx[graph.inputs[1]]: baselineProjects,
+			}
+			result, err := executor.ProcessDelta(deltaInputs)
+			if err != nil {
+				b.Fatalf("Processing failed: %v", err)
+			}
+			_ = result
+		}
+	})
+
+	b.Run("UpdateUser_Incremental", func(b *testing.B) {
+		graph := createJoinGraph(true, false)
+		executor, err := NewExecutor(graph, logger)
+		if err != nil {
+			b.Fatalf("Failed to create executor: %v", err)
+		}
+
+		if err := prepopulateJoinState(executor, graph, baselineUsers, baselineProjects); err != nil {
+			b.Fatalf("Failed to prepopulate state: %v", err)
+		}
+
+		updateDelta := createUserUpdateDelta(existingUserID, existingUserDept, "NewDept")
+
+		b.ResetTimer()
+		b.ReportAllocs()
+
+		for i := 0; i < b.N; i++ {
+			deltaInputs := map[string]*DocumentZSet{
+				graph.inputIdx[graph.inputs[0]]: updateDelta,
+				graph.inputIdx[graph.inputs[1]]: emptyProjectDelta,
+			}
+			result, err := executor.ProcessDelta(deltaInputs)
+			if err != nil {
+				b.Fatalf("Processing failed: %v", err)
+			}
+			_ = result
+		}
+	})
+
+	b.Run("UpdateUser_Optimized", func(b *testing.B) {
+		graph := createJoinGraph(true, true)
+		executor, err := NewExecutor(graph, logger)
+		if err != nil {
+			b.Fatalf("Failed to create executor: %v", err)
+		}
+
+		if err := prepopulateJoinState(executor, graph, baselineUsers, baselineProjects); err != nil {
+			b.Fatalf("Failed to prepopulate state: %v", err)
+		}
+
+		updateDelta := createUserUpdateDelta(existingUserID, existingUserDept, "NewDept")
+
+		b.ResetTimer()
+		b.ReportAllocs()
+
+		for i := 0; i < b.N; i++ {
+			deltaInputs := map[string]*DocumentZSet{
+				graph.inputIdx[graph.inputs[0]]: updateDelta,
+				graph.inputIdx[graph.inputs[1]]: emptyProjectDelta,
+			}
+			result, err := executor.ProcessDelta(deltaInputs)
+			if err != nil {
+				b.Fatalf("Processing failed: %v", err)
+			}
+			_ = result
+		}
+	})
+
+	// Benchmark: Delete single user from existing state
+	b.Run("DeleteUser_Snapshot", func(b *testing.B) {
+		graph := createJoinGraph(false, false)
+		executor, err := NewExecutor(graph, logger)
+		if err != nil {
+			b.Fatalf("Failed to create executor: %v", err)
+		}
+
+		deleteDelta := createUserDeleteDelta(existingUserID, existingUserDept)
+
+		b.ResetTimer()
+		b.ReportAllocs()
+
+		for i := 0; i < b.N; i++ {
+			// Snapshot: re-processes entire state
+			allUsers, _ := baselineUsers.Add(deleteDelta)
+			deltaInputs := map[string]*DocumentZSet{
+				graph.inputIdx[graph.inputs[0]]: allUsers,
+				graph.inputIdx[graph.inputs[1]]: baselineProjects,
+			}
+			result, err := executor.ProcessDelta(deltaInputs)
+			if err != nil {
+				b.Fatalf("Processing failed: %v", err)
+			}
+			_ = result
+		}
+	})
+
+	b.Run("DeleteUser_Incremental", func(b *testing.B) {
+		graph := createJoinGraph(true, false)
+		executor, err := NewExecutor(graph, logger)
+		if err != nil {
+			b.Fatalf("Failed to create executor: %v", err)
+		}
+
+		if err := prepopulateJoinState(executor, graph, baselineUsers, baselineProjects); err != nil {
+			b.Fatalf("Failed to prepopulate state: %v", err)
+		}
+
+		deleteDelta := createUserDeleteDelta(existingUserID, existingUserDept)
+
+		b.ResetTimer()
+		b.ReportAllocs()
+
+		for i := 0; i < b.N; i++ {
+			deltaInputs := map[string]*DocumentZSet{
+				graph.inputIdx[graph.inputs[0]]: deleteDelta,
+				graph.inputIdx[graph.inputs[1]]: emptyProjectDelta,
+			}
+			result, err := executor.ProcessDelta(deltaInputs)
+			if err != nil {
+				b.Fatalf("Processing failed: %v", err)
+			}
+			_ = result
+		}
+	})
+
+	b.Run("DeleteUser_Optimized", func(b *testing.B) {
+		graph := createJoinGraph(true, true)
+		executor, err := NewExecutor(graph, logger)
+		if err != nil {
+			b.Fatalf("Failed to create executor: %v", err)
+		}
+
+		if err := prepopulateJoinState(executor, graph, baselineUsers, baselineProjects); err != nil {
+			b.Fatalf("Failed to prepopulate state: %v", err)
+		}
+
+		deleteDelta := createUserDeleteDelta(existingUserID, existingUserDept)
+
+		b.ResetTimer()
+		b.ReportAllocs()
+
+		for i := 0; i < b.N; i++ {
+			deltaInputs := map[string]*DocumentZSet{
+				graph.inputIdx[graph.inputs[0]]: deleteDelta,
+				graph.inputIdx[graph.inputs[1]]: emptyProjectDelta,
+			}
 			result, err := executor.ProcessDelta(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)

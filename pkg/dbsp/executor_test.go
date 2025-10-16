@@ -626,7 +626,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err.Error()).To(ContainSubstring("missing input"))
 		})
 
-		It("should reject non-incremental graphs", func() {
+		It("should accept non-incremental graphs", func() {
 			// Create non-optimized graph
 			inputs := []string{"users", "projects"}
 			badGraph := NewChainGraph()
@@ -634,10 +634,10 @@ var _ = Describe("LinearChainExecutor", func() {
 			badGraph.AddInput(NewInput(inputs[1]))
 			badGraph.SetJoin(NewBinaryJoin(NewFlexibleJoin("id", inputs), inputs)) // Non-incremental join
 
-			// Should reject at executor creation
-			_, err := NewExecutor(badGraph, logger)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("not optimized for incremental execution"))
+			// Should accept at executor creation (with warning logged)
+			executor, err := NewExecutor(badGraph, logger)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(executor).NotTo(BeNil())
 		})
 	})
 

@@ -15,14 +15,10 @@ type Executor struct {
 	log   logr.Logger
 }
 
-// NewExecutor returns a new executor.
+// NewExecutor returns a new executor for evaluating incremental or snapshot graphs.
 func NewExecutor(graph *ChainGraph, log logr.Logger) (*Executor, error) {
 	if err := graph.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid graph: %w", err)
-	}
-
-	if !isIncrementalGraph(graph) {
-		return nil, fmt.Errorf("graph is not optimized for incremental execution")
 	}
 
 	return &Executor{
