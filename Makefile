@@ -91,8 +91,7 @@ HELM_URL ?= "https://l7mp.github.io/dcontroller/"
 
 .PHONY: chart
 chart: helm manifests kustomize
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/helm > chart/helm/templates/all.yaml
+	$(KUSTOMIZE) build config/helm-base > chart/helm/templates/all.yaml
 	$(HELM) package chart/helm -d chart/repo
 	$(HELM) repo index --url $(HELM_URL) chart/repo
 

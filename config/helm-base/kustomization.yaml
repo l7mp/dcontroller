@@ -4,12 +4,11 @@ namespace: dcontroller-system
 resources:
 - ../rbac
 - ../crd
-- ../manager
+- namespace.yaml
 namePrefix: dcontroller
-patches:
- - target:
-      group: apps
-      version: v1
-      kind: Deployment
-      name: dcontroller
-   path: deployment-patch.yaml
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+- files:
+  - manager_config.yaml
+  name: -config

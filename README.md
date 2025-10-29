@@ -229,122 +229,107 @@ kubectl delete operators.dcontroller.io pod-container-num-annotator
 
 ## The API server
 
-Δ-controller includes a custom embedded Kubernetes API server that allows standard kubectl
-clients to inspect, modify or watch operators' view resources.
+Δ-controller includes an embedded Kubernetes API server that allows standard kubectl clients to
+inspect, modify or watch operators' view resources. The API server is deployed automatically with
+the Helm chart and runs inside the dcontroller-manager pod.
 
-### Quick start (HTTP mode - development only)
+### Accessing the API server (development)
 
-For development and testing, you can run the API server in insecure HTTP mode without authentication:
+The default Helm installation runs the API server in HTTP mode without authentication for easy
+local development:
 
-1. Start the operator in HTTP mode with authentication disabled:
+1. Port-forward to the API server:
 
 ```console
-dctl start --http --disable-authentication
+kubectl -n dcontroller-system port-forward deployment/dcontroller-manager 8443:8443 &
 ```
 
-This starts the API server on `http://localhost:8443` with unrestricted access.
-
-2. Generate a kubeconfig pointing to the local HTTP server (outputs to stdout):
+2. Generate a development kubeconfig:
 
 ```console
-dctl generate-config --http --user=dev --namespaces="*" --server-address=localhost:8443 > dev.config
+dctl generate-config --http --insecure --user=dev --namespaces="*" \
+  --server-address=localhost:8443 > dev.config
 export KUBECONFIG=./dev.config
 ```
 
 3. Use kubectl to access view resources:
 
 ```console
-kubectl get myoperator.view.dcontroller.io
+kubectl api-resources | grep view.dcontroller.io
+kubectl get <kind>.<operator>.view.dcontroller.io
 ```
 
-### Production deployment (HTTPS with authentication)
+### Production deployment with authentication
 
-For production deployments, use HTTPS with JWT-based authentication and RBAC authorization:
+For production, redeploy with HTTPS and JWT authentication:
 
-1. Generate TLS certificate and private key:
+1. Generate TLS certificate and create Kubernetes secret:
 
 ```console
 dctl generate-keys
+kubectl create secret tls dcontroller-tls \
+  --cert=apiserver.crt --key=apiserver.key \
+  -n dcontroller-system
 ```
 
-This creates `apiserver.key` (private key) and `apiserver.crt` (certificate). The certificate is used both for TLS encryption and for JWT token validation (the public key is extracted from it).
-
-2. Start the API server with authentication enabled:
+2. Upgrade Helm release to production mode:
 
 ```console
-dctl start --tls-cert-file=apiserver.crt --tls-key-file=apiserver.key
+helm upgrade dcontroller dcontroller/dcontroller \
+  --set apiServer.mode=production \
+  --set apiServer.service.type=LoadBalancer
 ```
 
-The API server will:
-- Serve over HTTPS using the TLS certificate
-- Require valid JWT tokens for all requests
-- Validate tokens using the public key from the certificate
+3. Get the API server address:
 
-3. Create a rules file defining RBAC permissions (using Kubernetes PolicyRule format):
+```console
+kubectl get svc dcontroller-apiserver -n dcontroller-system
+# Note the EXTERNAL-IP or use port-forward for ClusterIP
+```
+
+4. Create RBAC rules file (Kubernetes PolicyRule format):
 
 ```console
 cat > alice-rules.json <<EOF
 [
   {
     "verbs": ["get", "list", "watch"],
-    "apiGroups": [""],
-    "resources": ["pods", "services"]
-  },
-  {
-    "verbs": ["get", "list", "create", "update", "delete"],
-    "apiGroups": ["myoperator.view.dcontroller.io"],
+    "apiGroups": ["*.view.dcontroller.io"],
     "resources": ["*"]
   }
 ]
 EOF
 ```
 
-4. Generate a kubeconfig for a user (outputs to stdout, redirect to file):
+5. Generate user kubeconfig with restricted access:
 
 ```console
-dctl generate-config --user=alice --namespaces=team-a --rules-file=alice-rules.json \
-  --tls-key-file=apiserver.key --server-address=localhost:8443 > alice.config
+dctl generate-config --user=alice --namespaces=team-a \
+  --rules-file=alice-rules.json \
+  --tls-key-file=apiserver.key \
+  --server-address=<EXTERNAL-IP>:8443 > alice.config
 ```
 
-Alternatively, use `--output` to write directly to a file:
-
-```console
-dctl generate-config --user=alice --namespaces=team-a --rules-file=alice-rules.json \
-  --tls-key-file=apiserver.key --server-address=localhost:8443 --output=alice.config
-```
-
-5. Verify the config contents:
+6. Verify and use the kubeconfig:
 
 ```console
 export KUBECONFIG=alice.config
 dctl get-config --tls-cert-file=apiserver.crt
+
+kubectl get <kind>.<operator>.view.dcontroller.io -n team-a  # allowed
+kubectl get <kind>.<operator>.view.dcontroller.io --all-namespaces  # denied
 ```
 
-6. Use the generated kubeconfig to access the API server:
-
-```console
-kubectl get myoperator.view.dcontroller.io
-```
-
-The user `alice` will be restricted to:
-- Namespaces: `team-a`
-- Read-only access to pods and services in core API group
-- Full access to resources in `myoperator.view.dcontroller.io` API group
-
-For admin access with no restrictions, omit the `--rules-file` flag:
+For admin access with no restrictions:
 
 ```console
 dctl generate-config --user=admin --namespaces="*" \
-  --tls-key-file=apiserver.key --server-address=localhost:8443 > admin.config
-export KUBECONFIG=admin.config
+  --tls-key-file=apiserver.key \
+  --server-address=<EXTERNAL-IP>:8443 > admin.config
 ```
 
-### Key differences between HTTP and HTTPS modes
-
-- **HTTP mode (`--http`)**: No TLS encryption, typically used with `--disable-authentication` for local development
-- **HTTPS mode (default)**: TLS encryption required, authentication recommended for production
-- The same TLS certificate is used for both HTTPS encryption and JWT token validation
-- Use `--insecure` flag in `generate-config` to skip TLS verification (for self-signed certificates)
+See the [Helm chart documentation](chart/helm/README.md) for more deployment options including
+NodePort, Gateway API, and advanced configuration.
 
 ## Caveats
 

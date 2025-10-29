@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dcontroller-manager
+  namespace: dcontroller-system
+  labels:
+    control-plane: dcontroller
+spec:
+  selector:
+    matchLabels:
+      control-plane: dcontroller
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: dcontroller
+      labels:
+        control-plane: dcontroller
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - command:
+        - /dctl
+        args:
+        - start
+        - --leader-elect
+{{- if .Values.apiServer.enabled }}
+  {{- if eq .Values.apiServer.mode "production" }}
+        - --tls-cert-file=/etc/dcontroller/tls/tls.crt
+        - --tls-key-file=/etc/dcontroller/tls/tls.key
+  {{- else }}
+        - --http
+        - --disable-authentication
+  {{- end }}
+{{- else }}
+        - --disable-api-server
+{{- end }}
+        image: "{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        name: dcontroller
+        ports:
+        - name: api
+          containerPort: {{ .Values.apiServer.port }}
+          protocol: TCP
+        securityContext:
+          allowPrivilegeEscalation: false
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+{{- if and .Values.apiServer.enabled (eq .Values.apiServer.mode "production") }}
+        volumeMounts:
+        - name: tls
+          mountPath: /etc/dcontroller/tls
+          readOnly: true
+{{- end }}
+{{- if and .Values.apiServer.enabled (eq .Values.apiServer.mode "production") }}
+      volumes:
+      - name: tls
+        secret:
+          secretName: {{ .Values.apiServer.tls.secretName }}
+{{- end }}
+      serviceAccountName: dcontroller-account
+      terminationGracePeriodSeconds: 10
