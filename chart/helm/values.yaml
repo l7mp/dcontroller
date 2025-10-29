@@ -2,3 +2,70 @@ image:
   name: docker.io/l7mp/dcontroller
   tag: latest
   pullPolicy: Always
+
+# API Server configuration
+apiServer:
+  # Enable/disable the embedded API server
+  enabled: true
+
+  # Deployment mode: "development" or "production"
+  # development: HTTP mode, no authentication, ClusterIP service (port-forward access only)
+  # production: HTTPS mode, JWT authentication, configurable service type
+  mode: development
+
+  # Port for the API server
+  port: 8443
+
+  # TLS configuration (only used in production mode)
+  tls:
+    # If enabled, TLS secret must be provided
+    enabled: true
+
+    # Name of the secret containing tls.crt and tls.key
+    # The secret must exist in the dcontroller-system namespace
+    # Create it with: kubectl create secret tls dcontroller-tls --cert=apiserver.crt --key=apiserver.key -n dcontroller-system
+    secretName: dcontroller-tls
+
+    # Alternatively, provide certificate and key directly (they will be created as a secret)
+    # This is useful for initial setup but NOT recommended for production
+    # cert: |
+    #   -----BEGIN CERTIFICATE-----
+    #   ...
+    #   -----END CERTIFICATE-----
+    # key: |
+    #   -----BEGIN PRIVATE KEY-----
+    #   ...
+    #   -----END PRIVATE KEY-----
+
+  # Service configuration
+  service:
+    # Service type: ClusterIP, LoadBalancer, or NodePort
+    # ClusterIP: API server only accessible within cluster (use port-forward)
+    # LoadBalancer: API server exposed with cloud load balancer
+    # NodePort: API server exposed on node ports
+    type: ClusterIP
+
+    # NodePort to use when service.type is NodePort (optional, will be auto-assigned if not specified)
+    # nodePort: 30443
+
+    # Annotations for the service (useful for cloud-specific load balancer configuration)
+    annotations: {}
+      # service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+      # service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+
+  # Gateway API configuration (optional, advanced)
+  # If enabled, creates HTTPRoute for exposing the API server through Gateway API
+  gateway:
+    enabled: false
+    # Name of the Gateway to attach to
+    gatewayName: ""
+    # Namespace of the Gateway
+    gatewayNamespace: ""
+    # Hostname for the HTTPRoute
+    hostname: "dcontroller-api.example.com"
+    # TLS configuration for the HTTPRoute (if different from service TLS)
+    # If not specified, Gateway's TLS configuration will be used
+    tls:
+      enabled: false
+      # Name of the secret containing the certificate
+      secretName: ""

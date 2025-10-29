@@ -7,6 +7,8 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apiserver/pkg/authentication/authenticator"
+	"k8s.io/apiserver/pkg/authorization/authorizer"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/rest"
 	"k8s.io/component-base/compatibility"
@@ -25,8 +27,8 @@ type Config struct {
 	// Addr is the server address.
 	Addr *net.TCPAddr
 
-	// UseHTTP switches the API server to insecure serving mode.
-	UseHTTP bool
+	// HTTPMode switches the API server to insecure serving mode.
+	HTTPMode bool
 
 	// DelegatingClient allows to inject a controller runtime client into the API server that
 	// will be used by the server to serve requests.
@@ -36,13 +38,20 @@ type Config struct {
 	// mostly for testing.
 	DiscoveryClient composite.ViewDiscoveryInterface
 
+	// Authenticator and authorizer
+	Authenticator authenticator.Request
+	Authorizer    authorizer.Authorizer
+
+	// CERT files for TLS
+	CertFile, KeyFile string
+
 	// Logger provides a logger for the API server.
 	Logger logr.Logger
 }
 
 // NewDefaultConfig creates an API server configuration with sensible defaults, either using secure
 // serving (HTTPS) or insecure serving (HTTP) that can be used for testing.
-func NewDefaultConfig(addr string, port int, client client.Client, insecure bool, log logr.Logger) (Config, error) {
+func NewDefaultConfig(addr string, port int, client client.Client, httpMode bool, log logr.Logger) (Config, error) {
 	if addr == "" {
 		addr = "localhost"
 	}
@@ -62,11 +71,11 @@ func NewDefaultConfig(addr string, port int, client client.Client, insecure bool
 
 	// Create loopback config
 	config.LoopbackClientConfig = &rest.Config{}
-	if insecure {
+	if httpMode {
 		config.LoopbackClientConfig.Host = fmt.Sprintf("http://%s", bindAddr.String())
 	} else {
 		config.LoopbackClientConfig.Host = fmt.Sprintf("https://%s", bindAddr.String())
-		config.LoopbackClientConfig.TLSClientConfig = rest.TLSClientConfig{Insecure: insecure}
+		config.LoopbackClientConfig.TLSClientConfig = rest.TLSClientConfig{Insecure: httpMode}
 	}
 
 	// Set other required fields
@@ -75,7 +84,7 @@ func NewDefaultConfig(addr string, port int, client client.Client, insecure bool
 	return Config{
 		RecommendedConfig: &genericapiserver.RecommendedConfig{Config: *config},
 		Addr:              bindAddr,
-		UseHTTP:           insecure,
+		HTTPMode:          httpMode,
 		DelegatingClient:  client,
 		Logger:            log,
 	}, nil
@@ -83,5 +92,5 @@ func NewDefaultConfig(addr string, port int, client client.Client, insecure bool
 
 // String returns the status for the API server.
 func (c *Config) String() string {
-	return fmt.Sprintf("{addr:%s:%s,insecure:%t}", c.Addr.Network(), c.Addr.String(), c.UseHTTP)
+	return fmt.Sprintf("{addr:%s:%s,insecure:%t}", c.Addr.Network(), c.Addr.String(), c.HTTPMode)
 }

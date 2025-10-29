@@ -138,7 +138,7 @@ func (s *APIServer) runServerInstance(ctx context.Context) error {
 		s.mu.Unlock()
 	}()
 
-	if s.config.UseHTTP {
+	if s.config.HTTPMode {
 		s.log.V(2).Info("starting insecure API server", "addr", s.insecureListener.Addr())
 
 		s.insecureServer = &http.Server{Handler: s.server.Handler} //nolint:gosec

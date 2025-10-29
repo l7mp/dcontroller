@@ -80,7 +80,9 @@ Congratulations, you have just deployed and verified your first NoCode operator 
 
 ## Accessing the Extension API Server
 
-Δ-controller runs an embedded API server to let you inspect internal "views" using `kubectl`. To access it securely, you'll use a port-forward.
+Δ-controller runs an embedded API server to let you inspect internal "views" using `kubectl`. The API server supports JWT-based authentication and RBAC authorization for secure access in production environments. For this getting started guide, we'll use a simple port-forward approach that leverages your existing Kubernetes cluster authentication.
+
+> **Note**: For production deployments with direct API server access, see the [Extension API Server concepts guide](concepts-API-server.md#authentication-and-authorization) for information on setting up authentication and authorization.
 
 1.  **Start the Port-Forward:**
     Open a new terminal and run the following command. It will run in the background.
@@ -89,12 +91,17 @@ Congratulations, you have just deployed and verified your first NoCode operator 
     kubectl -n dcontroller-system port-forward deployment/dcontroller-manager 8443:8443 &
     ```
 
-2.  **Set Your Kubeconfig:** 
-    Point your `KUBECONFIG` environment variable to the special configuration file that connects to the local port-forward. The below assumes you are in the root of the dcontroller project checkout:
+2.  **Generate a Development Kubeconfig:**
+    Use the `dctl` CLI tool to generate a kubeconfig for development access through the port-forward:
 
     ```bash
-    export KUBECONFIG=deploy/dcontroller-config
+    dctl generate-config --http --insecure --user=dev --namespaces="*" \
+      --server-address=localhost:8443 > /tmp/dcontroller-dev.config
+
+    export KUBECONFIG=/tmp/dcontroller-dev.config
     ```
+
+    This creates a kubeconfig pointing to the local port-forward. The `--http --insecure` flags configure it for development use (no TLS, no token validation). Since the Δ-controller Helm deployment has authentication disabled by default, no JWT token is required for access.
 
 3.  **Query the API Server:**
     You can now list the available API resources, just like with a standard Kubernetes cluster. If you have deployed operators that create views (like the ones in the tutorials), you will see them here.

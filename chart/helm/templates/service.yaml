@@ -1,0 +1,23 @@
+{{- if .Values.apiServer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: dcontroller-apiserver
+  namespace: dcontroller-system
+  {{- with .Values.apiServer.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.apiServer.service.type }}
+  ports:
+  - name: api
+    port: {{ .Values.apiServer.port }}
+    targetPort: api
+    protocol: TCP
+    {{- if and (eq .Values.apiServer.service.type "NodePort") .Values.apiServer.service.nodePort }}
+    nodePort: {{ .Values.apiServer.service.nodePort }}
+    {{- end }}
+  selector:
+    control-plane: dcontroller
+{{- end }}

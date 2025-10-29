@@ -7,11 +7,13 @@ toolchain go1.24.2
 require (
 	github.com/bsm/gomega v1.27.10
 	github.com/go-logr/logr v1.4.3
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/gnostic-models v0.7.0
 	github.com/grokify/mogo v0.70.21
 	github.com/ohler55/ojg v1.26.10
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
+	github.com/spf13/cobra v1.10.1
 	go.uber.org/zap v1.27.0
 	golang.org/x/time v0.13.0
 	k8s.io/api v0.34.0
@@ -84,7 +86,6 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.17.0 // indirect
-	github.com/spf13/cobra v1.10.1 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect

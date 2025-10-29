@@ -74,7 +74,8 @@ func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, e
 	// Apply secure serving options.
 	secureAddr := config.Addr.IP
 	securePort := config.Addr.Port
-	if config.UseHTTP {
+
+	if config.HTTPMode {
 		secureAddr = net.ParseIP("127.0.0.1")
 		// use a random port for the mandatory TLS server
 		securePort = rand.IntN(15000) + 32768 //nolint:gosec
@@ -83,8 +84,10 @@ func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, e
 		BindAddress: secureAddr,
 		BindPort:    securePort,
 		ServerCert: genericoptions.GeneratableKeyCert{
-			PairName: "apiserver",
-			// CertKey:  genericoptions.CertKey{},
+			CertKey: genericoptions.CertKey{
+				CertFile: config.CertFile,
+				KeyFile:  config.KeyFile,
+			},
 		},
 	}
 
@@ -92,25 +95,62 @@ func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, e
 		return nil, fmt.Errorf("failed to apply secure serving: %w", err)
 	}
 
+	// Configure authentication
+	if config.Authenticator != nil {
+		config.Authentication.Authenticator = config.Authenticator
+	}
+
+	// Configure authorization
+	if config.Authorizer != nil {
+		config.Authorization.Authorizer = config.Authorizer
+	}
+
+	// Configure request info resolver if not already set
+	if config.RequestInfoResolver == nil {
+		config.RequestInfoResolver = genericapiserver.NewRequestInfoResolver(&config.Config)
+	}
+
 	// Create the HTTP middleware for the inecure HTTP server.
+	// Note: Middleware is built bottom-up but executes top-down (outer to inner)
 	config.BuildHandlerChainFunc = func(apiHandler http.Handler, c *genericapiserver.Config) http.Handler {
 		handler := genericfilters.WithWaitGroup(apiHandler, c.LongRunningFunc, c.NonLongRunningRequestWaitGroup)
+
+		// Add audit handler
 		handler = genericapifilters.WithAudit(handler, c.AuditBackend, c.AuditPolicyRuleEvaluator, c.LongRunningFunc)
 		handler = genericapifilters.WithAuditInit(handler)
-		middleware := genericapifilters.WithRequestInfo(handler, c.RequestInfoResolver)
+
+		// Add authorization (needs RequestInfo in context)
+		if c.Authorization.Authorizer != nil {
+			handler = genericapifilters.WithAuthorization(handler, c.Authorization.Authorizer, c.Serializer)
+		}
+
+		// Add authentication (needs RequestInfo in context)
+		if c.Authentication.Authenticator != nil {
+			// Create failed authentication handler
+			failedHandler := genericapifilters.Unauthorized(c.Serializer)
+			failedHandler = genericapifilters.WithFailedAuthenticationAudit(failedHandler, c.AuditBackend, c.AuditPolicyRuleEvaluator)
+
+			handler = genericapifilters.WithAuthentication(handler, c.Authentication.Authenticator, failedHandler, c.Authentication.APIAudiences, c.Authentication.RequestHeaderConfig)
+		}
+
+		// Add RequestInfo parser (must come AFTER auth/authz in chain building, so it runs BEFORE them in execution)
+		handler = genericapifilters.WithRequestInfo(handler, c.RequestInfoResolver)
+
+		// Add logging wrapper (outermost)
+		nextHandler := handler // Capture handler before reassignment to avoid infinite loop
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			dump, err := httputil.DumpRequest(r, true) // true = include body
 			if err != nil {
 				dump = []byte{}
 			}
 			s.log.Info("HTTP Request", "method", r.Method, "path", r.URL.Path, "content", string(dump))
-			middleware.ServeHTTP(w, r)
+			nextHandler.ServeHTTP(w, r)
 		})
 		return handler
 	}
 
 	// Ensure secure serving is configured.
-	if config.UseHTTP {
+	if config.HTTPMode {
 		insecureAddr := &net.TCPAddr{
 			IP:   config.Addr.IP,
 			Port: config.Addr.Port,

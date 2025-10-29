@@ -1,44 +1,27 @@
-<!-- [![Go Report Card](https://goreportcard.com/badge/sigs.k8s.io/controller-runtime)](https://goreportcard.com/report/sigs.k8s.io/controller-runtime) -->
-<!-- [![godoc](https://pkg.go.dev/badge/sigs.k8s.io/controller-runtime)](https://pkg.go.dev/sigs.k8s.io/controller-runtime) -->
+[![Go Report Card](https://goreportcard.com/badge/github.com/l7mp/dcontroller)](https://goreportcard.com/report/github.com/l7mp/dcontroller)
+[![godoc](https://pkg.go.dev/badge/github.com/l7mp/dcontroller)](https://pkg.go.dev/github.com/l7mp/dcontroller)
 
 # Δ-controller: A NoCode/LowCode Kubernetes controller framework
 
 Δ-controller is a framework to simplify the design, implementation and maintenance of Kubernetes
 operators. The main goal is to reduce the mental overhead of writing Kubernetes operators by
-providing simple automations to eliminate some of the repetitive imperative code that must be
-written when coding against the [Kubernetes
+providing simple automations to eliminate the repetitive imperative code required when building
+operators on the [Kubernetes
 controller-runtime](https://github.com/kubernetes-sigs/controller-runtime) project. The final goal
-is to let anyone with minimal Go skills to write complex Kubernetes operators in the NoCode/LowCode
+is to let anyone with minimal Go skills to write complex Kubernetes operators in a NoCode/LowCode
 style.
 
 See the full documentation [here](doc/README.md).
 
 ## Description
 
-The main design philosophy behind Δ-controller is to view the Kubernetes API as a gigantic NoSQL
-database and implement a custom query language that can be used to process Kubernetes objects into
-either a simplified internal representation that we call a *view*, or back into actual native
-Kubernetes resources. This is much akin to MongoDB, so users familiar with document-oriented
-databases and declarative queries will feel at home when using Δ-controller.
+The philosophy of Δ-controller is thinking of Kubernetes as a MongoDB database. Instead of writing imperative Go code, you query and transform Kubernetes resources using declarative pipelines, just like how [MongoDB aggregation](https://www.mongodb.com/docs/manual/core/aggregation-pipeline) pipelines are used to query JSON documents. If you've used document databases, you'll feel right at home.
 
-The Δ in the name stands for **declarative** and imperative (or **delta**).
+The Δ (delta) in the name represents two core concepts:
 
-First, Δ-controller implements a *declarative query language* (inspired by [MongoDB
-aggregators](https://www.mongodb.com/docs/manual/core/aggregation-pipeline)) that can be used to
-combine, filter and transform Kubernetes API resources into a shape that better fits the operators'
-internal logic, and from there back to native Kubernetes resources.  This is done by registering a
-processing pipeline to map the Kubernetes API resources into a view of interest to the
-controller. Views are dynamically maintained by Δ-controller by running the aggregation pipeline on
-the watch events automatically installed for the source Kubernetes API resources of the aggregation
-pipeline.
+**Declarative pipelines:** Write operators using a query language inspired by MongoDB aggregators. Combine, filter, and transform Kubernetes resources into simplified *views*, then project them back as native Kubernetes objects. No imperative reconciliation loops; just specify which Kubernetes resources your operator wants to watch and the declarative transformation rules to process them, and Δ-controller does the rest! Put your operator spec into a YAML file, and one kubectl-apply will deploy it right away.
 
-The literal delta in the name connotes that operators in Δ-controller use *incremental
-reconciliation* style control loops. This means that the controllers watch the incremental changes
-to Kubernetes API resources and internal views and act only on the deltas. Deltas are traced
-through possibly multiple stacked controllers without having to re-generate the entire API state,
-like in usual "state-of-the-world-reconciliation" style controllers. Δ-controller's incremental
-view maintenance implementation is based a solid theoretical foundation provided by
-[DBSP](https://mihaibudiu.github.io/work/dbsp-spec.pdf).
+**Delta processing:** Traditional controllers re-process the entire Kubernetes API state on every change. Δ-controller tracks only the deltas (changes) and propagates them incrementally through your pipeline. This means your operators react instantly to changes without re-computing everything from scratch. Δ-controller's incremental view maintenance engine is powered by [DBSP](https://mihaibudiu.github.io/work/dbsp-spec.pdf), providing a solid theoretical foundation for incremental computation.
 
 ## Installation
 
@@ -102,7 +85,7 @@ operator will write. This time, both the source and target will be Pods. The tar
 `Patcher`, which means that the controller will use the processing pipeline output to patch the
 target. (In contrast, `Updater` targets will simply overwrite the target.)
 
-The most important field is the `pipeline`, which describes a declarative pipeline to process the
+The most important field is the `pipeline`, a declarative pipeline describing how to process the
 source API resource(s) into the target resource. The pipeline operates on the fields of the source
 and the target resources using standard [JSONPath
 notation](https://datatracker.ietf.org/doc/html/rfc9535).
@@ -234,26 +217,6 @@ kubectl -n kube-system get pod etcd -o jsonpath='{.metadata.annotations}'
 ...
 ```
 
-### Connecting to the embedded API server
-
-Δ-controller includes an custom embedded Kubernetes API server that allows standard kubectl
-clients to inspect, modify or watch operators' view resources. Currently the API server is exposed
-over insecure unauthenticated HTTP for simplicity so we do not expose it to the Internet. Rather,
-use a kubectl port-forward to reach it:
-
-1. Start a port-forward in background:
-
-```console
-kubectl -n dcontroller-system port-forward deployment/dcontroller-manager 8443:8443 &
-```
-
-2. Use the default dcontroller kubeconfig pointing to forwarded port:
-
-```console
-export KUBECONFIG=deploy/dcontroller-config
-kubectl list my-operator.view.dcontroller.io
-```
-
 ### Cleanup
 
 Remove all resources we have created:
@@ -264,12 +227,124 @@ kubectl delete pod net-debug-2
 kubectl delete operators.dcontroller.io pod-container-num-annotator
 ```
 
-<!-- ### Expressions -->
+## The API server
 
-<!-- - Aggregations work on objects that are indexed on (.metadata.namespace, .metadata.name): all -->
-<!--   objects at every stage of the aggregation must have valid .metadata. -->
-<!-- - Operator arguments go into lists, optional for single-argument ops (like @len and @not).  -->
-<!-- - No multi-dimensional lists: arrays our unpacked to the top level. -->
+Δ-controller includes a custom embedded Kubernetes API server that allows standard kubectl
+clients to inspect, modify or watch operators' view resources.
+
+### Quick start (HTTP mode - development only)
+
+For development and testing, you can run the API server in insecure HTTP mode without authentication:
+
+1. Start the operator in HTTP mode with authentication disabled:
+
+```console
+dctl start --http --disable-authentication
+```
+
+This starts the API server on `http://localhost:8443` with unrestricted access.
+
+2. Generate a kubeconfig pointing to the local HTTP server (outputs to stdout):
+
+```console
+dctl generate-config --http --user=dev --namespaces="*" --server-address=localhost:8443 > dev.config
+export KUBECONFIG=./dev.config
+```
+
+3. Use kubectl to access view resources:
+
+```console
+kubectl get myoperator.view.dcontroller.io
+```
+
+### Production deployment (HTTPS with authentication)
+
+For production deployments, use HTTPS with JWT-based authentication and RBAC authorization:
+
+1. Generate TLS certificate and private key:
+
+```console
+dctl generate-keys
+```
+
+This creates `apiserver.key` (private key) and `apiserver.crt` (certificate). The certificate is used both for TLS encryption and for JWT token validation (the public key is extracted from it).
+
+2. Start the API server with authentication enabled:
+
+```console
+dctl start --tls-cert-file=apiserver.crt --tls-key-file=apiserver.key
+```
+
+The API server will:
+- Serve over HTTPS using the TLS certificate
+- Require valid JWT tokens for all requests
+- Validate tokens using the public key from the certificate
+
+3. Create a rules file defining RBAC permissions (using Kubernetes PolicyRule format):
+
+```console
+cat > alice-rules.json <<EOF
+[
+  {
+    "verbs": ["get", "list", "watch"],
+    "apiGroups": [""],
+    "resources": ["pods", "services"]
+  },
+  {
+    "verbs": ["get", "list", "create", "update", "delete"],
+    "apiGroups": ["myoperator.view.dcontroller.io"],
+    "resources": ["*"]
+  }
+]
+EOF
+```
+
+4. Generate a kubeconfig for a user (outputs to stdout, redirect to file):
+
+```console
+dctl generate-config --user=alice --namespaces=team-a --rules-file=alice-rules.json \
+  --tls-key-file=apiserver.key --server-address=localhost:8443 > alice.config
+```
+
+Alternatively, use `--output` to write directly to a file:
+
+```console
+dctl generate-config --user=alice --namespaces=team-a --rules-file=alice-rules.json \
+  --tls-key-file=apiserver.key --server-address=localhost:8443 --output=alice.config
+```
+
+5. Verify the config contents:
+
+```console
+export KUBECONFIG=alice.config
+dctl get-config --tls-cert-file=apiserver.crt
+```
+
+6. Use the generated kubeconfig to access the API server:
+
+```console
+kubectl get myoperator.view.dcontroller.io
+```
+
+The user `alice` will be restricted to:
+- Namespaces: `team-a`
+- Read-only access to pods and services in core API group
+- Full access to resources in `myoperator.view.dcontroller.io` API group
+
+For admin access with no restrictions, omit the `--rules-file` flag:
+
+```console
+dctl generate-config --user=admin --namespaces="*" \
+  --tls-key-file=apiserver.key --server-address=localhost:8443 > admin.config
+export KUBECONFIG=admin.config
+```
+
+### Key differences between HTTP and HTTPS modes
+
+- **HTTP mode (`--http`)**: No TLS encryption, typically used with `--disable-authentication` for local development
+- **HTTPS mode (default)**: TLS encryption required, authentication recommended for production
+- The same TLS certificate is used for both HTTPS encryption and JWT token validation
+- Use `--insecure` flag in `generate-config` to skip TLS verification (for self-signed certificates)
 
 ## Caveats
 

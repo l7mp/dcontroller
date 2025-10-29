@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"crypto/rsa"
 	"fmt"
 	"math/rand/v2"
 	"net"
@@ -10,8 +11,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -29,6 +32,7 @@ import (
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/auth"
 	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
@@ -1415,6 +1419,556 @@ var _ = Describe("APIServer Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(created.GetName()).To(Equal("test-view"))
 			Expect(created.GetKind()).To(Equal("TestView"))
+		})
+	})
+})
+
+var _ = Describe("Authorization Tests", func() {
+	var (
+		apiServer    *APIServer
+		mgr          *manager.FakeManager
+		serverCtx    context.Context
+		serverCancel context.CancelFunc
+		serverAddr   string
+		port         int
+		privateKey   *rsa.PrivateKey
+		publicKey    *rsa.PublicKey
+		tokenGen     *auth.TokenGenerator
+		testGroup    = viewv1a1.Group("authtest")
+		testGVR      = schema.GroupVersionResource{
+			Group:    testGroup,
+			Version:  viewv1a1.Version,
+			Resource: "authview",
+		}
+	)
+
+	BeforeEach(func() {
+		serverCtx, serverCancel = context.WithCancel(context.Background())
+
+		// Generate RSA keys for JWT
+		var err error
+		cert, key, err := auth.GenerateSelfSignedCert("localhost")
+		Expect(err).NotTo(HaveOccurred())
+		privateKey, err = auth.ParsePrivateKey(key)
+		Expect(err).NotTo(HaveOccurred())
+		publicKey, err = auth.ParsePublicKey(cert)
+		Expect(err).NotTo(HaveOccurred())
+		tokenGen = auth.NewTokenGenerator(privateKey)
+
+		// Create mock manager
+		mgr, err = manager.NewFakeManager("authtest", runtimeManager.Options{Logger: logger})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Add test objects to the cache
+		fakeCache, ok := mgr.GetCache().(*composite.CompositeCache)
+		Expect(ok).To(BeTrue())
+
+		// Object in default namespace
+		defaultObj := &unstructured.Unstructured{
+			Object: map[string]any{
+				"apiVersion": testGroup + "/" + viewv1a1.Version,
+				"kind":       "AuthView",
+				"metadata": map[string]any{
+					"namespace": "default",
+					"name":      "test-obj",
+				},
+				"data": "test-data",
+			},
+		}
+		err = fakeCache.GetViewCache().Add(defaultObj)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Object in restricted namespace
+		restrictedObj := &unstructured.Unstructured{
+			Object: map[string]any{
+				"apiVersion": testGroup + "/" + viewv1a1.Version,
+				"kind":       "AuthView",
+				"metadata": map[string]any{
+					"namespace": "restricted",
+					"name":      "restricted-obj",
+				},
+				"data": "restricted-data",
+			},
+		}
+		err = fakeCache.GetViewCache().Add(restrictedObj)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create the client multiplexer
+		clientMpx := composite.NewClientMultiplexer(logger)
+		err = clientMpx.RegisterClient(testGroup, mgr.GetClient())
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create API server with authentication enabled
+		serverAddr = "localhost"
+		port = rand.IntN(15000) + 32768 //nolint:gosec
+		config, err := NewDefaultConfig(serverAddr, port, clientMpx, true, logger)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Configure authentication and authorization
+		config.Authenticator = auth.NewJWTAuthenticator(publicKey)
+		config.Authorizer = auth.NewCompositeAuthorizer()
+
+		apiServer, err = NewAPIServer(config)
+		if err != nil {
+			// Retry with different port on failure
+			port = rand.IntN(15000) + 32768 //nolint:gosec
+			config, err = NewDefaultConfig(serverAddr, port, clientMpx, true, logger)
+			Expect(err).NotTo(HaveOccurred())
+			config.Authenticator = auth.NewJWTAuthenticator(publicKey)
+			config.Authorizer = auth.NewCompositeAuthorizer()
+			apiServer, err = NewAPIServer(config)
+		}
+		Expect(err).NotTo(HaveOccurred())
+
+		// Register the test API group
+		err = apiServer.RegisterAPIGroup(testGroup, []schema.GroupVersionKind{
+			{Group: testGroup, Version: viewv1a1.Version, Kind: "AuthView"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Start the server
+		go func() {
+			defer GinkgoRecover()
+			err := apiServer.Start(serverCtx)
+			Expect(err).NotTo(HaveOccurred())
+		}()
+
+		// Wait for the API server to start
+		Eventually(func() bool { return apiServer.running }, timeout, interval).Should(BeTrue())
+	})
+
+	AfterEach(func() {
+		serverCancel()
+		time.Sleep(20 * time.Millisecond)
+	})
+
+	// Helper function to create a dynamic client with a token
+	createAuthenticatedClient := func(token string) dynamic.Interface {
+		server := fmt.Sprintf("http://%s:%d", serverAddr, port)
+		config := auth.CreateRestConfig(server, token, true)
+		client, err := dynamic.NewForConfig(config)
+		Expect(err).NotTo(HaveOccurred())
+		return client
+	}
+
+	Describe("RBAC Authorization", func() {
+		type testCase struct {
+			name          string
+			verb          string
+			allowedRules  []rbacv1.PolicyRule
+			deniedRules   []rbacv1.PolicyRule
+			namespace     string
+			objectName    string
+			expectAllowed bool
+			expectDenied  bool
+			operationFunc func(client dynamic.Interface) error
+		}
+
+		DescribeTable("should enforce RBAC permissions",
+			func(tc testCase) {
+				// Test with allowed token
+				if tc.expectAllowed {
+					allowedToken, err := tokenGen.GenerateToken(
+						"allowed-user",
+						[]string{"*"}, // All namespaces
+						tc.allowedRules,
+						time.Hour,
+					)
+					Expect(err).NotTo(HaveOccurred())
+
+					allowedClient := createAuthenticatedClient(allowedToken)
+					err = tc.operationFunc(allowedClient)
+					Expect(err).NotTo(HaveOccurred(), "Operation should succeed with allowed token")
+				}
+
+				// Test with denied token
+				if tc.expectDenied {
+					deniedToken, err := tokenGen.GenerateToken(
+						"denied-user",
+						[]string{"*"}, // All namespaces
+						tc.deniedRules,
+						time.Hour,
+					)
+					Expect(err).NotTo(HaveOccurred())
+
+					deniedClient := createAuthenticatedClient(deniedToken)
+					err = tc.operationFunc(deniedClient)
+					Expect(err).To(HaveOccurred(), "Operation should fail with denied token")
+					Expect(apierrors.IsForbidden(err)).To(BeTrue(), "Error should be Forbidden")
+				}
+			},
+			Entry("GET operation", testCase{
+				name: "GET with full and no permissions",
+				verb: "get",
+				allowedRules: []rbacv1.PolicyRule{
+					{Verbs: []string{"get"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				deniedRules: []rbacv1.PolicyRule{
+					{Verbs: []string{"list"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				namespace:     "default",
+				objectName:    "test-obj",
+				expectAllowed: true,
+				expectDenied:  true,
+				operationFunc: func(client dynamic.Interface) error {
+					_, err := client.Resource(testGVR).Namespace("default").Get(context.TODO(), "test-obj", metav1.GetOptions{})
+					return err
+				},
+			}),
+			Entry("LIST operation", testCase{
+				name: "LIST with full and no permissions",
+				verb: "list",
+				allowedRules: []rbacv1.PolicyRule{
+					{Verbs: []string{"list"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				deniedRules: []rbacv1.PolicyRule{
+					{Verbs: []string{"get"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				namespace:     "default",
+				expectAllowed: true,
+				expectDenied:  true,
+				operationFunc: func(client dynamic.Interface) error {
+					_, err := client.Resource(testGVR).Namespace("default").List(context.TODO(), metav1.ListOptions{})
+					return err
+				},
+			}),
+			Entry("CREATE operation", testCase{
+				name: "CREATE with full and no permissions",
+				verb: "create",
+				allowedRules: []rbacv1.PolicyRule{
+					{Verbs: []string{"create"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				deniedRules: []rbacv1.PolicyRule{
+					{Verbs: []string{"get", "list"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				namespace:     "default",
+				expectAllowed: true,
+				expectDenied:  true,
+				operationFunc: func(client dynamic.Interface) error {
+					newObj := &unstructured.Unstructured{
+						Object: map[string]any{
+							"apiVersion": testGroup + "/" + viewv1a1.Version,
+							"kind":       "AuthView",
+							"metadata": map[string]any{
+								"namespace": "default",
+								"name":      "new-obj",
+							},
+							"data": "new-data",
+						},
+					}
+					_, err := client.Resource(testGVR).Namespace("default").Create(context.TODO(), newObj, metav1.CreateOptions{})
+					return err
+				},
+			}),
+			Entry("UPDATE operation", testCase{
+				name: "UPDATE with full and no permissions",
+				verb: "update",
+				allowedRules: []rbacv1.PolicyRule{
+					{Verbs: []string{"get", "update"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				deniedRules: []rbacv1.PolicyRule{
+					{Verbs: []string{"get", "list"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				namespace:     "default",
+				objectName:    "test-obj",
+				expectAllowed: true,
+				expectDenied:  true,
+				operationFunc: func(client dynamic.Interface) error {
+					// For allowed case, we need to get first
+					obj, err := client.Resource(testGVR).Namespace("default").Get(context.TODO(), "test-obj", metav1.GetOptions{})
+					if err != nil {
+						// For denied case, the get might succeed but update should fail
+						// Create a minimal object for update attempt
+						obj = &unstructured.Unstructured{
+							Object: map[string]any{
+								"apiVersion": testGroup + "/" + viewv1a1.Version,
+								"kind":       "AuthView",
+								"metadata": map[string]any{
+									"namespace": "default",
+									"name":      "test-obj",
+								},
+								"data": "updated-data",
+							},
+						}
+					}
+					obj.Object["data"] = "updated-data"
+					_, err = client.Resource(testGVR).Namespace("default").Update(context.TODO(), obj, metav1.UpdateOptions{})
+					return err
+				},
+			}),
+			Entry("DELETE operation", testCase{
+				name: "DELETE with full and no permissions",
+				verb: "delete",
+				allowedRules: []rbacv1.PolicyRule{
+					{Verbs: []string{"delete"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				deniedRules: []rbacv1.PolicyRule{
+					{Verbs: []string{"get", "list"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				namespace:     "default",
+				objectName:    "test-obj",
+				expectAllowed: true,
+				expectDenied:  true,
+				operationFunc: func(client dynamic.Interface) error {
+					return client.Resource(testGVR).Namespace("default").Delete(context.TODO(), "test-obj", metav1.DeleteOptions{})
+				},
+			}),
+			Entry("WATCH operation", testCase{
+				name: "WATCH with full and no permissions",
+				verb: "watch",
+				allowedRules: []rbacv1.PolicyRule{
+					{Verbs: []string{"watch"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				deniedRules: []rbacv1.PolicyRule{
+					{Verbs: []string{"get", "list"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				namespace:     "default",
+				expectAllowed: true,
+				expectDenied:  true,
+				operationFunc: func(client dynamic.Interface) error {
+					watcher, err := client.Resource(testGVR).Namespace("default").Watch(context.TODO(), metav1.ListOptions{})
+					if err == nil {
+						watcher.Stop()
+					}
+					return err
+				},
+			}),
+		)
+	})
+
+	Describe("Namespace-based Authorization", func() {
+		It("should allow access to permitted namespaces and deny access to restricted namespaces", func() {
+			// Token with access only to "default" namespace
+			token, err := tokenGen.GenerateToken(
+				"namespace-user",
+				[]string{"default"}, // Only default namespace
+				[]rbacv1.PolicyRule{
+					{Verbs: []string{"*"}, APIGroups: []string{"*"}, Resources: []string{"*"}},
+				},
+				time.Hour,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			client := createAuthenticatedClient(token)
+
+			// Should succeed: GET in allowed namespace
+			_, err = client.Resource(testGVR).Namespace("default").Get(context.TODO(), "test-obj", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should fail: GET in restricted namespace
+			_, err = client.Resource(testGVR).Namespace("restricted").Get(context.TODO(), "restricted-obj", metav1.GetOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsForbidden(err)).To(BeTrue())
+
+			// Should succeed: LIST in allowed namespace
+			list, err := client.Resource(testGVR).Namespace("default").List(context.TODO(), metav1.ListOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(list.Items).To(HaveLen(1))
+			Expect(list.Items[0].GetName()).To(Equal("test-obj"))
+
+			// Should fail: LIST in restricted namespace
+			_, err = client.Resource(testGVR).Namespace("restricted").List(context.TODO(), metav1.ListOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsForbidden(err)).To(BeTrue())
+		})
+
+		It("should deny cross-namespace LIST for namespace-restricted users", func() {
+			// Token with namespace restriction
+			token, err := tokenGen.GenerateToken(
+				"restricted-user",
+				[]string{"default"}, // Only default namespace
+				[]rbacv1.PolicyRule{
+					{Verbs: []string{"*"}, APIGroups: []string{"*"}, Resources: []string{"*"}},
+				},
+				time.Hour,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			client := createAuthenticatedClient(token)
+
+			// Should fail: cross-namespace LIST (no namespace specified)
+			_, err = client.Resource(testGVR).List(context.TODO(), metav1.ListOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsForbidden(err)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("cross-namespace operations not allowed"))
+		})
+
+		It("should deny cross-namespace WATCH for namespace-restricted users", func() {
+			// Token with namespace restriction
+			token, err := tokenGen.GenerateToken(
+				"restricted-user",
+				[]string{"default"}, // Only default namespace
+				[]rbacv1.PolicyRule{
+					{Verbs: []string{"*"}, APIGroups: []string{"*"}, Resources: []string{"*"}},
+				},
+				time.Hour,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			client := createAuthenticatedClient(token)
+
+			// Should fail: cross-namespace WATCH (no namespace specified)
+			_, err = client.Resource(testGVR).Watch(context.TODO(), metav1.ListOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsForbidden(err)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("cross-namespace operations not allowed"))
+		})
+
+		It("should allow wildcard namespace access", func() {
+			// Token with wildcard namespace access
+			token, err := tokenGen.GenerateToken(
+				"admin-user",
+				[]string{"*"}, // All namespaces
+				[]rbacv1.PolicyRule{
+					{Verbs: []string{"get", "list"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				time.Hour,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			client := createAuthenticatedClient(token)
+
+			// Should succeed: GET in any namespace
+			_, err = client.Resource(testGVR).Namespace("default").Get(context.TODO(), "test-obj", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = client.Resource(testGVR).Namespace("restricted").Get(context.TODO(), "restricted-obj", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should succeed: cross-namespace LIST with wildcard access
+			list, err := client.Resource(testGVR).List(context.TODO(), metav1.ListOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(len(list.Items)).To(BeNumerically(">=", 2)) // At least test-obj and restricted-obj
+		})
+
+		It("should allow multiple specific namespaces", func() {
+			// Token with access to multiple namespaces
+			token, err := tokenGen.GenerateToken(
+				"multi-ns-user",
+				[]string{"default", "restricted"},
+				[]rbacv1.PolicyRule{
+					{Verbs: []string{"get", "list"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				time.Hour,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			client := createAuthenticatedClient(token)
+
+			// Should succeed in both allowed namespaces
+			_, err = client.Resource(testGVR).Namespace("default").Get(context.TODO(), "test-obj", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = client.Resource(testGVR).Namespace("restricted").Get(context.TODO(), "restricted-obj", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should fail in other namespaces
+			newObj := &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": testGroup + "/" + viewv1a1.Version,
+					"kind":       "AuthView",
+					"metadata": map[string]any{
+						"namespace": "kube-system",
+						"name":      "system-obj",
+					},
+				},
+			}
+			err = mgr.GetCache().(*composite.CompositeCache).GetViewCache().Add(newObj)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = client.Resource(testGVR).Namespace("kube-system").Get(context.TODO(), "system-obj", metav1.GetOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsForbidden(err)).To(BeTrue())
+		})
+	})
+
+	Describe("Combined RBAC and Namespace Authorization", func() {
+		It("should enforce both RBAC and namespace restrictions", func() {
+			// Token with limited RBAC in limited namespace
+			token, err := tokenGen.GenerateToken(
+				"limited-user",
+				[]string{"default"}, // Only default namespace
+				[]rbacv1.PolicyRule{
+					{Verbs: []string{"get", "list"}, APIGroups: []string{testGroup}, Resources: []string{"*"}},
+				},
+				time.Hour,
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			client := createAuthenticatedClient(token)
+
+			// Should succeed: allowed verb in allowed namespace
+			_, err = client.Resource(testGVR).Namespace("default").Get(context.TODO(), "test-obj", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should fail: disallowed verb in allowed namespace
+			newObj := &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": testGroup + "/" + viewv1a1.Version,
+					"kind":       "AuthView",
+					"metadata": map[string]any{
+						"namespace": "default",
+						"name":      "create-test",
+					},
+				},
+			}
+			_, err = client.Resource(testGVR).Namespace("default").Create(context.TODO(), newObj, metav1.CreateOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsForbidden(err)).To(BeTrue())
+
+			// Should fail: allowed verb in disallowed namespace
+			_, err = client.Resource(testGVR).Namespace("restricted").Get(context.TODO(), "restricted-obj", metav1.GetOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsForbidden(err)).To(BeTrue())
+		})
+	})
+
+	Describe("Authentication Failure Handling", func() {
+		It("should handle invalid tokens gracefully without panicking", func() {
+			// Use an invalid token
+			invalidToken := "invalid.jwt.token" //nolint:gosec
+			server := fmt.Sprintf("http://%s:%d", serverAddr, port)
+			config := auth.CreateRestConfig(server, invalidToken, true)
+			client, err := dynamic.NewForConfig(config)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should fail with Unauthorized error (not panic)
+			_, err = client.Resource(testGVR).Namespace("default").Get(context.TODO(), "test-obj", metav1.GetOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsUnauthorized(err)).To(BeTrue())
+		})
+
+		It("should handle expired tokens gracefully", func() {
+			// Generate token with negative expiry (already expired)
+			expiredToken, err := tokenGen.GenerateToken(
+				"expired-user",
+				[]string{"default"},
+				[]rbacv1.PolicyRule{
+					{Verbs: []string{"*"}, APIGroups: []string{"*"}, Resources: []string{"*"}},
+				},
+				-1*time.Hour, // Expired 1 hour ago
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			client := createAuthenticatedClient(expiredToken)
+
+			// Should fail with Unauthorized error (not panic)
+			_, err = client.Resource(testGVR).Namespace("default").Get(context.TODO(), "test-obj", metav1.GetOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsUnauthorized(err)).To(BeTrue())
+		})
+
+		It("should handle requests without authentication token", func() {
+			// Create client without token
+			server := fmt.Sprintf("http://%s:%d", serverAddr, port)
+			config := &rest.Config{Host: server}
+			client, err := dynamic.NewForConfig(config)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should fail with Unauthorized error (not panic)
+			_, err = client.Resource(testGVR).Namespace("default").Get(context.TODO(), "test-obj", metav1.GetOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsUnauthorized(err)).To(BeTrue())
 		})
 	})
 })

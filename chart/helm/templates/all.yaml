@@ -36,7 +36,7 @@ spec:
       openAPIV3Schema:
         description: |-
           Operator is an abstraction of a basic unit of automation, a set of related controllers working
-          on a single shared view of system resources.
+          on a single shared view of resources.
 
           // +kubebuilder:printcolumn:name="ControllerNum",type=integer,JSONPath=`length(.spec.controllers)`
         properties:
@@ -83,7 +83,9 @@ spec:
                           the controller.
                         properties:
                           apiGroup:
-                            description: Group is the API group. Default is "view.dcontroller.io".
+                            description: |-
+                              Group is the API group. Default is "<operator-name>.view.dcontroller.io", where
+                              <operator-name> is the name of the operator that manages the object.
                             type: string
                           kind:
                             description: Kind is the type of the resource. Mandatory.
@@ -141,7 +143,7 @@ spec:
                             type: string
                           predicate:
                             description: Predicate is a controller runtime predicate
-                              for filtering events on this source..
+                              for filtering events on this source.
                             x-kubernetes-preserve-unknown-fields: true
                           version:
                             description: Version is the version of the resource. Optional.
@@ -154,7 +156,9 @@ spec:
                       description: The target resource the results are to be added.
                       properties:
                         apiGroup:
-                          description: Group is the API group. Default is "view.dcontroller.io".
+                          description: |-
+                            Group is the API group. Default is "<operator-name>.view.dcontroller.io", where
+                            <operator-name> is the name of the operator that manages the object.
                           type: string
                         kind:
                           description: Kind is the type of the resource. Mandatory.
@@ -174,7 +178,7 @@ spec:
                   - sources
                   - target
                   type: object
-                maxItems: 24
+                maxItems: 255
                 minItems: 1
                 type: array
             required:

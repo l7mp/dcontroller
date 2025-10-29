@@ -7,6 +7,7 @@ BUILD_DATE ?= $(shell date +%FT%T%z)
 LDFLAGS += -s -w
 LDFLAGS += -X main.version=${VERSION} -X main.commitHash=${COMMIT_HASH} -X main.buildDate=${BUILD_DATE}
 GOARGS = -trimpath
+EXECUTABLE = dctl
 
 # Image URL to use all building/pushing image targets
 IMG ?= retvari/dcontroller:latest
@@ -64,7 +65,7 @@ build: manifests generate fmt vet build-bin
 
 .PHONY: build-bin
 build-bin:
-	go build ${GOARGS} -ldflags "${LDFLAGS}" -o ${BUILD_DIR}/dcontroller-manager main.go
+	go build ${GOARGS} -ldflags "${LDFLAGS}" -o ${BUILD_DIR}/${EXECUTABLE} main.go
 
 .PHONY: run
 run: manifests generate fmt vet
