@@ -48,6 +48,13 @@ func (g *TokenGenerator) GenerateToken(username string, namespaces []string, rul
 // The certificate is valid for the provided hostname (which can be a DNS name or an IP).
 // It returns the PEM-encoded certificate and private key as byte slices.
 func GenerateSelfSignedCert(hostname string) (certPEM, keyPEM []byte, err error) {
+	return GenerateSelfSignedCertWithSANs([]string{hostname})
+}
+
+// GenerateSelfSignedCertWithSANs generates a self-signed TLS certificate with multiple SANs.
+// The certificate is valid for all provided hostnames/IPs.
+// It returns the PEM-encoded certificate and private key as byte slices.
+func GenerateSelfSignedCertWithSANs(hostnames []string) (certPEM, keyPEM []byte, err error) {
 	// 1. Generate a new RSA private key.
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -55,10 +62,15 @@ func GenerateSelfSignedCert(hostname string) (certPEM, keyPEM []byte, err error)
 	}
 
 	// 2. Create a certificate template.
+	commonName := "localhost"
+	if len(hostnames) > 0 {
+		commonName = hostnames[0]
+	}
+
 	template := x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
-			CommonName: hostname,
+			CommonName: commonName,
 		},
 		NotBefore: time.Now(),
 		NotAfter:  time.Now().Add(365 * 24 * time.Hour), // Valid for 1 year.
@@ -67,11 +79,13 @@ func GenerateSelfSignedCert(hostname string) (certPEM, keyPEM []byte, err error)
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
 
-	// 3. Set the Subject Alternative Name (SAN).
-	if ip := net.ParseIP(hostname); ip != nil {
-		template.IPAddresses = append(template.IPAddresses, ip)
-	} else {
-		template.DNSNames = append(template.DNSNames, hostname)
+	// 3. Set the Subject Alternative Names (SANs).
+	for _, hostname := range hostnames {
+		if ip := net.ParseIP(hostname); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, hostname)
+		}
 	}
 
 	// 4. Create the self-signed certificate bytes.
