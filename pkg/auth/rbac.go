@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"strings"
 
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apiserver/pkg/authentication/user"
@@ -63,15 +64,53 @@ func ruleMatches(rule rbacv1.PolicyRule, verb, apiGroup, resource, resourceName 
 }
 
 // matches checks if the requested value is in the rule list
-// Supports wildcard "*" matching
+// Supports:
+// - Exact match: "core" matches "core"
+// - Full wildcard: "*" matches anything
+// - Prefix wildcard: "*.example.com" matches "foo.example.com", "bar.example.com", etc.
+// - Suffix wildcard: "kube-*" matches "kube-system", "kube-public", etc.
 func matches(ruleValues []string, requested string) bool {
 	for _, ruleValue := range ruleValues {
+		// Full wildcard
 		if ruleValue == "*" {
 			return true
 		}
+
+		// Exact match
 		if ruleValue == requested {
 			return true
 		}
+
+		// Wildcard pattern matching
+		if strings.Contains(ruleValue, "*") {
+			if matchesWildcard(ruleValue, requested) {
+				return true
+			}
+		}
 	}
+	return false
+}
+
+// matchesWildcard checks if a value matches a wildcard pattern
+// Supports "*" at the beginning or end of the pattern
+func matchesWildcard(pattern, value string) bool {
+	// Handle prefix wildcard: "*.example.com"
+	if strings.HasPrefix(pattern, "*") {
+		suffix := strings.TrimPrefix(pattern, "*")
+		return strings.HasSuffix(value, suffix)
+	}
+
+	// Handle suffix wildcard: "kube-*"
+	if strings.HasSuffix(pattern, "*") {
+		prefix := strings.TrimSuffix(pattern, "*")
+		return strings.HasPrefix(value, prefix)
+	}
+
+	// Handle middle wildcard: "foo*bar" (split on first *)
+	parts := strings.SplitN(pattern, "*", 2)
+	if len(parts) == 2 {
+		return strings.HasPrefix(value, parts[0]) && strings.HasSuffix(value, parts[1])
+	}
+
 	return false
 }

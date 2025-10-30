@@ -226,4 +226,50 @@ var _ = Describe("RBAC Access Control", func() {
 			Expect(auth.CheckRBACAccess(userInfo, "get", "", "pods", "")).To(BeFalse())
 		})
 	})
+
+	Context("CheckRBACAccess with wildcard patterns in APIGroups", func() {
+		BeforeEach(func() {
+			rules := []rbacv1.PolicyRule{
+				{
+					Verbs:     []string{"get", "list", "watch"},
+					APIGroups: []string{"*.view.dcontroller.io"},
+					Resources: []string{"*"},
+				},
+				{
+					Verbs:     []string{"get"},
+					APIGroups: []string{"kube-*"},
+					Resources: []string{"pods"},
+				},
+			}
+
+			rulesJSON := mustMarshalJSON(rules)
+			userInfo = &user.DefaultInfo{
+				Name:  "wildcard-user",
+				Extra: map[string][]string{"rules": {rulesJSON}},
+			}
+		})
+
+		It("should match prefix wildcard *.view.dcontroller.io", func() {
+			// Should match any API group ending with .view.dcontroller.io
+			Expect(auth.CheckRBACAccess(userInfo, "get", "myoperator.view.dcontroller.io", "healthview", "")).To(BeTrue())
+			Expect(auth.CheckRBACAccess(userInfo, "list", "svc-health-operator.view.dcontroller.io", "healthview", "")).To(BeTrue())
+			Expect(auth.CheckRBACAccess(userInfo, "watch", "foo.bar.view.dcontroller.io", "anything", "")).To(BeTrue())
+		})
+
+		It("should not match API groups that don't end with .view.dcontroller.io", func() {
+			Expect(auth.CheckRBACAccess(userInfo, "get", "apps", "deployments", "")).To(BeFalse())
+			Expect(auth.CheckRBACAccess(userInfo, "get", "view.dcontroller.io.something", "pods", "")).To(BeFalse())
+		})
+
+		It("should match suffix wildcard kube-*", func() {
+			// Should match any API group starting with kube-
+			Expect(auth.CheckRBACAccess(userInfo, "get", "kube-system", "pods", "")).To(BeTrue())
+			Expect(auth.CheckRBACAccess(userInfo, "get", "kube-public", "pods", "")).To(BeTrue())
+		})
+
+		It("should not match verbs not in the rule", func() {
+			Expect(auth.CheckRBACAccess(userInfo, "create", "myoperator.view.dcontroller.io", "healthview", "")).To(BeFalse())
+			Expect(auth.CheckRBACAccess(userInfo, "delete", "svc-health-operator.view.dcontroller.io", "healthview", "")).To(BeFalse())
+		})
+	})
 })
