@@ -101,7 +101,8 @@ func main() {
 // ============================================================================
 
 type genKeysConfig struct {
-	hostname, keyFile, certFile string
+	hostnames         []string
+	keyFile, certFile string
 }
 
 func generateKeysCmd() *cobra.Command {
@@ -110,17 +111,23 @@ func generateKeysCmd() *cobra.Command {
 		Use:   "generate-keys",
 		Short: "Generate RSA key pair for the Δ-controller API server",
 		Long:  "Generate a new RSA key pair for signing and validating JWT tokens",
-		Example: `  # Generate keys with default names
+		Example: `  # Generate keys with default names (localhost)
   dctl generate-keys
 
-  # Generate keys with custom names
+  # Generate keys for a specific hostname
+  dctl generate-keys --hostname=api.example.com
+
+  # Generate keys for multiple hostnames and IPs
+  dctl generate-keys --hostname=api.example.com --hostname=134.112.161.48 --hostname=localhost
+
+  # Generate keys with custom output files
   dctl generate-keys --hostname=example.com --tls-key-file=/etc/server.key --tls-cert-file=/etc/server.crt`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGenerateKeys(cmd, cfg)
 		},
 	}
 
-	cmd.Flags().StringVar(&cfg.hostname, "hostname", "localhost", "Host name")
+	cmd.Flags().StringSliceVar(&cfg.hostnames, "hostname", []string{"localhost"}, "Hostname or IP address (can be specified multiple times)")
 	cmd.Flags().StringVar(&cfg.keyFile, "tls-key-file", "apiserver.key", "TLS key output file")
 	cmd.Flags().StringVar(&cfg.certFile, "tls-cert-file", "apiserver.crt", "TLS certificate output file")
 
@@ -130,7 +137,7 @@ func generateKeysCmd() *cobra.Command {
 func runGenerateKeys(_ *cobra.Command, cfg genKeysConfig) error {
 	fmt.Println("🔑 Generating RSA key pair...")
 
-	cert, key, err := auth.GenerateSelfSignedCert(cfg.hostname)
+	cert, key, err := auth.GenerateSelfSignedCertWithSANs(cfg.hostnames)
 	if err != nil {
 		return fmt.Errorf("failed to generate keys: %w", err)
 	}
@@ -142,6 +149,7 @@ func runGenerateKeys(_ *cobra.Command, cfg genKeysConfig) error {
 	fmt.Println("✅ Successfully generated keys:")
 	fmt.Printf("   TLS key:  %s\n", cfg.keyFile)
 	fmt.Printf("   TLS cert: %s\n", cfg.certFile)
+	fmt.Printf("   SANs:     %v\n", cfg.hostnames)
 
 	return nil
 }
