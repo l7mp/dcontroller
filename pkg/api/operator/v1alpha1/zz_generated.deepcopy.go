@@ -22,6 +22,7 @@ package v1alpha1
 
 import (
 	"github.com/l7mp/dcontroller/pkg/expression"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -285,6 +286,11 @@ func (in *Source) DeepCopyInto(out *Source) {
 	if in.Predicate != nil {
 		in, out := &in.Predicate, &out.Predicate
 		*out = (*in).DeepCopy()
+	}
+	if in.Parameters != nil {
+		in, out := &in.Parameters, &out.Parameters
+		*out = new(apiextensionsv1.JSON)
+		(*in).DeepCopyInto(*out)
 	}
 }
 

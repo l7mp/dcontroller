@@ -135,6 +135,11 @@ spec:
                             description: Namespace, if given, restricts the source
                               to generate events only from the given namespace.
                             type: string
+                          parameters:
+                            description: |-
+                              Parameters contains arbitrary source-specific parameters for virtual sources.
+                              For example, Periodic sources use {"period": "5m"}.
+                            x-kubernetes-preserve-unknown-fields: true
                           predicate:
                             description: Predicate is a controller runtime predicate
                               for filtering events on this source.

@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/l7mp/dcontroller/pkg/expression"
@@ -64,6 +65,13 @@ type Source struct {
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Predicate *predicate.Predicate `json:"predicate,omitempty"`
+	// Parameters contains arbitrary source-specific parameters for virtual sources.
+	// For example, Periodic sources use {"period": "5m"}.
+	//
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +optional
+	Parameters *apiextensionsv1.JSON `json:"parameters,omitempty"`
 }
 
 // Target is the target reource type in which the controller writes.

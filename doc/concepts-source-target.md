@@ -44,7 +44,27 @@ sources:
     version: v1alpha1
 ```
 
-You can refine what a source watches by applying filters. This is crucial for performance and for targeting your controller's logic to specific resources. Filters are combined with a logical AND.
+### Virtual Sources
+
+In addition to watching Kubernetes resources, Δ-controller supports **virtual sources** that generate synthetic events based on timers. Virtual sources use the special API group `source.dcontroller.io`.
+
+*   **`OneShot`**: Triggers the pipeline exactly once when the controller starts. Useful for initializing resources or performing one-time setup.
+*   **`Periodic`**: Triggers the pipeline at regular intervals. Configure the period using the `parameters` field with a Go duration string (e.g., `"5m"`, `"30s"`). Default period is 5 minutes.
+
+```yaml
+sources:
+  # Trigger once at startup
+  - apiGroup: "source.dcontroller.io"
+    kind: OneShot
+
+  # Trigger every 30 seconds
+  - apiGroup: "source.dcontroller.io"
+    kind: Periodic
+    parameters:
+      period: "30s"
+```
+
+You can refine what a source watches by applying filters. This is crucial for performance and for targeting your controller's logic to specific resources. Filters are combined with a logical AND. 
 
 *   **`namespace`**: Restricts the watch to a single Kubernetes namespace.
 
