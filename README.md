@@ -25,6 +25,8 @@ The Δ (delta) in the name represents two core concepts:
 
 ## Installation
 
+### Operator deployment
+
 Deploy Δ-controller with Helm:
 
 ``` console
@@ -34,7 +36,18 @@ helm install dcontroller dcontroller/dcontroller
 ```
 
 This will deploy the Δ-controller operator, a Kubernetes operator that can take custom resources
-describing a declarative controller and implement the logics on the Kubernetes API.
+describing a declarative controller and implement the logics on the Kubernetes API. 
+
+The `dctl` CLI tool is used for managing credentials, generating kubeconfigs, and accessing the
+embedded API server. Download the latest release for your platform from the [releases
+page](https://github.com/l7mp/dcontroller/releases):
+
+```console
+# Linux amd64
+curl -LO https://github.com/l7mp/dcontroller/releases/download/v0.1.0/dcontroller_v0.1.0_Linux_x86_64.tar.gz
+tar -xzf dcontroller_v0.1.0_Linux_x86_64.tar.gz
+sudo mv dctl /usr/local/bin/
+```
 
 ## Getting started
 
@@ -263,32 +276,38 @@ kubectl get <kind>.<operator>.view.dcontroller.io
 
 For production, redeploy with HTTPS and JWT authentication:
 
-1. Generate TLS certificate and create Kubernetes secret:
-
+1. Upgrade Helm release to production mode (temporarily without TLS):
 ```console
-dctl generate-keys
+helm upgrade dcontroller dcontroller/dcontroller \
+  --set apiServer.mode=development \
+  --set apiServer.service.type=LoadBalancer
+```
+
+2. Wait for LoadBalancer IP and generate TLS certificate with IP SAN:
+```console
+# Wait for external IP to be assigned
+kubectl -n dcontroller-system wait --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' \
+  service/dcontroller-apiserver --timeout=60s
+
+export EXTERNAL_IP=$(kubectl -n dcontroller-system get service dcontroller-apiserver \
+  -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+# Generate certificate valid for both localhost and the external IP
+dctl generate-keys --hostname=localhost --hostname=${EXTERNAL_IP}
+
 kubectl create secret tls dcontroller-tls \
   --cert=apiserver.crt --key=apiserver.key \
   -n dcontroller-system
 ```
 
-2. Upgrade Helm release to production mode:
-
+3. Upgrade to production mode with TLS:
 ```console
 helm upgrade dcontroller dcontroller/dcontroller \
   --set apiServer.mode=production \
   --set apiServer.service.type=LoadBalancer
 ```
 
-3. Get the API server address:
-
-```console
-kubectl get svc dcontroller-apiserver -n dcontroller-system
-# Note the EXTERNAL-IP or use port-forward for ClusterIP
-```
-
 4. Create RBAC rules file (Kubernetes PolicyRule format):
-
 ```console
 cat > alice-rules.json <<EOF
 [
@@ -307,7 +326,7 @@ EOF
 dctl generate-config --user=alice --namespaces=team-a \
   --rules-file=alice-rules.json \
   --tls-key-file=apiserver.key \
-  --server-address=<EXTERNAL-IP>:8443 > alice.config
+  --server-address=${EXTERNAL_IP}:8443 > alice.config
 ```
 
 6. Verify and use the kubeconfig:

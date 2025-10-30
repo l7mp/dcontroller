@@ -33,31 +33,47 @@ kubectl api-resources
 
 For production deployment with HTTPS and JWT authentication:
 
-1. **Generate TLS certificate and key:**
-
-   ```bash
-   dctl generate-keys --hostname=dcontroller-api.example.com
-   ```
-
-2. **Create TLS secret:**
+1. **Install with LoadBalancer (development mode first):**
 
    ```bash
    kubectl create namespace dcontroller-system
+   helm install dcontroller dcontroller/dcontroller \
+     --set apiServer.mode=development \
+     --set apiServer.service.type=LoadBalancer
+   ```
+
+2. **Get LoadBalancer IP and generate certificate:**
+
+   ```bash
+   # Wait for external IP
+   kubectl -n dcontroller-system wait --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' \
+     service/dcontroller-apiserver --timeout=60s
+
+   EXTERNAL_IP=$(kubectl -n dcontroller-system get service dcontroller-apiserver \
+     -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+   # Generate certificate with IP SAN
+   dctl generate-keys --hostname=localhost --hostname=${EXTERNAL_IP}
+   ```
+
+3. **Create TLS secret:**
+
+   ```bash
    kubectl create secret tls dcontroller-tls \
      --cert=apiserver.crt \
      --key=apiserver.key \
      -n dcontroller-system
    ```
 
-3. **Install with production mode:**
+4. **Upgrade to production mode:**
 
    ```bash
-   helm install dcontroller dcontroller/dcontroller \
+   helm upgrade dcontroller dcontroller/dcontroller \
      --set apiServer.mode=production \
      --set apiServer.service.type=LoadBalancer
    ```
 
-4. **Get the LoadBalancer IP/hostname:**
+5. **Get the LoadBalancer IP:**
 
    ```bash
    kubectl get svc dcontroller-apiserver -n dcontroller-system
