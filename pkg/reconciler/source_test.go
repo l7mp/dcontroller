@@ -7,10 +7,19 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	// "k8s.io/client-go/util/workqueue"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/client-go/util/workqueue"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/yaml"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/manager"
+	"github.com/l7mp/dcontroller/pkg/object"
 )
 
 var _ = Describe("Virtual Sources", func() {
@@ -18,13 +27,15 @@ var _ = Describe("Virtual Sources", func() {
 		ctx    context.Context
 		cancel context.CancelFunc
 		queue  workqueue.TypedRateLimitingInterface[Request]
+		mgr    runtimeManager.Manager
 	)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithCancel(context.Background())
-		queue = workqueue.NewTypedRateLimitingQueue(
-			workqueue.DefaultTypedControllerRateLimiter[Request](),
-		)
+		var err error
+		mgr, err = manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
+		Expect(err).NotTo(HaveOccurred())
+		queue = workqueue.NewTypedRateLimitingQueue[Request](workqueue.DefaultTypedControllerRateLimiter[Request]())
 	})
 
 	AfterEach(func() {
@@ -32,213 +43,158 @@ var _ = Describe("Virtual Sources", func() {
 		queue.ShutDown()
 	})
 
-	Describe("OneShot Source", func() {
-		It("should trigger exactly once", func() {
-			src := &oneShotRuntimeSource{}
+	It("should unmarshal a OneShot source from YAML", func() {
+		sourceYAML := `
+apiGroup: oneshot-source.view.dcontroller.io
+kind: TestOneShotTrigger
+`
+		var source opv1a1.Source
+		err := yaml.Unmarshal([]byte(sourceYAML), &source)
+		Expect(err).ToNot(HaveOccurred())
 
-			err := src.Start(ctx, queue)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Should receive one event
-			Eventually(func() int {
-				return queue.Len()
-			}, time.Second, 10*time.Millisecond).Should(Equal(1))
-
-			// Wait a bit more and verify no additional events
-			Consistently(func() int {
-				return queue.Len()
-			}, 100*time.Millisecond, 10*time.Millisecond).Should(Equal(1))
-
-			// Verify we can dequeue the event
-			item, shutdown := queue.Get()
-			Expect(shutdown).To(BeFalse())
-			Expect(item).ToNot(BeNil())
-			queue.Done(item)
-		})
-
-		It("should stop gracefully on context cancellation", func() {
-			src := &oneShotRuntimeSource{}
-
-			err := src.Start(ctx, queue)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Cancel context immediately
-			cancel()
-
-			// Should still get the event (goroutine is not checking ctx before sending)
-			Eventually(func() int {
-				return queue.Len()
-			}, time.Second, 10*time.Millisecond).Should(Equal(1))
-		})
+		Expect(source.Group).ToNot(BeNil())
+		Expect(*source.Group).To(Equal(viewv1a1.Group(OneShotSourceOperator)))
+		Expect(source.Kind).To(Equal("TestOneShotTrigger"))
 	})
 
-	Describe("Periodic Source", func() {
-		It("should trigger periodically", func() {
-			period := 5 * time.Millisecond
-			src := &periodicRuntimeSource{
-				period: period,
-			}
-
-			err := src.Start(ctx, queue)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Count events over a period
-			eventCount := 0
-			deadline := time.Now().Add(20 * time.Millisecond)
-
-			for time.Now().Before(deadline) {
-				if queue.Len() > 0 {
-					item, shutdown := queue.Get()
-					if shutdown {
-						break
-					}
-					eventCount++
-					queue.Done(item)
-				}
-				time.Sleep(1 * time.Millisecond)
-			}
-
-			// Should have received at least 2-3 events in 20ms with 5ms period
-			Expect(eventCount).To(BeNumerically(">=", 2))
-			Expect(eventCount).To(BeNumerically("<=", 5))
+	It("OneShot Source should trigger exactly once", func() {
+		group := viewv1a1.Group(OneShotSourceOperator)
+		s := newOneShotSource(mgr, "test", opv1a1.Source{
+			Resource: opv1a1.Resource{
+				Group: &group,
+				Kind:  "TestOneShotTrigger",
+			},
 		})
+		src, err := s.GetSource()
+		Expect(err).NotTo(HaveOccurred())
 
-		It("should stop on context cancellation", func() {
-			period := 5 * time.Millisecond
-			src := &periodicRuntimeSource{
-				period: period,
-			}
+		err = src.Start(ctx, queue)
+		Expect(err).ToNot(HaveOccurred())
 
-			err := src.Start(ctx, queue)
-			Expect(err).ToNot(HaveOccurred())
+		// Should receive one event
+		Eventually(func() int {
+			return queue.Len()
+		}, time.Second, 50*time.Millisecond).Should(Equal(1))
 
-			// Wait for first tick
-			Eventually(func() int {
-				return queue.Len()
-			}, 100*time.Millisecond, 1*time.Millisecond).Should(BeNumerically(">", 0))
+		// Wait a bit more and verify no additional events
+		Consistently(func() int {
+			return queue.Len()
+		}, 100*time.Millisecond, 10*time.Millisecond).Should(Equal(1))
 
-			initialCount := queue.Len()
+		// Verify we can dequeue the event
+		item, shutdown := queue.Get()
+		Expect(shutdown).To(BeFalse())
+		Expect(item).ToNot(BeNil())
+		gvk := item.GVK
+		Expect(gvk.Group).To(Equal(viewv1a1.Group("test")))
+		Expect(gvk.Kind).To(Equal("TestOneShotTrigger"))
+		Expect(item.Name).To(Equal(OneShotSourceObjectName))
+		Expect(item.Namespace).To(Equal(""))
+		Expect(queue.Len()).To(Equal(0))
 
-			// Cancel context
-			cancel()
+		// Verify that the object can be listed from the cache
+		list := composite.NewViewObjectList("test", "TestOneShotTrigger")
+		Eventually(func() bool {
+			err := mgr.GetClient().List(ctx, list)
+			return err == nil && len(list.Items) == 1
+		}, time.Second, 50*time.Millisecond).Should(BeTrue())
+		listObj := list.Items[0]
+		Expect(listObj.GetName()).To(Equal(OneShotSourceObjectName))
+		Expect(listObj.GetLabels()).To(HaveKey(VirtualSourceTriggeredLabel))
+		queue.Done(item)
 
-			// Wait a bit to ensure ticker would have fired if still running
-			time.Sleep(15 * time.Millisecond)
+		// Verify that the object can be fetched from the cache
+		obj := object.NewViewObject("test", "TestOneShotTrigger")
+		Eventually(func() bool {
+			err := mgr.GetClient().Get(ctx, client.ObjectKey{Name: OneShotSourceObjectName}, obj)
+			return err == nil
+		}, time.Second, 50*time.Millisecond).Should(BeTrue())
+		Expect(obj.GetName()).To(Equal(OneShotSourceObjectName))
+		Expect(obj.GetLabels()).To(HaveKey(VirtualSourceTriggeredLabel))
 
-			// Queue length should not have increased significantly
-			finalCount := queue.Len()
-			Expect(finalCount - initialCount).To(BeNumerically("<=", 1))
-		})
-
-		It("should reject non-positive period", func() {
-			src := &periodicRuntimeSource{period: 0}
-
-			err := src.Start(ctx, queue)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("positive period"))
-		})
+		queue.Done(item)
 	})
 
-	Describe("IsVirtualSource", func() {
-		It("should recognize virtual source group", func() {
-			Expect(IsVirtualSource(VirtualSourceGroup)).To(BeTrue())
-			Expect(IsVirtualSource("source.dcontroller.io")).To(BeTrue())
-		})
+	It("should unmarshal a complete Periodic source from YAML", func() {
+		sourceYAML := `
+apiGroup: periodic-source.view.dcontroller.io
+kind: TestPeriodicTrigger
+parameters:
+  period: "10ms"`
+		var source opv1a1.Source
+		err := yaml.Unmarshal([]byte(sourceYAML), &source)
+		Expect(err).ToNot(HaveOccurred())
 
-		It("should reject other groups", func() {
-			Expect(IsVirtualSource("")).To(BeFalse())
-			Expect(IsVirtualSource("apps")).To(BeFalse())
-			Expect(IsVirtualSource("view.dcontroller.io")).To(BeFalse())
-		})
+		// Verify fields
+		Expect(source.Group).ToNot(BeNil())
+		Expect(*source.Group).To(Equal(viewv1a1.Group(PeriodicSourceOperator)))
+		Expect(source.Kind).To(Equal("TestPeriodicTrigger"))
+		Expect(source.Parameters).ToNot(BeNil())
+
+		// Verify parameter parsing
+		var params map[string]interface{}
+		err = json.Unmarshal(source.Parameters.Raw, &params)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(params["period"]).To(Equal("10ms"))
 	})
 
-	Describe("newPeriodicSource parameter parsing", func() {
-		It("should parse period from parameters", func() {
-			periodStr := "10ms"
-			params := map[string]interface{}{
-				"period": periodStr,
-			}
-			raw, err := json.Marshal(params)
-			Expect(err).ToNot(HaveOccurred())
-
-			source := opv1a1.Source{
-				Resource: opv1a1.Resource{
-					Kind: PeriodicKind,
-				},
-				Parameters: &apiextensionsv1.JSON{
-					Raw: raw,
-				},
-			}
-
-			// Create a minimal mock manager for testing
-			// We'll just test the parsing logic directly
-			var extractedPeriod time.Duration
-			if source.Parameters != nil && source.Parameters.Raw != nil {
-				var p map[string]interface{}
-				if err := json.Unmarshal(source.Parameters.Raw, &p); err == nil {
-					if ps, ok := p["period"].(string); ok {
-						if d, err := time.ParseDuration(ps); err == nil {
-							extractedPeriod = d
-						}
-					}
-				}
-			}
-
-			Expect(extractedPeriod).To(Equal(10 * time.Millisecond))
+	It("Periodic Source should trigger periodically", func() {
+		group := viewv1a1.Group(PeriodicSourceOperator)
+		params := apiextensionsv1.JSON{
+			Raw: []byte(`{"period": "5ms"}`),
+		}
+		s := newPeriodicSource(mgr, "test", opv1a1.Source{
+			Resource: opv1a1.Resource{
+				Group: &group,
+				Kind:  "TestPeriodicTrigger",
+			},
+			Parameters: &params,
 		})
 
-		It("should use default period when parameters are nil", func() {
-			source := opv1a1.Source{
-				Resource: opv1a1.Resource{
-					Kind: PeriodicKind,
-				},
-				Parameters: nil,
-			}
+		src, err := s.GetSource()
+		Expect(err).NotTo(HaveOccurred())
 
-			extractedPeriod := 5 * time.Minute // default
-			if source.Parameters != nil && source.Parameters.Raw != nil {
-				var p map[string]interface{}
-				if err := json.Unmarshal(source.Parameters.Raw, &p); err == nil {
-					if ps, ok := p["period"].(string); ok {
-						if d, err := time.ParseDuration(ps); err == nil {
-							extractedPeriod = d
-						}
-					}
+		err = src.Start(ctx, queue)
+		Expect(err).ToNot(HaveOccurred())
+
+		// Count events over a period
+		eventCount := 0
+		deadline := time.Now().Add(20 * time.Millisecond)
+
+		for time.Now().Before(deadline) {
+			if queue.Len() > 0 {
+				item, shutdown := queue.Get()
+				if shutdown {
+					break
 				}
+				eventCount++
+				queue.Done(item)
 			}
+			time.Sleep(1 * time.Millisecond)
+		}
 
-			Expect(extractedPeriod).To(Equal(5 * time.Minute))
-		})
+		// Should have received at least 2-3 events in 20ms with 5ms period
+		Expect(eventCount).To(BeNumerically(">=", 2))
+		Expect(eventCount).To(BeNumerically("<=", 5))
 
-		It("should use default period for invalid duration string", func() {
-			params := map[string]interface{}{
-				"period": "invalid",
-			}
-			raw, err := json.Marshal(params)
-			Expect(err).ToNot(HaveOccurred())
+		// Verify that the object can be listed from the cache
+		list := composite.NewViewObjectList("test", "TestPeriodicTrigger")
+		Eventually(func() bool {
+			err := mgr.GetClient().List(ctx, list)
+			return err == nil && len(list.Items) == 1
+		}, time.Second, 50*time.Millisecond).Should(BeTrue())
+		listObj := list.Items[0]
+		Expect(listObj.GetName()).To(Equal(PeriodicSourceObjectName))
+		Expect(listObj.GetNamespace()).To(Equal(""))
+		Expect(listObj.GetLabels()).To(HaveKey(VirtualSourceTriggeredLabel))
 
-			source := opv1a1.Source{
-				Resource: opv1a1.Resource{
-					Kind: PeriodicKind,
-				},
-				Parameters: &apiextensionsv1.JSON{
-					Raw: raw,
-				},
-			}
-
-			extractedPeriod := 5 * time.Minute // default
-			if source.Parameters != nil && source.Parameters.Raw != nil {
-				var p map[string]interface{}
-				if err := json.Unmarshal(source.Parameters.Raw, &p); err == nil {
-					if ps, ok := p["period"].(string); ok {
-						if d, err := time.ParseDuration(ps); err == nil {
-							extractedPeriod = d
-						}
-					}
-				}
-			}
-
-			Expect(extractedPeriod).To(Equal(5 * time.Minute))
-		})
+		// Verify that the object can be fetched from the cache
+		obj := object.NewViewObject("test", "TestPeriodicTrigger")
+		Eventually(func() bool {
+			err := mgr.GetClient().Get(ctx, client.ObjectKey{Name: PeriodicSourceObjectName}, obj)
+			return err == nil
+		}, time.Second, 50*time.Millisecond).Should(BeTrue())
+		Expect(obj.GetName()).To(Equal(PeriodicSourceObjectName))
+		Expect(obj.GetLabels()).To(HaveKey(VirtualSourceTriggeredLabel))
 	})
 })

@@ -818,6 +818,119 @@ target:
 			}, timeout, retryInterval).Should(BeTrue())
 		})
 	})
+
+	Describe("With Controllers triggered by a virtual source", func() {
+		It("should generate watch requests on the target view using a OneShot source", func() {
+			jsonData := `
+name: one-shot-controller
+sources:
+  - apiGroup: "oneshot-source.view.dcontroller.io"
+    kind: InitialTrigger
+pipeline:
+ '@aggregate':
+   - '@project':
+       metadata:
+         name: test-name
+         namespace: ns
+target:
+  kind: test-target`
+			var config opv1a1.Controller
+			err := yaml.Unmarshal([]byte(jsonData), &config)
+			Expect(err).NotTo(HaveOccurred())
+
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			go func() { mgr.Start(ctx) }()
+
+			errorChan := make(chan error, 1)
+			defer close(errorChan)
+			c, err := New(mgr, "test", config, Options{ErrorChan: errorChan})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.GetName()).To(Equal("one-shot-controller"))
+
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			Expect(vcache).NotTo(BeNil())
+			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "test-target"))
+			Expect(err).NotTo(HaveOccurred())
+
+			event := watch.Event{}
+			Eventually(func() bool {
+				var ok bool
+				event, ok = tryWatchWatcher(watcher, interval)
+				return ok && event.Type == watch.Added
+			}, timeout, retryInterval).Should(BeTrue())
+
+			obj, ok := event.Object.(object.Object)
+			Expect(ok).To(BeTrue())
+			Expect(obj.GroupVersionKind()).To(Equal(viewv1a1.GroupVersionKind("test", "test-target")))
+			Expect(obj.GetName()).To(Equal("test-name"))
+			Expect(obj.GetNamespace()).To(Equal("ns"))
+		})
+
+		It("should generate watch requests on the target view using a Periodoc source", func() {
+			jsonData := `
+name: periodic-controller
+sources:
+  - apiGroup: "periodic-source.view.dcontroller.io"
+    kind: PeriodicTrigger
+    parameters:
+      period: "5ms"
+pipeline:
+ '@aggregate':
+   - '@project':
+       metadata:
+         name: test-name
+         namespace: ns
+         labels: $.metadata.labels
+target:
+  kind: test-target`
+			var config opv1a1.Controller
+			err := yaml.Unmarshal([]byte(jsonData), &config)
+			Expect(err).NotTo(HaveOccurred())
+
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			go func() { mgr.Start(ctx) }()
+
+			errorChan := make(chan error, 1)
+			defer close(errorChan)
+			c, err := New(mgr, "test", config, Options{ErrorChan: errorChan})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.GetName()).To(Equal("periodic-controller"))
+
+			// Create a viewcache watcher
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			Expect(vcache).NotTo(BeNil())
+			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "test-target"))
+			Expect(err).NotTo(HaveOccurred())
+
+			// wait 2 events
+			counter := 0
+			event := watch.Event{}
+			Eventually(func() bool {
+				for i := 0; i < 3; i++ {
+					var ok bool
+					event, ok = tryWatchWatcher(watcher, interval)
+					if ok && (event.Type == watch.Modified || event.Type == watch.Added) {
+						counter++
+					}
+				}
+				return counter == 3
+			}, 20*time.Millisecond, 5*time.Millisecond).Should(BeTrue())
+
+			obj, ok := event.Object.(object.Object)
+			Expect(ok).To(BeTrue())
+			Expect(obj.GroupVersionKind()).To(Equal(viewv1a1.GroupVersionKind("test", "test-target")))
+			Expect(obj.GetName()).To(Equal("test-name"))
+			Expect(obj.GetNamespace()).To(Equal("ns"))
+			labels := obj.GetLabels()
+			Expect(labels).To(HaveKey(reconciler.VirtualSourceTriggeredLabel))
+		})
+	})
 })
 
 func tryWatchWatcher(watcher watch.Interface, d time.Duration) (watch.Event, bool) {

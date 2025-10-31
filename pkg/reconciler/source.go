@@ -15,37 +15,53 @@ import (
 	runtimeSource "sigs.k8s.io/controller-runtime/pkg/source"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/predicate"
 )
 
 const (
-	// VirtualSourceGroup is the API group for virtual (non-Kubernetes) sources
-	VirtualSourceGroup = "source.dcontroller.io"
+	// OneShotSourceOperator is a virtual operator that triggers exactly once when the
+	// controller starts with injecting an empty object into the parent operator's view cache.
+	OneShotSourceOperator = "oneshot-source"
 
-	// VirtualSourceVersion is the version for virtual sources
-	VirtualSourceVersion = "v1alpha1"
+	// OneShotSourceObjectName is the name of the trigger object.
+	OneShotSourceObjectName = "one-shot-trigger"
+
+	// PeriodicSourceOperator is a virtual operator that triggers periodically based on a timer
+	// with injecting an empty object into the parent operator's view cache.
+	PeriodicSourceOperator = "periodic-source"
+
+	// PeriodicSourceObjectName is the name of the trigger object.
+	PeriodicSourceObjectName = "periodic-trigger"
+
+	// VirtualSourceTriggeredLabel defines the name of the last-triggered label.
+	VirtualSourceTriggeredLabel = "dcontroller.io/last-triggered"
 )
-
-// Virtual source kinds
-const (
-	// OneShotKind is a source that triggers exactly once when the controller starts
-	OneShotKind = "OneShot"
-
-	// PeriodicKind is a source that triggers periodically based on a timer
-	PeriodicKind = "Periodic"
-)
-
-// IsVirtualSource returns true if the given resource is a virtual source
-func IsVirtualSource(apiGroup string) bool {
-	return apiGroup == VirtualSourceGroup
-}
 
 // Source is a generic watch source that knows how to create controller runtime sources.
 type Source interface {
 	Resource
 	GetSource() (runtimeSource.TypedSource[Request], error)
 	fmt.Stringer
+}
+
+// NewSource creates a new source resource. It dispatches to the appropriate implementation based
+// on the source's API group (virtual sources vs Kubernetes resource watches).
+func NewSource(mgr runtimeManager.Manager, operator string, s opv1a1.Source) Source {
+	apiGroup := ""
+	if s.Group != nil {
+		apiGroup = *s.Group
+	}
+
+	switch apiGroup {
+	case viewv1a1.Group(OneShotSourceOperator):
+		return newOneShotSource(mgr, operator, s)
+	case viewv1a1.Group(PeriodicSourceOperator):
+		return newPeriodicSource(mgr, operator, s)
+	default:
+		return newWatchSource(mgr, operator, s)
+	}
 }
 
 // watchSource is a source that watches Kubernetes API resources
@@ -114,52 +130,32 @@ func (s *watchSource) GetSource() (runtimeSource.TypedSource[Request], error) {
 	return src, nil
 }
 
-// NewSource creates a new source resource. It dispatches to the appropriate implementation
-// based on the source's API group (virtual sources vs Kubernetes resource watches).
-func NewSource(mgr runtimeManager.Manager, operator string, s opv1a1.Source) Source {
-	// Check if this is a virtual source
-	apiGroup := s.Group
-	if apiGroup == nil {
-		apiGroup = new(string)
-		*apiGroup = ""
-	}
-
-	if IsVirtualSource(*apiGroup) {
-		// Dispatch to virtual source implementation
-		kind := s.Kind
-		switch kind {
-		case OneShotKind:
-			return newOneShotSource(mgr, operator, s)
-		case PeriodicKind:
-			return newPeriodicSource(mgr, operator, s)
-		default:
-			// Unknown virtual source kind - fall back to watch source
-			// (will likely fail during GetSource())
-			return newWatchSource(mgr, operator, s)
-		}
-	}
-
-	// Regular Kubernetes resource watch
-	return newWatchSource(mgr, operator, s)
-}
-
-// oneShotSource is a virtual source that triggers exactly once when the controller starts.
+// oneShotSource is a virtual operator that triggers the controller exactly once when the
+// controller starts with an empty resource.
 type oneShotSource struct {
 	Resource
-	mgr    runtimeManager.Manager
-	source opv1a1.Source
-	log    logr.Logger
+	mgr      runtimeManager.Manager
+	client   client.Client
+	operator string
+	source   opv1a1.Source
+	log      logr.Logger
 }
 
 // newOneShotSource creates a new one-shot source.
 func newOneShotSource(mgr runtimeManager.Manager, operator string, s opv1a1.Source) Source {
+	objGVK := viewv1a1.GroupVersionKind(operator, s.Kind)
 	src := &oneShotSource{
 		mgr:      mgr,
+		client:   mgr.GetClient(),
 		source:   s,
-		Resource: NewResource(mgr, operator, s.Resource),
+		operator: operator,
+		Resource: NewResource(mgr, operator, opv1a1.Resource{
+			Group: &objGVK.Group,
+			Kind:  objGVK.Kind,
+		}),
 	}
 
-	log := mgr.GetLogger().WithName("oneshot-source").WithValues("name", src.Resource.String())
+	log := mgr.GetLogger().WithName("oneshot-source").WithValues("kind", s.Kind)
 	src.log = log
 
 	return src
@@ -171,42 +167,50 @@ func (s *oneShotSource) String() string { return s.Resource.String() }
 // GetSource generates a controller-runtime source that triggers once.
 func (s *oneShotSource) GetSource() (runtimeSource.TypedSource[Request], error) {
 	s.log.V(4).Info("one-shot source: ready")
-	return &oneShotRuntimeSource{}, nil
+
+	// Create an empty object in the operator's view space, with the requested Kind.
+	gvk, err := s.GetGVK()
+	if err != nil {
+		return nil, err
+	}
+
+	// Inject into the view cache
+	obj := object.NewViewObject(s.operator, gvk.Kind)
+	obj.SetName(OneShotSourceObjectName)
+	obj.SetLabels(map[string]string{VirtualSourceTriggeredLabel: time.Now().String()})
+	if err := s.client.Create(context.TODO(), obj); err != nil {
+		return nil, fmt.Errorf("failed to inject initial trigger")
+	}
+
+	return runtimeSource.TypedKind[client.Object](s.mgr.GetCache(), obj,
+		EventHandler[client.Object]{}), nil
 }
 
-// oneShotRuntimeSource is a controller-runtime source that triggers exactly once.
-type oneShotRuntimeSource struct{}
-
-// Start implements source.TypedSource and triggers a single reconciliation event.
-func (s *oneShotRuntimeSource) Start(ctx context.Context, queue workqueue.TypedRateLimitingInterface[Request]) error {
-	go func() {
-		// Virtual sources don't have a specific object, so we use empty values
-		queue.Add(Request{
-			Name:      "OneShotEvent",
-			Namespace: "",
-			EventType: object.Added,
-		})
-	}()
-
-	return nil
-}
-
-// periodicSource is a virtual source that triggers periodically based on a timer.
+// periodicSource is a virtual operator that triggers periodically based on a timer with inhecting
+// an empty object into the parent operator's view cache.
 type periodicSource struct {
 	Resource
-	mgr    runtimeManager.Manager
-	source opv1a1.Source
-	period time.Duration
-	log    logr.Logger
+	mgr      runtimeManager.Manager
+	client   client.Client
+	source   opv1a1.Source
+	operator string
+	period   time.Duration
+	log      logr.Logger
 }
 
 // newPeriodicSource creates a new periodic source.
 func newPeriodicSource(mgr runtimeManager.Manager, operator string, s opv1a1.Source) Source {
+	objGVK := viewv1a1.GroupVersionKind(operator, s.Kind)
 	src := &periodicSource{
 		mgr:      mgr,
+		client:   mgr.GetClient(),
 		source:   s,
-		Resource: NewResource(mgr, operator, s.Resource),
-		period:   5 * time.Minute, // default period
+		operator: operator,
+		Resource: NewResource(mgr, operator, opv1a1.Resource{
+			Group: &objGVK.Group,
+			Kind:  objGVK.Kind,
+		}),
+		period: 5 * time.Minute, // default period
 	}
 
 	// Extract period from parameters
@@ -221,53 +225,72 @@ func newPeriodicSource(mgr runtimeManager.Manager, operator string, s opv1a1.Sou
 		}
 	}
 
-	log := mgr.GetLogger().WithName("periodic-source").
-		WithValues("name", src.Resource.String(), "period", src.period)
+	log := mgr.GetLogger().WithName("periodic-source").WithValues("kind", s.Kind)
 	src.log = log
 
 	return src
 }
 
 // String stringifies a periodic source.
-func (s *periodicSource) String() string { return s.Resource.String() }
+func (s *periodicSource) String() string {
+	return fmt.Sprintf("%s(period=%s)", s.Resource.String(), s.period.String())
+}
 
 // GetSource generates a controller-runtime source that triggers periodically.
 func (s *periodicSource) GetSource() (runtimeSource.TypedSource[Request], error) {
 	s.log.V(4).Info("periodic source: ready")
-	return &periodicRuntimeSource{period: s.period}, nil
+	return &periodicRuntimeSource{src: s, client: s.mgr.GetClient(), log: s.log}, nil
 }
 
 // periodicRuntimeSource is a controller-runtime source that triggers on a timer.
 type periodicRuntimeSource struct {
-	period time.Duration
+	src    *periodicSource
+	client client.Client
+	log    logr.Logger
 }
 
 // Start implements source.TypedSource and triggers periodic reconciliation events.
 func (s *periodicRuntimeSource) Start(ctx context.Context, queue workqueue.TypedRateLimitingInterface[Request]) error {
-	if s.period <= 0 {
-		return fmt.Errorf("periodic source requires positive period, got: %v", s.period)
+	if s.src.period <= 0 {
+		return fmt.Errorf("periodic source requires positive period, got: %v", s.src.period)
 	}
 
+	// Create an empty object in the operator's view space, with the requested Kind.
+	gvk, err := s.src.GetGVK()
+	if err != nil {
+		return err
+	}
+
+	// Triggering source
+	obj := object.NewViewObject(s.src.operator, gvk.Kind)
+	obj.SetName(PeriodicSourceObjectName)
+	src := runtimeSource.TypedKind[client.Object](s.src.mgr.GetCache(), obj,
+		EventHandler[client.Object]{})
+
+	ticker := time.NewTicker(s.src.period)
 	go func() {
-		// Create ticker
-		ticker := time.NewTicker(s.period)
 		defer ticker.Stop()
 
+		started := false
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				// Enqueue a reconciliation request directly
-				// Virtual sources don't have a specific object, so we use empty values
-				queue.Add(Request{
-					Name:      "PeriodicEvent",
-					Namespace: "",
-					EventType: object.Added,
-				})
+				obj.SetLabels(map[string]string{VirtualSourceTriggeredLabel: time.Now().String()})
+				if started {
+					started = true
+					if err := s.client.Update(ctx, obj); err != nil {
+						s.log.Error(err, "failed to update trigger")
+					}
+				} else {
+					if err := s.client.Create(ctx, obj); err != nil {
+						s.log.Error(err, "failed to inject initial trigger")
+					}
+				}
 			}
 		}
 	}()
 
-	return nil
+	return src.Start(ctx, queue)
 }
