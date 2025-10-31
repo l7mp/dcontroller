@@ -336,9 +336,11 @@ func (c *ViewCache) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		return apierrors.NewBadRequest("invalid GVK")
 	}
 
-	c.log.V(5).Info("get", "gvk", gvk, "key", key)
+	c.log.V(5).Info("get", "gvk", gvk, "key", key.String())
 
-	item, exists, err := cache.GetByKey(key.String())
+	// Use toolscache.MetaNamespaceKeyFunc to look up the object, which stringifies an empty
+	// namespace differently from the way client.ObjectKey would stringify it
+	item, exists, err := cache.GetByKey(clientKeyToCacheKey(key).String())
 	if err != nil {
 		return err
 	}
@@ -670,4 +672,26 @@ func (w *ViewCacheWatcher) ResultChan() <-chan watch.Event {
 
 func (c *ViewCache) newGroupError(gvk schema.GroupVersionKind) error {
 	return fmt.Errorf("unknown view object group %s, expected %s", gvk.Group, c.group)
+}
+
+// clientKeyToCacheKey converts a controller-runtime client.ObjectKey to a cache.ObjectName.  This
+// conversion is necessary because client.ObjectKey (a type alias for types.NamespacedName) and
+// cache.ObjectName have different String() implementations for cluster-scoped objects:
+//
+//   - cache.ObjectName.String() for empty namespace: "object-name"
+//   - types.NamespacedName.String() for empty namespace: "/object-name" (note the leading slash)
+//
+// Since cache.MetaNamespaceKeyFunc uses cache.ObjectName internally to generate index keys,
+// we must use the same type when looking up objects to ensure the key strings match.
+// Without this conversion, lookups for cluster-scoped objects will fail because the keys
+// won't match (e.g., looking up "/foo" when the cache indexed it as "foo").
+//
+// See: https://github.com/kubernetes/client-go/blob/master/tools/cache/store.go
+// The comment in cache.ObjectName.String() explicitly states this behavior is intentional
+// to maintain historical compatibility with MetaNamespaceKeyFunc.
+func clientKeyToCacheKey(key client.ObjectKey) toolscache.ObjectName {
+	return toolscache.ObjectName{
+		Namespace: key.Namespace,
+		Name:      key.Name,
+	}
 }

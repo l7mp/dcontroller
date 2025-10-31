@@ -166,6 +166,72 @@ var _ = Describe("ViewCache", func() {
 		})
 	})
 
+	Describe("View cache client operations", func() {
+		It("should retrieve an added object", func() {
+			obj := object.NewViewObject("test", "view")
+			object.SetContent(obj, map[string]any{"a": int64(1)})
+			object.SetName(obj, "ns", "test-1")
+
+			c := cache.GetClient()
+			err := c.Create(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+
+			object.WithUID(obj)
+			retrieved := object.DeepCopy(obj)
+			err = c.Get(ctx, client.ObjectKey{Namespace: "ns", Name: "test-1"}, retrieved)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(object.DeepEqual(retrieved, obj)).To(BeTrue())
+
+			object.SetContent(obj, map[string]any{"a": int64(2)})
+			object.SetName(obj, "ns", "test-1")
+			err = c.Update(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+
+			object.WithUID(obj)
+			retrieved = object.DeepCopy(obj)
+			err = c.Get(ctx, client.ObjectKey{Namespace: "ns", Name: "test-1"}, retrieved)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(object.DeepEqual(retrieved, obj)).To(BeTrue())
+
+			err = c.Delete(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+			err = c.Get(ctx, client.ObjectKey{Namespace: "ns", Name: "test-1"}, retrieved)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should retrieve an added object with an empty namespace", func() {
+			obj := object.NewViewObject("test", "view")
+			object.SetContent(obj, map[string]any{"a": int64(1)})
+			obj.SetName("test-1")
+
+			c := cache.GetClient()
+			err := c.Create(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+
+			object.WithUID(obj)
+			retrieved := object.DeepCopy(obj)
+			err = c.Get(ctx, client.ObjectKey{Name: "test-1"}, retrieved)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(object.DeepEqual(retrieved, obj)).To(BeTrue())
+
+			object.SetContent(obj, map[string]any{"a": int64(2)})
+			obj.SetName("test-1")
+			err = c.Update(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+
+			object.WithUID(obj)
+			retrieved = object.DeepCopy(obj)
+			err = c.Get(ctx, client.ObjectKey{Name: "test-1"}, retrieved)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(object.DeepEqual(retrieved, obj)).To(BeTrue())
+
+			err = c.Delete(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+			err = c.Get(ctx, client.ObjectKey{Name: "test-1"}, retrieved)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
 	Describe("Watch operation", func() {
 		It("should notify of existing objects", func() {
 			obj := object.NewViewObject("test", "view")
