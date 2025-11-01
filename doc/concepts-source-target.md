@@ -54,15 +54,17 @@ In addition to watching Kubernetes resources, Δ-controller supports **virtual s
 ```yaml
 sources:
   # Trigger once at startup
-  - apiGroup: "source.dcontroller.io"
+  - apiGroup: "oneshot.virtual-source.dcontroller.io"
     kind: OneShot
 
   # Trigger every 30 seconds
-  - apiGroup: "source.dcontroller.io"
+  - apiGroup: "periodoc.virtual-source.dcontroller.io"
     kind: Periodic
     parameters:
       period: "30s"
 ```
+
+### Predicates
 
 You can refine what a source watches by applying filters. This is crucial for performance and for targeting your controller's logic to specific resources. Filters are combined with a logical AND. 
 
@@ -86,7 +88,7 @@ sources:
     predicate: GenerationChanged
 ```
 
-### Targets: Where the Data Goes
+## Targets: Where the Data Goes
 
 The operator `target` specifies the single resource type where the output of a controller's pipeline is written. The pipeline's output is a set of deltas (additions, updates, deletions), and the target's configuration determines how these deltas are applied.
 
