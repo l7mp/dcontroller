@@ -45,7 +45,7 @@ var _ = Describe("Virtual Sources", func() {
 
 	It("should unmarshal a OneShot source from YAML", func() {
 		sourceYAML := `
-apiGroup: oneshot-source.view.dcontroller.io
+apiGroup: oneshot.virtual-source.dcontroller.io
 kind: TestOneShotTrigger
 `
 		var source opv1a1.Source
@@ -53,12 +53,12 @@ kind: TestOneShotTrigger
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(source.Group).ToNot(BeNil())
-		Expect(*source.Group).To(Equal(viewv1a1.Group(OneShotSourceOperator)))
+		Expect(*source.Group).To(Equal(opv1a1.OneShotSourceGroupVersion.Group))
 		Expect(source.Kind).To(Equal("TestOneShotTrigger"))
 	})
 
 	It("OneShot Source should trigger exactly once", func() {
-		group := viewv1a1.Group(OneShotSourceOperator)
+		group := opv1a1.OneShotSourceGroupVersion.Group
 		s := newOneShotSource(mgr, "test", opv1a1.Source{
 			Resource: opv1a1.Resource{
 				Group: &group,
@@ -117,7 +117,7 @@ kind: TestOneShotTrigger
 
 	It("should unmarshal a complete Periodic source from YAML", func() {
 		sourceYAML := `
-apiGroup: periodic-source.view.dcontroller.io
+apiGroup: periodic.virtual-source.dcontroller.io
 kind: TestPeriodicTrigger
 parameters:
   period: "10ms"`
@@ -127,7 +127,7 @@ parameters:
 
 		// Verify fields
 		Expect(source.Group).ToNot(BeNil())
-		Expect(*source.Group).To(Equal(viewv1a1.Group(PeriodicSourceOperator)))
+		Expect(*source.Group).To(Equal(opv1a1.PeriodicSourceGroupVersion.Group))
 		Expect(source.Kind).To(Equal("TestPeriodicTrigger"))
 		Expect(source.Parameters).ToNot(BeNil())
 
@@ -139,7 +139,7 @@ parameters:
 	})
 
 	It("Periodic Source should trigger periodically", func() {
-		group := viewv1a1.Group(PeriodicSourceOperator)
+		group := opv1a1.PeriodicSourceGroupVersion.Group
 		params := apiextensionsv1.JSON{
 			Raw: []byte(`{"period": "5ms"}`),
 		}

@@ -21,16 +21,8 @@ import (
 )
 
 const (
-	// OneShotSourceOperator is a virtual operator that triggers exactly once when the
-	// controller starts with injecting an empty object into the parent operator's view cache.
-	OneShotSourceOperator = "oneshot-source"
-
 	// OneShotSourceObjectName is the name of the trigger object.
 	OneShotSourceObjectName = "one-shot-trigger"
-
-	// PeriodicSourceOperator is a virtual operator that triggers periodically based on a timer
-	// with injecting an empty object into the parent operator's view cache.
-	PeriodicSourceOperator = "periodic-source"
 
 	// PeriodicSourceObjectName is the name of the trigger object.
 	PeriodicSourceObjectName = "periodic-trigger"
@@ -55,9 +47,9 @@ func NewSource(mgr runtimeManager.Manager, operator string, s opv1a1.Source) Sou
 	}
 
 	switch apiGroup {
-	case viewv1a1.Group(OneShotSourceOperator):
+	case opv1a1.OneShotSourceGroupVersion.Group:
 		return newOneShotSource(mgr, operator, s)
-	case viewv1a1.Group(PeriodicSourceOperator):
+	case opv1a1.PeriodicSourceGroupVersion.Group:
 		return newPeriodicSource(mgr, operator, s)
 	default:
 		return newWatchSource(mgr, operator, s)

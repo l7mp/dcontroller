@@ -824,7 +824,7 @@ target:
 			jsonData := `
 name: one-shot-controller
 sources:
-  - apiGroup: "oneshot-source.view.dcontroller.io"
+  - apiGroup: "oneshot.virtual-source.dcontroller.io"
     kind: InitialTrigger
 pipeline:
  '@aggregate':
@@ -873,7 +873,7 @@ target:
 			jsonData := `
 name: periodic-controller
 sources:
-  - apiGroup: "periodic-source.view.dcontroller.io"
+  - apiGroup: "periodic.virtual-source.dcontroller.io"
     kind: PeriodicTrigger
     parameters:
       period: "5ms"
