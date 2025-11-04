@@ -28,7 +28,6 @@ import (
 	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
-	"github.com/l7mp/dcontroller/pkg/reconciler"
 )
 
 const (
@@ -143,68 +142,6 @@ var _ = Describe("Controller", func() {
 	})
 
 	Describe("With Controllers using simple aggregation pipelines", func() {
-		It("should generate watch requests on the target view", func() {
-			jsonData := `
-'@aggregate':
-  - '@project':
-      metadata:
-        annotations:
-          testannotation: $.testannotation`
-			var p opv1a1.Pipeline
-			err := yaml.Unmarshal([]byte(jsonData), &p)
-			Expect(err).NotTo(HaveOccurred())
-
-			config := opv1a1.Controller{
-				Name: "test",
-				Sources: []opv1a1.Source{{
-					Resource: opv1a1.Resource{
-						Kind: "view",
-					},
-				}},
-				Pipeline: p,
-				Target: opv1a1.Target{
-					Resource: opv1a1.Resource{
-						Kind: "view",
-					},
-					Type: "Patcher",
-				},
-			}
-
-			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(mgr).NotTo(BeNil())
-
-			go func() { mgr.Start(ctx) }()
-
-			// Create controller overriding the request processor
-			request := reconciler.Request{}
-			c, err := New(mgr, "test", config, Options{
-				Processor: func(_ context.Context, _ *Controller, req reconciler.Request) error {
-					request = req
-					return nil
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.GetName()).To(Equal("test"))
-
-			// push a view object via the view cache
-			vcache := mgr.GetCompositeCache().GetViewCache()
-			Expect(vcache).NotTo(BeNil())
-
-			err = vcache.Add(view)
-			Expect(err).NotTo(HaveOccurred())
-
-			Eventually(func() bool {
-				return request != reconciler.Request{}
-			}, timeout, retryInterval).Should(BeTrue())
-			Expect(request).To(Equal(reconciler.Request{
-				GVK:       viewv1a1.GroupVersionKind("test", "view"),
-				Namespace: "default",
-				Name:      "viewname",
-				EventType: object.Added,
-			}))
-		})
-
 		It("should implement a basic controller on view objects", func() {
 			jsonData := `
 '@aggregate':
@@ -824,7 +761,7 @@ target:
 			jsonData := `
 name: one-shot-controller
 sources:
-  - apiGroup: "oneshot.virtual-source.dcontroller.io"
+  - type: OneShot
     kind: InitialTrigger
 pipeline:
  '@aggregate':
@@ -871,19 +808,20 @@ target:
 
 		It("should generate watch requests on the target view using a Periodoc source", func() {
 			jsonData := `
-name: periodic-controller
+name: test-controller
 sources:
-  - apiGroup: "periodic.virtual-source.dcontroller.io"
+  - type: OneShot
+    kind: InitialTrigger
+  - type: Periodic
     kind: PeriodicTrigger
     parameters:
-      period: "5ms"
+      period: "20ms"
 pipeline:
  '@aggregate':
    - '@project':
        metadata:
          name: test-name
          namespace: ns
-         labels: $.metadata.labels
 target:
   kind: test-target`
 			var config opv1a1.Controller
@@ -897,10 +835,9 @@ target:
 			go func() { mgr.Start(ctx) }()
 
 			errorChan := make(chan error, 1)
-			defer close(errorChan)
 			c, err := New(mgr, "test", config, Options{ErrorChan: errorChan})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(c.GetName()).To(Equal("periodic-controller"))
+			Expect(c.GetName()).To(Equal("test-controller"))
 
 			// Create a viewcache watcher
 			vcache := mgr.GetCompositeCache().GetViewCache()
@@ -908,27 +845,173 @@ target:
 			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "test-target"))
 			Expect(err).NotTo(HaveOccurred())
 
-			// wait 2 events
+			// wait for multiple events - initial from oneshot, then periodic SoW reconciliations
 			counter := 0
 			event := watch.Event{}
-			Eventually(func() bool {
-				for i := 0; i < 3; i++ {
-					var ok bool
-					event, ok = tryWatchWatcher(watcher, interval)
-					if ok && (event.Type == watch.Modified || event.Type == watch.Added) {
-						counter++
-					}
-				}
-				return counter == 3
-			}, 20*time.Millisecond, 5*time.Millisecond).Should(BeTrue())
+			for i := 0; i < 3; i++ {
+				var ok bool
+				event, ok = tryWatchWatcher(watcher, interval)
+				if ok && (event.Type == watch.Modified || event.Type == watch.Added) {
+					counter++
+					// remove the generated object so that the periodic trigger
+					// can redo it
+					obj := object.NewViewObject("test", "test-target")
+					object.SetName(obj, "ns", "test-name")
+					err = vcache.Delete(obj)
+					Expect(err).NotTo(HaveOccurred())
 
+					// IMPORTANT: Also delete from the pipeline's target cache to keep it synchronized.
+					targetCache := c.pipeline.GetTargetCache()
+					Expect(targetCache).NotTo(BeNil())
+					err = targetCache.Delete(obj)
+					Expect(err).NotTo(HaveOccurred())
+				}
+			}
+
+			Expect(counter).To(BeNumerically(">=", 2), "should have at least initial + 1 periodic reconciliation")
 			obj, ok := event.Object.(object.Object)
 			Expect(ok).To(BeTrue())
 			Expect(obj.GroupVersionKind()).To(Equal(viewv1a1.GroupVersionKind("test", "test-target")))
 			Expect(obj.GetName()).To(Equal("test-name"))
 			Expect(obj.GetNamespace()).To(Equal("ns"))
-			labels := obj.GetLabels()
-			Expect(labels).To(HaveKey(reconciler.VirtualSourceTriggeredLabel))
+		})
+
+		It("should remove stale objects during periodic reconciliation", func() {
+			jsonData := `
+name: test-controller
+sources:
+  - type: OneShot
+    kind: InitialTrigger
+  - type: Periodic
+    kind: PeriodicTrigger
+    parameters:
+      period: "20ms"
+pipeline:
+ '@aggregate':
+   - '@project':
+       metadata:
+         name: from-source
+         namespace: ns
+target:
+  kind: test-target`
+			var config opv1a1.Controller
+			err := yaml.Unmarshal([]byte(jsonData), &config)
+			Expect(err).NotTo(HaveOccurred())
+
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			go func() { mgr.Start(ctx) }()
+
+			errorChan := make(chan error, 1)
+			c, err := New(mgr, "test", config, Options{ErrorChan: errorChan})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create a viewcache watcher
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			Expect(vcache).NotTo(BeNil())
+			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "test-target"))
+			Expect(err).NotTo(HaveOccurred())
+
+			// Wait for the initial object to be created
+			event, ok := tryWatchWatcher(watcher, timeout)
+			Expect(ok).To(BeTrue())
+			Expect(event.Type).To(Equal(watch.Added))
+
+			// Manually inject a stale object into both caches
+			staleObj := object.NewViewObject("test", "test-target")
+			object.SetName(staleObj, "ns", "stale-object")
+			err = vcache.Add(staleObj)
+			Expect(err).NotTo(HaveOccurred())
+			targetCache := c.pipeline.GetTargetCache()
+			err = targetCache.Add(staleObj)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Wait for periodic reconciliation to remove the stale object
+			Eventually(func() bool {
+				event, ok := tryWatchWatcher(watcher, interval)
+				if ok && event.Type == watch.Deleted {
+					obj, ok := event.Object.(object.Object)
+					if ok && obj.GetName() == "stale-object" {
+						return true
+					}
+				}
+				return false
+			}, timeout*5, interval).Should(BeTrue(), "periodic reconciliation should remove stale object")
+		})
+
+		It("should handle timeout-like scenario with periodic reconciliation", func() {
+			// This simulates a scenario where source objects have TTL-like behavior.
+			// The pipeline includes a timestamp, and periodic reconciliation ensures
+			// objects are recreated even if they expire/get deleted.
+			jsonData := `
+name: test-controller
+sources:
+  - type: OneShot
+    kind: InitialTrigger
+  - type: Periodic
+    kind: PeriodicTrigger
+    parameters:
+      period: "20ms"
+pipeline:
+ '@aggregate':
+   - '@project':
+       metadata:
+         name: refreshed-object
+         namespace: ns
+         labels:
+           refresh-count: "@string($.metadata.labels[\"dcontroller.io/last-triggered\"])"
+target:
+  kind: test-target`
+			var config opv1a1.Controller
+			err := yaml.Unmarshal([]byte(jsonData), &config)
+			Expect(err).NotTo(HaveOccurred())
+
+			mgr, err := manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			go func() { mgr.Start(ctx) }()
+
+			errorChan := make(chan error, 1)
+			c, err := New(mgr, "test", config, Options{ErrorChan: errorChan})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create a viewcache watcher
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			Expect(vcache).NotTo(BeNil())
+			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "test-target"))
+			Expect(err).NotTo(HaveOccurred())
+
+			// Wait for initial object
+			event, ok := tryWatchWatcher(watcher, timeout)
+			Expect(ok).To(BeTrue())
+			Expect(event.Type).To(Equal(watch.Added))
+
+			// Simulate timeout by deleting the object (mimics expiration)
+			obj := object.NewViewObject("test", "test-target")
+			object.SetName(obj, "ns", "refreshed-object")
+			err = vcache.Delete(obj)
+			Expect(err).NotTo(HaveOccurred())
+			targetCache := c.pipeline.GetTargetCache()
+			err = targetCache.Delete(obj)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Wait for deletion event
+			event, ok = tryWatchWatcher(watcher, timeout)
+			Expect(ok).To(BeTrue())
+			Expect(event.Type).To(Equal(watch.Deleted))
+
+			// Periodic reconciliation should recreate the object
+			Eventually(func() bool {
+				event, ok := tryWatchWatcher(watcher, interval)
+				if ok && event.Type == watch.Added {
+					obj, ok := event.Object.(object.Object)
+					return ok && obj.GetName() == "refreshed-object"
+				}
+				return false
+			}, timeout*5, interval).Should(BeTrue(), "periodic reconciliation should recreate deleted object")
 		})
 	})
 })

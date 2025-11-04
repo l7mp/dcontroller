@@ -27,39 +27,39 @@ func NewExecutor(graph *ChainGraph, log logr.Logger) (*Executor, error) {
 	}, nil
 }
 
-// ProcessDelta processes one delta input and produces delta output.  This is the core incremental
-// execution method.
-func (e *Executor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet, error) {
+// Process processes inputs through the executor.
+// For incremental executors, inputs are deltas. For snapshot executors, inputs are complete states.
+func (e *Executor) Process(inputs DeltaZSet) (*DocumentZSet, error) {
 	// Step 1: Validate inputs
-	if len(deltaInputs) != len(e.graph.inputs) {
-		return nil, fmt.Errorf("expected %d inputs, got %d", len(e.graph.inputs), len(deltaInputs))
+	if len(inputs) != len(e.graph.inputs) {
+		return nil, fmt.Errorf("expected %d inputs, got %d", len(e.graph.inputs), len(inputs))
 	}
 
-	inputs := []string{}
+	inputStrs := []string{}
 	for _, inputID := range e.graph.inputs {
 		inputName, ok := e.graph.inputIdx[inputID]
 		if !ok {
 			return nil, fmt.Errorf("internal error: no input for ID %s", inputID)
 		}
-		zset, exists := deltaInputs[inputName]
+		zset, exists := inputs[inputName]
 		if !exists {
 			return nil, fmt.Errorf("missing input for node %s", inputName)
 		}
-		inputs = append(inputs, fmt.Sprintf("%s->%s", inputName, zset.String()))
+		inputStrs = append(inputStrs, fmt.Sprintf("%s->%s", inputName, zset.String()))
 	}
 
-	// Step 2: Execute join (if exists) on delta inputs
+	// Step 2: Execute join (if exists) on inputs
 	var currentResult *DocumentZSet
 	var err error
 
 	if e.graph.joinNode != "" {
-		e.log.V(2).Info("processing join", "delta", strings.Join(inputs, ","))
+		e.log.V(2).Info("processing join", "inputs", strings.Join(inputStrs, ","))
 
-		// Execute incremental N-ary join
+		// Execute N-ary join
 		joinNode := e.graph.nodes[e.graph.joinNode]
 		joinInputs := make([]*DocumentZSet, len(e.graph.inputs))
 		for i, inputID := range e.graph.inputs {
-			joinInputs[i] = deltaInputs[e.graph.inputIdx[inputID]]
+			joinInputs[i] = inputs[e.graph.inputIdx[inputID]]
 		}
 
 		currentResult, err = joinNode.Op.Process(joinInputs...)
@@ -70,10 +70,10 @@ func (e *Executor) ProcessDelta(deltaInputs DeltaZSet) (*DocumentZSet, error) {
 		e.log.V(4).Info("join ready", "result", currentResult.String())
 	} else {
 		// Single input, no join needed
-		currentResult = deltaInputs[e.graph.inputIdx[e.graph.inputs[0]]]
+		currentResult = inputs[e.graph.inputIdx[e.graph.inputs[0]]]
 	}
 
-	e.log.V(2).Info("processing aggregations", "delta", strings.Join(inputs, ","))
+	e.log.V(2).Info("processing aggregations", "inputs", strings.Join(inputStrs, ","))
 
 	// Step 3: Execute linear chain (all operations are incremental-friendly)
 	for i, nodeID := range e.graph.chain {
@@ -141,21 +141,21 @@ func (e *Executor) GetExecutionPlan() string {
 	step := 2
 	if e.graph.joinNode != "" {
 		joinOp := e.graph.nodes[e.graph.joinNode].Op
-		plan += fmt.Sprintf("%d. Join: %s (%s)\n", step, joinOp.id(), e.getOpTypeString(joinOp))
+		plan += fmt.Sprintf("%d. Join: %s (%s)\n", step, joinOp.id(), getOpTypeString(joinOp))
 		step++
 	}
 
 	// Show chain
 	for i, nodeID := range e.graph.chain {
 		op := e.graph.nodes[nodeID].Op
-		plan += fmt.Sprintf("%d. %s (%s)\n", step+i, op.id(), e.getOpTypeString(op))
+		plan += fmt.Sprintf("%d. %s (%s)\n", step+i, op.id(), getOpTypeString(op))
 	}
 
 	return plan
 }
 
 // getOpTypeString returns the op type as a string.
-func (e *Executor) getOpTypeString(op Operator) string {
+func getOpTypeString(op Operator) string {
 	switch op.OpType() {
 	case OpTypeLinear:
 		return "Linear"
@@ -233,70 +233,29 @@ func (e *Executor) GetNodeResult(nodeID string, deltaInputs map[string]*Document
 	return currentResult, nil
 }
 
-// IncrementalExecutionContext helps track incremental execution state.
-type IncrementalExecutionContext struct {
-	executor         *Executor
-	cumulativeInputs map[string]*DocumentZSet // Running total of all inputs
-	cumulativeOutput *DocumentZSet            // Running total of output
-	timestep         int
+// SnapshotExecutor executes snapshot (state-of-the-world) queries on the linear chain graph.
+// Unlike the incremental Executor, SnapshotExecutor is stateless and processes complete input
+// states rather than deltas. It embeds an Executor and reuses its Process() method.
+type SnapshotExecutor struct {
+	*Executor
 }
 
-// NewIncrementalExecutionContext returns a new executor context.
-func NewIncrementalExecutionContext(executor *Executor) *IncrementalExecutionContext {
-	return &IncrementalExecutionContext{
-		executor:         executor,
-		cumulativeInputs: make(map[string]*DocumentZSet),
-		cumulativeOutput: NewDocumentZSet(),
-		timestep:         0,
-	}
-}
-
-// ProcessDelta processes one delta and updates cumulative state.
-func (ctx *IncrementalExecutionContext) ProcessDelta(deltaInputs map[string]*DocumentZSet) (*DocumentZSet, error) {
-	// fmt.Printf("\n=== Incremental Context: Timestep %d ===\n", ctx.timestep)
-
-	// Update cumulative inputs
-	for inputID, delta := range deltaInputs {
-		if ctx.cumulativeInputs[inputID] == nil {
-			ctx.cumulativeInputs[inputID] = NewDocumentZSet()
-		}
-
-		var err error
-		ctx.cumulativeInputs[inputID], err = ctx.cumulativeInputs[inputID].Add(delta)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update cumulative input %s: %w", inputID, err)
-		}
-	}
-
-	// Execute on delta
-	deltaOutput, err := ctx.executor.ProcessDelta(deltaInputs)
+// NewSnapshotExecutor returns a new snapshot executor for state-of-the-world reconciliation.
+func NewSnapshotExecutor(graph *ChainGraph, log logr.Logger) (*SnapshotExecutor, error) {
+	// Create the underlying executor
+	executor, err := NewExecutor(graph, log)
 	if err != nil {
 		return nil, err
 	}
 
-	// Update cumulative output
-	ctx.cumulativeOutput, err = ctx.cumulativeOutput.Add(deltaOutput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update cumulative output: %w", err)
-	}
-
-	// fmt.Printf("Timestep %d: processed delta (%d docs) -> cumulative (%d docs)\n",
-	// 	ctx.timestep, deltaOutput.Size(), ctx.cumulativeOutput.Size())
-
-	ctx.timestep++
-	return deltaOutput, nil
+	return &SnapshotExecutor{
+		Executor: executor,
+	}, nil
 }
 
-// GetCumulativeOutput returns the current cumulative output.
-func (ctx *IncrementalExecutionContext) GetCumulativeOutput() *DocumentZSet {
-	result := ctx.cumulativeOutput.DeepCopy()
-	return result
+// Reset is a no-op for snapshot executor (stateless).
+func (e *SnapshotExecutor) Reset() {
+	// Snapshot executor is stateless, nothing to reset.
 }
 
-// Reset the context for a fresh start.
-func (ctx *IncrementalExecutionContext) Reset() {
-	ctx.cumulativeInputs = make(map[string]*DocumentZSet)
-	ctx.cumulativeOutput = NewDocumentZSet()
-	ctx.timestep = 0
-	ctx.executor.Reset()
-}
+// Note: GetExecutionPlan() is inherited from the embedded Executor.

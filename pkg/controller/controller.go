@@ -23,40 +23,24 @@
 package controller
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/composite"
-	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/pipeline"
 	"github.com/l7mp/dcontroller/pkg/reconciler"
 	"github.com/l7mp/dcontroller/pkg/util"
 )
 
-var _ runtimeManager.Runnable = &Controller{}
-
-// WatcherBufferSize is the default buffer size for the watch event handler.
-const WatcherBufferSize int = 1024
-
-// ProcessorFunc is the request processor type for the controller.
-type ProcessorFunc func(ctx context.Context, c *Controller, req reconciler.Request) error
-
 // Options defines the controller configuration.
 type Options struct {
-	// Processor allows to override the default request processor of the controller.
-	Processor ProcessorFunc
-
 	// ErrorChannel is a channel to receive errors from the controller.
 	ErrorChan chan error
 }
@@ -67,12 +51,9 @@ type Controller struct {
 	name, op    string
 	config      opv1a1.Controller
 	sources     []reconciler.Source
-	cache       map[schema.GroupVersionKind]*composite.Store // needed to recover deleted objects
 	target      reconciler.Target
 	mgr         runtimeManager.Manager
-	watcher     chan reconciler.Request
 	pipeline    pipeline.Evaluator
-	processor   ProcessorFunc
 	logger, log logr.Logger
 }
 
@@ -89,9 +70,7 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 		mgr:     mgr,
 		op:      operator,
 		sources: []reconciler.Source{},
-		cache:   make(map[schema.GroupVersionKind]*composite.Store),
 		config:  config,
-		watcher: make(chan reconciler.Request, WatcherBufferSize),
 		logger:  logger,
 	}
 	c.errorReporter = NewErrorReporter(c, opts.ErrorChan)
@@ -112,21 +91,12 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 		return c, c.PushCriticalError("invalid controller configuration: no target")
 	}
 
-	processor := processRequest
-	if opts.Processor != nil {
-		processor = opts.Processor
-	}
-	c.processor = processor
-
 	// Create the target.
 	c.target = reconciler.NewTarget(mgr, c.op, config.Target)
 	targetGVK, err := c.target.GetGVK()
 	if err != nil {
 		return c, c.PushCriticalErrorf("invalid target: %w", err)
 	}
-
-	// Create the reconciler.
-	controllerReconciler := NewControllerReconciler(mgr, c)
 
 	// Create the sources and the cache.
 	srcs := []string{}
@@ -147,13 +117,22 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 				util.Stringify(s), err)
 		}
 
-		// Init the cache.
-		c.cache[gvk] = composite.NewStore()
+		// Choose reconciler based on source type
+		var rec reconcile.TypedReconciler[reconciler.Request]
+		if s.Type() == opv1a1.Periodic {
+			// State-of-the-world reconciler for periodic sources.
+			rec = NewStateOfTheWorldReconciler(mgr, c)
+		} else {
+			// Incremental reconciler for watcher and oneshot sources.
+			rec = NewIncrementalReconciler(mgr, c)
+			// Only incremental sources flow through the pipeline.
+			baseviews = append(baseviews, gvk)
+		}
 
 		// Create the controller.
 		ctrl, err := controller.NewTyped(name, mgr, controller.TypedOptions[reconciler.Request]{
 			SkipNameValidation: &on,
-			Reconciler:         controllerReconciler,
+			Reconciler:         rec,
 		})
 		if err != nil {
 			return c, c.PushCriticalErrorf("failed to create runtime controller "+
@@ -174,8 +153,6 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 		}
 
 		c.log.V(4).Info("watching resource", "GVK", s.String())
-
-		baseviews = append(baseviews, gvk)
 	}
 
 	// Create the pipeline.
@@ -187,13 +164,6 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 	}
 	c.pipeline = pipeline
 
-	// Add the controller to the manager (this will automatically start it when Start is called
-	// on the manager, but the reconciler must still be explicitly started).
-	if err := mgr.Add(c); err != nil {
-		return c, c.PushCriticalErrorf("failed to schedule controller %s: %w",
-			c.name, err)
-	}
-
 	c.log.Info("controller ready", "sources", fmt.Sprintf("[%s]", strings.Join(srcs, ",")),
 		"pipeline", c.pipeline.String(), "target", c.target.String(),
 		"errors", strings.Join(c.ReportErrors(), ","))
@@ -203,9 +173,6 @@ func New(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, 
 
 // GetName returns the name of the controller.
 func (c *Controller) GetName() string { return c.name }
-
-// GetWatcher returns the channel that multiplexes the requests coming from the base resources.
-func (c *Controller) GetWatcher() chan reconciler.Request { return c.watcher }
 
 // SetPipeline overrides the pipeline of the controller. Useful for adding a custom pipeline to a controller.
 func (c *Controller) SetPipeline(pipeline pipeline.Evaluator) { c.pipeline = pipeline }
@@ -230,28 +197,6 @@ func (c *Controller) GetGVKs() []schema.GroupVersionKind {
 	}
 
 	return gvks
-}
-
-// Start starts running the controller. The Start function blocks until the context is closed or an
-// error occurs, and it will stop running when the context is closed.
-func (c *Controller) Start(ctx context.Context) error {
-	c.log.Info("starting")
-
-	defer close(c.watcher)
-	for {
-		select {
-		case req := <-c.watcher:
-			c.log.V(2).Info("processing request", "request", util.Stringify(req))
-
-			if err := c.processor(ctx, c, req); err != nil {
-				err = fmt.Errorf("error processing watch event: %w", err)
-				c.log.Error(c.Push(err), "error", "request", req)
-			}
-		case <-ctx.Done():
-			c.log.V(2).Info("controller terminating")
-			return nil
-		}
-	}
 }
 
 // GetStatus returns the status of the controller.
@@ -295,92 +240,4 @@ func (c *Controller) GetStatus(gen int64) opv1a1.ControllerStatus {
 	status.LastErrors = c.Report()
 
 	return status
-}
-
-// processRequest processes a reconcile request.
-func processRequest(ctx context.Context, c *Controller, req reconciler.Request) error {
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(req.GVK)
-	obj.SetNamespace(req.Namespace)
-	obj.SetName(req.Name)
-
-	switch req.EventType {
-	case object.Added, object.Updated, object.Replaced:
-		if err := c.mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
-			return fmt.Errorf("object %s/%s disappeared from client for Add/Update event: %w",
-				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
-		}
-		if err := c.cache[req.GVK].Add(obj); err != nil {
-			return fmt.Errorf("failed to add object %s/%s to cache: %w",
-				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
-		}
-	case object.Deleted:
-		d, ok, err := c.cache[req.GVK].Get(obj)
-		if err != nil {
-			return fmt.Errorf("failed to get object %s/%s to cache in Delete event: %w",
-				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
-		}
-		if !ok {
-			c.log.Info("ignoring Delete event for unknown object %s/%s",
-				req.GVK, client.ObjectKeyFromObject(obj).String())
-		}
-		if err := c.cache[req.GVK].Delete(obj); err != nil {
-			return fmt.Errorf("failed to delete object %s/%s from cache: %w",
-				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
-		}
-
-		obj = d
-	default:
-		c.log.Info("ignoring event %s", req.EventType)
-		return nil
-	}
-
-	delta := object.Delta{
-		Type:   req.EventType,
-		Object: obj,
-	}
-
-	// Process the delta through the pipeline.
-	deltas, err := c.pipeline.Evaluate(delta)
-	if err != nil {
-		return fmt.Errorf("error evaluating pipeline for object %s/%s: %w", req.GVK,
-			client.ObjectKeyFromObject(obj), err)
-	}
-
-	// Apply the resultant deltas.
-	for _, d := range deltas {
-		c.log.V(4).Info("writing delta to target", "target", c.target.String(),
-			"delta-type", d.Type, "object", object.Dump(d.Object))
-
-		if err := c.target.Write(ctx, d); err != nil {
-			return fmt.Errorf("cannot update target %s for delta %s: %w", req.GVK,
-				d.String(), err)
-		}
-	}
-
-	return nil
-}
-
-// ControllerReconciler is a generic reconciler that feeds the requests received from any of the
-// sources into the controller processor pipeline.
-type ControllerReconciler struct {
-	manager runtimeManager.Manager
-	watcher chan reconciler.Request
-	log     logr.Logger
-}
-
-// NewControllerReconciler creates a new generic reconciler.
-func NewControllerReconciler(mgr runtimeManager.Manager, c *Controller) *ControllerReconciler {
-	return &ControllerReconciler{
-		manager: mgr,
-		watcher: c.watcher,
-		log:     mgr.GetLogger().WithName("reconciler").WithValues("name", c.name),
-	}
-}
-
-// Reconcile implements the reconciler.
-func (r *ControllerReconciler) Reconcile(ctx context.Context, req reconciler.Request) (reconcile.Result, error) {
-	r.log.V(4).Info("reconcile", "request", req)
-	r.watcher <- req
-	return reconcile.Result{}, nil
 }

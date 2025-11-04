@@ -228,7 +228,7 @@ func BenchmarkSnapshotSmall(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		result, err := executor.ProcessDelta(deltaInputs)
+		result, err := executor.Process(deltaInputs)
 		if err != nil {
 			b.Fatalf("Processing failed: %v", err)
 		}
@@ -257,7 +257,7 @@ func BenchmarkIncrementalSmall(b *testing.B) {
 			executor.Reset()
 		}
 
-		result, err := executor.ProcessDelta(deltaInputs)
+		result, err := executor.Process(deltaInputs)
 		if err != nil {
 			b.Fatalf("Processing failed: %v", err)
 		}
@@ -284,7 +284,7 @@ func BenchmarkOptimizedSmall(b *testing.B) {
 			executor.Reset()
 		}
 
-		result, err := executor.ProcessDelta(deltaInputs)
+		result, err := executor.Process(deltaInputs)
 		if err != nil {
 			b.Fatalf("Processing failed: %v", err)
 		}
@@ -307,7 +307,7 @@ func BenchmarkSnapshotMedium(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		result, err := executor.ProcessDelta(deltaInputs)
+		result, err := executor.Process(deltaInputs)
 		if err != nil {
 			b.Fatalf("Processing failed: %v", err)
 		}
@@ -340,7 +340,7 @@ func BenchmarkRealisticIncremental(b *testing.B) {
 				benchData.incrementalGraph.inputs[0]: smallDeltas[i%len(smallDeltas)],
 			}
 
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)
 			}
@@ -363,7 +363,7 @@ func BenchmarkRealisticIncremental(b *testing.B) {
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)
 			}
@@ -388,7 +388,7 @@ func BenchmarkOptimizedMedium(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		executor.Reset()
 
-		result, err := executor.ProcessDelta(deltaInputs)
+		result, err := executor.Process(deltaInputs)
 		if err != nil {
 			b.Fatalf("Processing failed: %v", err)
 		}
@@ -411,7 +411,7 @@ func BenchmarkSnapshotLarge(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		result, err := executor.ProcessDelta(deltaInputs)
+		result, err := executor.Process(deltaInputs)
 		if err != nil {
 			b.Fatalf("Processing failed: %v", err)
 		}
@@ -435,7 +435,7 @@ func BenchmarkIncrementalLarge(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		executor.Reset()
 
-		result, err := executor.ProcessDelta(deltaInputs)
+		result, err := executor.Process(deltaInputs)
 		if err != nil {
 			b.Fatalf("Processing failed: %v", err)
 		}
@@ -459,7 +459,7 @@ func BenchmarkOptimizedLarge(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		executor.Reset()
 
-		result, err := executor.ProcessDelta(deltaInputs)
+		result, err := executor.Process(deltaInputs)
 		if err != nil {
 			b.Fatalf("Processing failed: %v", err)
 		}
@@ -473,7 +473,7 @@ func prepopulateJoinState(executor *Executor, graph *ChainGraph, users, projects
 		graph.inputIdx[graph.inputs[0]]: users,
 		graph.inputIdx[graph.inputs[1]]: projects,
 	}
-	_, err := executor.ProcessDelta(deltaInputs)
+	_, err := executor.Process(deltaInputs)
 	return err
 }
 
@@ -584,7 +584,7 @@ func BenchmarkJoinScenarios(b *testing.B) {
 				graph.inputIdx[graph.inputs[0]]: allUsers,
 				graph.inputIdx[graph.inputs[1]]: baselineProjects,
 			}
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)
 			}
@@ -616,7 +616,7 @@ func BenchmarkJoinScenarios(b *testing.B) {
 				graph.inputIdx[graph.inputs[0]]: singleUserDelta,
 				graph.inputIdx[graph.inputs[1]]: emptyProjectDelta,
 			}
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)
 			}
@@ -647,7 +647,7 @@ func BenchmarkJoinScenarios(b *testing.B) {
 				graph.inputIdx[graph.inputs[0]]: singleUserDelta,
 				graph.inputIdx[graph.inputs[1]]: emptyProjectDelta,
 			}
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)
 			}
@@ -676,7 +676,7 @@ func BenchmarkJoinScenarios(b *testing.B) {
 				graph.inputIdx[graph.inputs[0]]: allUsers,
 				graph.inputIdx[graph.inputs[1]]: baselineProjects,
 			}
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)
 			}
@@ -705,7 +705,7 @@ func BenchmarkJoinScenarios(b *testing.B) {
 				graph.inputIdx[graph.inputs[0]]: updateDelta,
 				graph.inputIdx[graph.inputs[1]]: emptyProjectDelta,
 			}
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)
 			}
@@ -734,7 +734,7 @@ func BenchmarkJoinScenarios(b *testing.B) {
 				graph.inputIdx[graph.inputs[0]]: updateDelta,
 				graph.inputIdx[graph.inputs[1]]: emptyProjectDelta,
 			}
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)
 			}
@@ -762,7 +762,7 @@ func BenchmarkJoinScenarios(b *testing.B) {
 				graph.inputIdx[graph.inputs[0]]: allUsers,
 				graph.inputIdx[graph.inputs[1]]: baselineProjects,
 			}
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)
 			}
@@ -791,7 +791,7 @@ func BenchmarkJoinScenarios(b *testing.B) {
 				graph.inputIdx[graph.inputs[0]]: deleteDelta,
 				graph.inputIdx[graph.inputs[1]]: emptyProjectDelta,
 			}
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)
 			}
@@ -820,7 +820,7 @@ func BenchmarkJoinScenarios(b *testing.B) {
 				graph.inputIdx[graph.inputs[0]]: deleteDelta,
 				graph.inputIdx[graph.inputs[1]]: emptyProjectDelta,
 			}
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			if err != nil {
 				b.Fatalf("Processing failed: %v", err)
 			}
@@ -980,7 +980,7 @@ func benchmarkApproach(b *testing.B, graph *ChainGraph, data *DocumentZSet, name
 	for i := 0; i < iterations; i++ {
 		executor.Reset()
 
-		result, err := executor.ProcessDelta(deltaInputs)
+		result, err := executor.Process(deltaInputs)
 		if err != nil {
 			b.Fatalf("%s processing failed: %v", name, err)
 		}

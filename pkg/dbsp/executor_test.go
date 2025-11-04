@@ -23,9 +23,11 @@ var (
 
 var _ = Describe("LinearChainExecutor", func() {
 	var (
-		executor *Executor
-		graph    *ChainGraph
-		rewriter *LinearChainRewriteEngine
+		executor         *Executor
+		snapshotExecutor *SnapshotExecutor
+		graph            *ChainGraph
+		snapshotGraph    *ChainGraph
+		rewriter         *LinearChainRewriteEngine
 	)
 
 	BeforeEach(func() {
@@ -40,8 +42,16 @@ var _ = Describe("LinearChainExecutor", func() {
 			graph.AddToChain(NewProjection(NewFieldProjection("name", "age")))
 			graph.AddToChain(NewSelection(NewRangeFilter("age", 18, 100)))
 
-			// Optimize and create executor
-			err := rewriter.Optimize(graph)
+			// Create both snapshot and incremental executors
+			var err error
+			snapshotGraph, err = ToSnapshotGraph(graph)
+			Expect(err).NotTo(HaveOccurred())
+
+			snapshotExecutor, err = NewSnapshotExecutor(snapshotGraph, logger)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Optimize and create incremental executor
+			err = rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
 			executor, err = NewExecutor(graph, logger)
@@ -73,7 +83,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			}
 
 			// Execute
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should have 2 adults (Alice, Charlie) after projection and selection
@@ -101,13 +111,69 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(names).To(ConsistOf("Alice", "Charlie"))
 		})
 
+		It("should produce equivalent results with snapshot executor", func() {
+			// Create test data
+			alice, err := newDocumentFromPairs("name", "Alice", "age", int64(25), "city", "NYC")
+			Expect(err).NotTo(HaveOccurred())
+
+			bob, err := newDocumentFromPairs("name", "Bob", "age", int64(17), "city", "LA")
+			Expect(err).NotTo(HaveOccurred())
+
+			charlie, err := newDocumentFromPairs("name", "Charlie", "age", int64(30), "city", "SF")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create input state
+			stateUsers := NewDocumentZSet()
+			err = stateUsers.AddDocumentMutate(alice, 1)
+			Expect(err).NotTo(HaveOccurred())
+			err = stateUsers.AddDocumentMutate(bob, 1)
+			Expect(err).NotTo(HaveOccurred())
+			err = stateUsers.AddDocumentMutate(charlie, 1)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Execute with incremental executor
+			deltaInputs := map[string]*DocumentZSet{
+				graph.inputIdx[graph.inputs[0]]: stateUsers,
+			}
+			incrementalResult, err := executor.Process(deltaInputs)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Execute with snapshot executor
+			snapshotInputs := map[string]*DocumentZSet{
+				snapshotGraph.inputIdx[snapshotGraph.inputs[0]]: stateUsers,
+			}
+			snapshotResult, err := snapshotExecutor.Process(snapshotInputs)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Results should be identical
+			Expect(snapshotResult.Size()).To(Equal(incrementalResult.Size()))
+			Expect(snapshotResult.UniqueCount()).To(Equal(incrementalResult.UniqueCount()))
+
+			incrementalDocs, err := incrementalResult.GetUniqueDocuments()
+			Expect(err).NotTo(HaveOccurred())
+			snapshotDocs, err := snapshotResult.GetUniqueDocuments()
+			Expect(err).NotTo(HaveOccurred())
+
+			// Convert to sets for comparison (order may differ)
+			incrementalNames := make([]string, 0)
+			for _, doc := range incrementalDocs {
+				incrementalNames = append(incrementalNames, doc["name"].(string))
+			}
+			snapshotNames := make([]string, 0)
+			for _, doc := range snapshotDocs {
+				snapshotNames = append(snapshotNames, doc["name"].(string))
+			}
+
+			Expect(snapshotNames).To(ConsistOf(incrementalNames))
+		})
+
 		It("should handle empty deltas", func() {
 			emptyDelta := NewDocumentZSet()
 			deltaInputs := map[string]*DocumentZSet{
 				graph.inputIdx[graph.inputs[0]]: emptyDelta,
 			}
 
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(result.IsZero()).To(BeTrue())
@@ -126,7 +192,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[0]]: deltaUsers,
 			}
 
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should have removal result
@@ -152,7 +218,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[0]]: deltaUsers,
 			}
 
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should preserve multiplicity through pipeline
@@ -170,8 +236,16 @@ var _ = Describe("LinearChainExecutor", func() {
 			graph.SetJoin(NewBinaryJoin(NewFlexibleJoin("id", inputs), inputs))
 			graph.AddToChain(NewProjection(NewFieldProjection("left_name", "right_title")))
 
-			// Optimize and create executor
-			err := rewriter.Optimize(graph)
+			// Create snapshot executor
+			var err error
+			snapshotGraph, err = ToSnapshotGraph(graph)
+			Expect(err).NotTo(HaveOccurred())
+
+			snapshotExecutor, err = NewSnapshotExecutor(snapshotGraph, logger)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Optimize and create incremental executor
+			err = rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
 			executor, err = NewExecutor(graph, logger)
@@ -208,7 +282,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[1]]: deltaProjects, // projects
 			}
 
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should have 1 join (Alice-WebApp, both have id=1)
@@ -240,7 +314,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[1]]: deltaProjects,
 			}
 
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// No matches = empty result
@@ -267,12 +341,67 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[1]]: deltaProjects,
 			}
 
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Result should have multiplicity 3 × 2 = 6
 			Expect(result.Size()).To(Equal(6))
 			Expect(result.UniqueCount()).To(Equal(1))
+		})
+
+		It("should produce equivalent results with snapshot executor for joins", func() {
+			// Users
+			alice, err := newDocumentFromPairs("id", int64(1), "name", "Alice")
+			Expect(err).NotTo(HaveOccurred())
+			bob, err := newDocumentFromPairs("id", int64(2), "name", "Bob")
+			Expect(err).NotTo(HaveOccurred())
+
+			stateUsers := NewDocumentZSet()
+			err = stateUsers.AddDocumentMutate(alice, 1)
+			Expect(err).NotTo(HaveOccurred())
+			err = stateUsers.AddDocumentMutate(bob, 1)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Projects
+			proj1, err := newDocumentFromPairs("id", int64(1), "title", "WebApp")
+			Expect(err).NotTo(HaveOccurred())
+			proj3, err := newDocumentFromPairs("id", int64(3), "title", "MobileApp")
+			Expect(err).NotTo(HaveOccurred())
+
+			stateProjects := NewDocumentZSet()
+			err = stateProjects.AddDocumentMutate(proj1, 1)
+			Expect(err).NotTo(HaveOccurred())
+			err = stateProjects.AddDocumentMutate(proj3, 1)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Execute with incremental executor
+			deltaInputs := map[string]*DocumentZSet{
+				graph.inputIdx[graph.inputs[0]]: stateUsers,
+				graph.inputIdx[graph.inputs[1]]: stateProjects,
+			}
+			incrementalResult, err := executor.Process(deltaInputs)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Execute with snapshot executor
+			snapshotInputs := map[string]*DocumentZSet{
+				snapshotGraph.inputIdx[snapshotGraph.inputs[0]]: stateUsers,
+				snapshotGraph.inputIdx[snapshotGraph.inputs[1]]: stateProjects,
+			}
+			snapshotResult, err := snapshotExecutor.Process(snapshotInputs)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Results should be identical
+			Expect(snapshotResult.Size()).To(Equal(incrementalResult.Size()))
+			Expect(snapshotResult.UniqueCount()).To(Equal(incrementalResult.UniqueCount()))
+
+			// Verify join result content
+			incrementalDocs, err := incrementalResult.GetDocuments()
+			Expect(err).NotTo(HaveOccurred())
+			snapshotDocs, err := snapshotResult.GetDocuments()
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(incrementalDocs[0]["left_name"]).To(Equal(snapshotDocs[0]["left_name"]))
+			Expect(incrementalDocs[0]["right_title"]).To(Equal(snapshotDocs[0]["right_title"]))
 		})
 	})
 
@@ -313,7 +442,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[1]]: delta1Projects,
 			}
 
-			result1, err := incrementalContext.ProcessDelta(delta1Inputs)
+			result1, err := incrementalContext.Process(delta1Inputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should create Alice-WebApp join
@@ -335,7 +464,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[1]]: delta2Projects,
 			}
 
-			result2, err := incrementalContext.ProcessDelta(delta2Inputs)
+			result2, err := incrementalContext.Process(delta2Inputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should create Bob-MobileApp join
@@ -358,7 +487,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[1]]: delta3Projects,
 			}
 
-			result3, err := incrementalContext.ProcessDelta(delta3Inputs)
+			result3, err := incrementalContext.Process(delta3Inputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should not create any new joins
@@ -379,7 +508,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[1]]: delta4Projects,
 			}
 
-			result4, err := incrementalContext.ProcessDelta(delta4Inputs)
+			result4, err := incrementalContext.Process(delta4Inputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should remove Alice-WebApp join
@@ -414,7 +543,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Step 1: Add both
-			result1, err := incrementalContext.ProcessDelta(map[string]*DocumentZSet{
+			result1, err := incrementalContext.Process(map[string]*DocumentZSet{
 				graph.inputIdx[graph.inputs[0]]: deltaUsers,
 				graph.inputIdx[graph.inputs[1]]: deltaProjects,
 			})
@@ -427,7 +556,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			deltaProjects2, err := SingletonZSet(webApp2)
 			Expect(err).NotTo(HaveOccurred())
 
-			result2, err := incrementalContext.ProcessDelta(map[string]*DocumentZSet{
+			result2, err := incrementalContext.Process(map[string]*DocumentZSet{
 				graph.inputIdx[graph.inputs[0]]: NewDocumentZSet(), // No new users
 				graph.inputIdx[graph.inputs[1]]: deltaProjects2,
 			})
@@ -449,8 +578,16 @@ var _ = Describe("LinearChainExecutor", func() {
 			keyExt, valueExt, aggregator := createGatherEvaluators("dept", "amount", "department", "amounts")
 			graph.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
-			// Optimize and create executor
-			err := rewriter.Optimize(graph)
+			// Create snapshot executor
+			var err error
+			snapshotGraph, err = ToSnapshotGraph(graph)
+			Expect(err).NotTo(HaveOccurred())
+
+			snapshotExecutor, err = NewSnapshotExecutor(snapshotGraph, logger)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Optimize and create incremental executor
+			err = rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
 			executor, err = NewExecutor(graph, logger)
@@ -478,7 +615,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[0]]: deltaSales,
 			}
 
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should have 2 groups
@@ -509,6 +646,68 @@ var _ = Describe("LinearChainExecutor", func() {
 
 			Expect(foundEngineering).To(BeTrue())
 			Expect(foundMarketing).To(BeTrue())
+		})
+
+		It("should produce equivalent results with snapshot executor for gather", func() {
+			// Sales data
+			sale1, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1000), "rep", "Alice")
+			Expect(err).NotTo(HaveOccurred())
+			sale2, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1500), "rep", "Bob")
+			Expect(err).NotTo(HaveOccurred())
+			sale3, err := newDocumentFromPairs("dept", "Marketing", "amount", int64(800), "rep", "Charlie")
+			Expect(err).NotTo(HaveOccurred())
+
+			stateSales := NewDocumentZSet()
+			err = stateSales.AddDocumentMutate(sale1, 1)
+			Expect(err).NotTo(HaveOccurred())
+			err = stateSales.AddDocumentMutate(sale2, 1)
+			Expect(err).NotTo(HaveOccurred())
+			err = stateSales.AddDocumentMutate(sale3, 1)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Execute with incremental executor
+			deltaInputs := map[string]*DocumentZSet{
+				graph.inputIdx[graph.inputs[0]]: stateSales,
+			}
+			incrementalResult, err := executor.Process(deltaInputs)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Execute with snapshot executor
+			snapshotInputs := map[string]*DocumentZSet{
+				snapshotGraph.inputIdx[snapshotGraph.inputs[0]]: stateSales,
+			}
+			snapshotResult, err := snapshotExecutor.Process(snapshotInputs)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Results should be identical
+			Expect(snapshotResult.Size()).To(Equal(incrementalResult.Size()))
+			Expect(snapshotResult.UniqueCount()).To(Equal(incrementalResult.UniqueCount()))
+
+			// Verify gather results match
+			incrementalDocs, err := incrementalResult.GetUniqueDocuments()
+			Expect(err).NotTo(HaveOccurred())
+			snapshotDocs, err := snapshotResult.GetUniqueDocuments()
+			Expect(err).NotTo(HaveOccurred())
+
+			// Convert to maps for comparison
+			incrementalMap := make(map[string][]any)
+			for _, doc := range incrementalDocs {
+				dept := doc["department"].(string)
+				incrementalMap[dept] = doc["amounts"].([]any)
+			}
+
+			snapshotMap := make(map[string][]any)
+			for _, doc := range snapshotDocs {
+				dept := doc["department"].(string)
+				snapshotMap[dept] = doc["amounts"].([]any)
+			}
+
+			Expect(snapshotMap).To(HaveLen(len(incrementalMap)))
+			for dept, incrementalAmounts := range incrementalMap {
+				snapshotAmounts, ok := snapshotMap[dept]
+				Expect(ok).To(BeTrue(), "Department %s not found in snapshot result", dept)
+				Expect(snapshotAmounts).To(ConsistOf(incrementalAmounts))
+			}
 		})
 	})
 
@@ -566,7 +765,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[1]]: deltaSales,
 			}
 
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should have 2 groups (Engineering: 1500, Marketing: 2000)
@@ -610,7 +809,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			// Don't provide required input
 			deltaInputs := map[string]*DocumentZSet{}
 
-			_, err := executor.ProcessDelta(deltaInputs)
+			_, err := executor.Process(deltaInputs)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("expected 1 inputs, got 0"))
 		})
@@ -621,7 +820,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				"wrong_id": NewDocumentZSet(),
 			}
 
-			_, err := executor.ProcessDelta(deltaInputs)
+			_, err := executor.Process(deltaInputs)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("missing input"))
 		})
@@ -665,7 +864,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			delta, err := SingletonZSet(doc)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = incrementalContext.ProcessDelta(map[string]*DocumentZSet{
+			_, err = incrementalContext.Process(map[string]*DocumentZSet{
 				graph.inputIdx[graph.inputs[0]]: delta,
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -692,7 +891,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			// Step 1
 			delta1, err := SingletonZSet(doc1)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = incrementalContext.ProcessDelta(map[string]*DocumentZSet{
+			_, err = incrementalContext.Process(map[string]*DocumentZSet{
 				graph.inputIdx[graph.inputs[0]]: delta1,
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -703,7 +902,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			// Step 2
 			delta2, err := SingletonZSet(doc2)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = incrementalContext.ProcessDelta(map[string]*DocumentZSet{
+			_, err = incrementalContext.Process(map[string]*DocumentZSet{
 				graph.inputIdx[graph.inputs[0]]: delta2,
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -762,7 +961,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			Expect(graph.chain).To(HaveLen(1)) // Fused operation
 
 			// Get final result
-			finalResult, err := executor.ProcessDelta(deltaInputs)
+			finalResult, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should have only Alice after selection
@@ -800,7 +999,7 @@ var _ = Describe("LinearChainExecutor", func() {
 			}
 
 			// Should complete without error
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should process all items
@@ -832,7 +1031,7 @@ var _ = Describe("LinearChainExecutor", func() {
 					graph.inputIdx[graph.inputs[0]]: delta,
 				}
 
-				_, err = context.ProcessDelta(deltaInputs)
+				_, err = context.Process(deltaInputs)
 				Expect(err).NotTo(HaveOccurred())
 			}
 
@@ -880,7 +1079,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[0]]: delta,
 			}
 
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(result.Size()).To(Equal(1))
@@ -919,7 +1118,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[0]]: mixedDelta,
 			}
 
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Net effect should be +3
@@ -948,7 +1147,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[0]]: delta,
 			}
 
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should produce empty result (selection filters everything out)
@@ -1001,7 +1200,7 @@ var _ = Describe("LinearChainExecutor", func() {
 				graph.inputIdx[graph.inputs[0]]: delta,
 			}
 
-			result, err := executor.ProcessDelta(deltaInputs)
+			result, err := executor.Process(deltaInputs)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should produce correct result

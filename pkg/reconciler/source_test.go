@@ -8,7 +8,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	// "k8s.io/client-go/util/workqueue"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,25 +44,23 @@ var _ = Describe("Virtual Sources", func() {
 
 	It("should unmarshal a OneShot source from YAML", func() {
 		sourceYAML := `
-apiGroup: oneshot.virtual-source.dcontroller.io
+type: OneShot
 kind: TestOneShotTrigger
 `
 		var source opv1a1.Source
 		err := yaml.Unmarshal([]byte(sourceYAML), &source)
 		Expect(err).ToNot(HaveOccurred())
 
-		Expect(source.Group).ToNot(BeNil())
-		Expect(*source.Group).To(Equal(opv1a1.OneShotSourceGroupVersion.Group))
+		Expect(source.Type).To(Equal(opv1a1.OneShot))
 		Expect(source.Kind).To(Equal("TestOneShotTrigger"))
 	})
 
 	It("OneShot Source should trigger exactly once", func() {
-		group := opv1a1.OneShotSourceGroupVersion.Group
-		s := newOneShotSource(mgr, "test", opv1a1.Source{
+		s := NewOneShotSource(mgr, "test", opv1a1.Source{
 			Resource: opv1a1.Resource{
-				Group: &group,
-				Kind:  "TestOneShotTrigger",
+				Kind: "TestOneShotTrigger",
 			},
+			Type: opv1a1.OneShot,
 		})
 		src, err := s.GetSource()
 		Expect(err).NotTo(HaveOccurred())
@@ -117,7 +114,7 @@ kind: TestOneShotTrigger
 
 	It("should unmarshal a complete Periodic source from YAML", func() {
 		sourceYAML := `
-apiGroup: periodic.virtual-source.dcontroller.io
+type: Periodic
 kind: TestPeriodicTrigger
 parameters:
   period: "10ms"`
@@ -126,8 +123,7 @@ parameters:
 		Expect(err).ToNot(HaveOccurred())
 
 		// Verify fields
-		Expect(source.Group).ToNot(BeNil())
-		Expect(*source.Group).To(Equal(opv1a1.PeriodicSourceGroupVersion.Group))
+		Expect(source.Type).To(Equal(opv1a1.Periodic))
 		Expect(source.Kind).To(Equal("TestPeriodicTrigger"))
 		Expect(source.Parameters).ToNot(BeNil())
 
@@ -138,63 +134,52 @@ parameters:
 		Expect(params["period"]).To(Equal("10ms"))
 	})
 
-	It("Periodic Source should trigger periodically", func() {
-		group := opv1a1.PeriodicSourceGroupVersion.Group
+	It("Periodic Source should emit periodic trigger events", func() {
 		params := apiextensionsv1.JSON{
-			Raw: []byte(`{"period": "5ms"}`),
+			Raw: []byte(`{"period": "10ms"}`),
 		}
-		s := newPeriodicSource(mgr, "test", opv1a1.Source{
+		s := NewPeriodicSource(mgr, "test", opv1a1.Source{
 			Resource: opv1a1.Resource{
-				Group: &group,
-				Kind:  "TestPeriodicTrigger",
+				Kind: "TestPeriodicTrigger",
 			},
+			Type:       opv1a1.Periodic,
 			Parameters: &params,
 		})
 
 		src, err := s.GetSource()
 		Expect(err).NotTo(HaveOccurred())
 
+		// Track received events in a channel (simulating controller worker)
+		receivedEvents := make(chan Request, 10)
+		go func() {
+			defer GinkgoRecover()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					item, shutdown := queue.Get()
+					if shutdown {
+						return
+					}
+					receivedEvents <- item
+					queue.Done(item)
+				}
+			}
+		}()
+
 		err = src.Start(ctx, queue)
 		Expect(err).ToNot(HaveOccurred())
 
-		// Count events over a period
-		eventCount := 0
-		deadline := time.Now().Add(20 * time.Millisecond)
+		// Wait for multiple periodic triggers (with 10ms period, should see several triggers)
+		Eventually(receivedEvents, 50*time.Millisecond).Should(Receive())
+		Eventually(receivedEvents, 20*time.Millisecond).Should(Receive())
+		Eventually(receivedEvents, 20*time.Millisecond).Should(Receive())
 
-		for time.Now().Before(deadline) {
-			if queue.Len() > 0 {
-				item, shutdown := queue.Get()
-				if shutdown {
-					break
-				}
-				eventCount++
-				queue.Done(item)
-			}
-			time.Sleep(1 * time.Millisecond)
-		}
-
-		// Should have received at least 2-3 events in 20ms with 5ms period
-		Expect(eventCount).To(BeNumerically(">=", 2))
-		Expect(eventCount).To(BeNumerically("<=", 5))
-
-		// Verify that the object can be listed from the cache
-		list := composite.NewViewObjectList("test", "TestPeriodicTrigger")
-		Eventually(func() bool {
-			err := mgr.GetClient().List(ctx, list)
-			return err == nil && len(list.Items) == 1
-		}, time.Second, 50*time.Millisecond).Should(BeTrue())
-		listObj := list.Items[0]
-		Expect(listObj.GetName()).To(Equal(PeriodicSourceObjectName))
-		Expect(listObj.GetNamespace()).To(Equal(""))
-		Expect(listObj.GetLabels()).To(HaveKey(VirtualSourceTriggeredLabel))
-
-		// Verify that the object can be fetched from the cache
-		obj := object.NewViewObject("test", "TestPeriodicTrigger")
-		Eventually(func() bool {
-			err := mgr.GetClient().Get(ctx, client.ObjectKey{Name: PeriodicSourceObjectName}, obj)
-			return err == nil
-		}, time.Second, 50*time.Millisecond).Should(BeTrue())
-		Expect(obj.GetName()).To(Equal(PeriodicSourceObjectName))
-		Expect(obj.GetLabels()).To(HaveKey(VirtualSourceTriggeredLabel))
+		// Verify event structure
+		var item Request
+		Eventually(receivedEvents, 20*time.Millisecond).Should(Receive(&item))
+		Expect(item.EventType).To(Equal(object.Updated))
+		Expect(item.Name).To(Equal(PeriodicSourceObjectName))
 	})
 })

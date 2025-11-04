@@ -62,6 +62,7 @@ func (r *resource) GetGVK() (schema.GroupVersionKind, error) {
 	if r.resource.Version == nil {
 		return r.getGVKByGroupKind(schema.GroupKind{Group: *r.resource.Group, Kind: r.resource.Kind})
 	}
+
 	return schema.GroupVersionKind{
 		Group:   *r.resource.Group,
 		Version: *r.resource.Version,

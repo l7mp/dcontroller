@@ -56,6 +56,8 @@ type Resource struct {
 // Source is a watch source that feeds deltas into the controller.
 type Source struct {
 	Resource `json:",inline"`
+	// Type specifies the behavior of the source. Default is Watcher.
+	Type SourceType `json:"type,omitempty"`
 	// Namespace, if given, restricts the source to generate events only from the given namespace.
 	Namespace *string `json:"namespace,omitempty"`
 	// LabelSelector is an optional label selector to filter events on this source.
@@ -73,6 +75,18 @@ type Source struct {
 	// +optional
 	Parameters *apiextensionsv1.JSON `json:"parameters,omitempty"`
 }
+
+// SourceType represents the type of a source.
+type SourceType string
+
+const (
+	// Watcher is a source that watches Kubernetes resources and performs incremental reconciliation.
+	Watcher SourceType = "Watcher"
+	// Periodic is a source that triggers state-of-the-world reconciliation for all other sources.
+	Periodic SourceType = "Periodic"
+	// OneShot is a source that emits a single empty object for initialization.
+	OneShot SourceType = "OneShot"
+)
 
 // Target is the target reource type in which the controller writes.
 type Target struct {

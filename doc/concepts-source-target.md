@@ -46,20 +46,50 @@ sources:
 
 ### Virtual Sources
 
-In addition to watching Kubernetes resources, Δ-controller supports **virtual sources** that generate synthetic events based on timers. Virtual sources use the special API group `source.dcontroller.io`.
+In addition to watching Kubernetes resources, Δ-controller supports **virtual sources** that generate synthetic events based on timers. 
 
-*   **`OneShot`**: Triggers the pipeline exactly once when the controller starts. Useful for initializing resources or performing one-time setup.
-*   **`Periodic`**: Triggers the pipeline at regular intervals. Configure the period using the `parameters` field with a Go duration string (e.g., `"5m"`, `"30s"`). Default period is 5 minutes.
+#### OneShot Source
+
+A `OneShot` source triggers the pipeline exactly once when the controller starts with an empty object. This is useful for initializing resources or performing one-time setup operations.
+
+*   OneShot sources generate a single empty object on controller startup, which can be transformed modified via the pipeline.
+*   The empty resource flows through the incremental pipeline just like regular Kubernetes resource watches.
+*   Use it when you need to bootstrap initial state or create resources that don't depend on other sources.
 
 ```yaml
 sources:
   # Trigger once at startup
-  - apiGroup: "oneshot.virtual-source.dcontroller.io"
-    kind: OneShot
+  - type: OneShot
+    kind: InitialSetup
+```
 
-  # Trigger every 30 seconds
-  - apiGroup: "periodoc.virtual-source.dcontroller.io"
-    kind: Periodic
+#### Periodic Source (Experimental)
+
+The `Periodic` source triggers state-of-the-world reconciliation at regular intervals. Unlike incremental sources, periodic sources do not flow through the pipeline as deltas. Instead, they trigger a full reconciliation that:
+
+1. Computes the required target state from all current source objects (using a snapshot of the pipeline).
+2. Compares it against the actual target state.
+3. Applies only the differences (adds missing objects, removes stale objects).
+
+This reconciliation pattern is useful for:
+*   Lease/TTL scenarios: Periodically refreshing resources that have expiration semantics.
+*   External system polling: Regularly checking views reflecting external state and synchronizing it to Kubernetes.
+*   Garbage collection: Removing stale objects that shouldn't exist based on current sources.
+*   Drift correction: Ensuring target state stays synchronized even if manually modified.
+
+Configure the period using the `parameters` field with a Go duration string (e.g., `"5m"`, `"30s"`). The default period is 5 minutes.
+
+**Important**: Periodic sources are experimental. Reconciliation is based on the current state of **all other sources** (Watcher and OneShot), not the periodic trigger itself. The periodic trigger object is not visible in the pipeline.
+
+```yaml
+sources:
+  # Regular watcher source - flows through incremental pipeline
+  - kind: ConfigMap
+    namespace: default
+  # Periodic reconciliation every 30 seconds
+  # This will reconcile based on the current ConfigMap state
+  - kind: Sync
+    type: Periodic
     parameters:
       period: "30s"
 ```
