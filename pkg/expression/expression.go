@@ -688,7 +688,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
 			return v, nil
 
-		case "@exists":
+		case "@exists", "@has":
 			v := arg != nil
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", arg, "result", v)
 			return v, nil
