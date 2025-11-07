@@ -32,7 +32,7 @@ type Error struct {
 
 // errorReporter is the error stack implementation.
 type errorReporter struct {
-	c           *Controller
+	c           *DeclarativeController
 	errorStack  []error
 	ratelimiter rate.Sometimes
 	errorChan   chan error
@@ -40,7 +40,7 @@ type errorReporter struct {
 }
 
 // NewErrorReporter creates a new error reporter.
-func NewErrorReporter(c *Controller, errorChan chan error) *errorReporter {
+func NewErrorReporter(c *DeclarativeController, errorChan chan error) *errorReporter {
 	return &errorReporter{c: c, errorStack: []error{}, ratelimiter: getDefaultRateLimiter(), errorChan: errorChan}
 }
 

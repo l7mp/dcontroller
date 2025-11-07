@@ -53,8 +53,8 @@ type Operator struct {
 	name        string
 	mgr         runtimeMgr.Manager
 	apiServer   *apiserver.APIServer
-	spec        *opv1a1.OperatorSpec
-	controllers []*dcontroller.Controller // maybe nil
+	specs       []*opv1a1.OperatorSpec
+	controllers []dcontroller.Controller // maybe nil
 	ctx         context.Context
 	gvks        []schema.GroupVersionKind
 	errorChan   chan error
@@ -63,43 +63,49 @@ type Operator struct {
 }
 
 // New creates a new operator.
-func New(name string, mgr runtimeMgr.Manager, spec *opv1a1.OperatorSpec, opts Options) *Operator {
+func New(name string, mgr runtimeMgr.Manager, opts Options) *Operator {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
 	}
 
-	op := &Operator{
+	return &Operator{
 		name:        name,
 		mgr:         mgr,
-		spec:        spec,
-		controllers: []*dcontroller.Controller{},
+		controllers: []dcontroller.Controller{},
+		specs:       []*opv1a1.OperatorSpec{},
 		apiServer:   opts.APIServer,
 		gvks:        []schema.GroupVersionKind{},
 		errorChan:   opts.ErrorChannel,
 		logger:      logger,
 		log:         logger.WithName("operator").WithValues("name", name),
 	}
+}
+
+// AddSpec adds a declarative controller spec to the operator. Make sure to call Commit
+// once all control loops are added.
+func (op *Operator) AddSpec(spec *opv1a1.OperatorSpec) {
+	op.specs = append(op.specs, spec)
 
 	// Create the controllers for the operator (manager.Start() will automatically start them)
 	for _, config := range spec.Controllers {
-		if err := op.AddController(config); err != nil {
+		if err := op.AddDeclarativeController(config); err != nil {
 			// error already pushed to the error channel: move on and let parent decide what to do
 			op.log.V(5).Info("failed to create controller", "controller", config.Name,
 				"error", err)
 		}
 	}
+}
 
-	// Update the API server
+// Commit finishes the setup of the operator by registering the GVKs in the API server.
+func (op *Operator) Commit() {
 	if err := op.RegisterGVKs(); err != nil {
 		// this is not fatal
 		op.log.Error(err, "failed to register GKVs with the API server")
 	}
-
-	return op
 }
 
-// NewFromFile creates a new operator from a serialized operator spec.
+// NewFromFile creates a new operator from a serialized operator spec. Note that once this call finishes there is no way to add new controllers to the operator.
 func NewFromFile(name string, mgr runtimeMgr.Manager, file string, opts Options) (*Operator, error) {
 	b, err := os.ReadFile(file)
 	if err != nil {
@@ -109,7 +115,12 @@ func NewFromFile(name string, mgr runtimeMgr.Manager, file string, opts Options)
 	if err := yaml.Unmarshal(b, &spec); err != nil {
 		return nil, fmt.Errorf("failed to parse operator spec: %w", err)
 	}
-	return New(name, mgr, &spec, opts), nil
+
+	op := New(name, mgr, opts)
+	op.AddSpec(&spec)
+	op.Commit()
+
+	return op, nil
 }
 
 // SetAPIServer allows to set the embedded API server. The API server lifecycle is not managed by
@@ -119,15 +130,15 @@ func (op *Operator) SetAPIServer(apiServer *apiserver.APIServer) {
 }
 
 // ListControllers lists the controllers for the operator.
-func (op *Operator) ListControllers() []*dcontroller.Controller {
-	ret := make([]*dcontroller.Controller, len(op.controllers))
+func (op *Operator) ListControllers() []dcontroller.Controller {
+	ret := make([]dcontroller.Controller, len(op.controllers))
 	copy(ret, op.controllers)
 	return ret
 }
 
 // GetController returns the controller with the given name or nil if no controller with that name
 // exists.
-func (op *Operator) GetController(name string) *dcontroller.Controller {
+func (op *Operator) GetController(name string) dcontroller.Controller {
 	for _, c := range op.controllers {
 		if c.GetName() == name {
 			return c
@@ -137,11 +148,25 @@ func (op *Operator) GetController(name string) *dcontroller.Controller {
 	return nil
 }
 
-// AddController adds a new controller to the operator.
-func (op *Operator) AddController(config opv1a1.Controller) error {
-	c, err := dcontroller.New(op.mgr, op.name, config, dcontroller.Options{ErrorChan: op.errorChan})
+// AddDeclarativeController adds a new declarative controller spec to the operator.
+func (op *Operator) AddDeclarativeController(config opv1a1.Controller) error {
+	c, err := dcontroller.NewDeclarative(op.mgr, op.name, config, dcontroller.Options{ErrorChan: op.errorChan})
 	if err != nil {
 		op.log.Error(err, "failed to create controller", "name", config.Name)
+	}
+
+	// the controller returned is always valid: this makes sure we will receive the
+	// status update triggers to show the controller errors to the user
+	op.controllers = append(op.controllers, c)
+
+	return err
+}
+
+// AddNativeController adds a controller-runtime controller to the operator.
+func (op *Operator) AddNativeController(name string, ctrl dcontroller.RuntimeController, gvks []schema.GroupVersionKind) error {
+	c, err := dcontroller.NewNative(name, ctrl, gvks)
+	if err != nil {
+		op.log.Error(err, "failed to create controller", "name", name)
 	}
 
 	// the controller returned is always valid: this makes sure we will receive the
@@ -210,18 +235,22 @@ func (op *Operator) RegisterGVKs() error {
 	for _, c := range op.controllers {
 		gvks = append(gvks, c.GetGVKs()...)
 	}
+	op.gvks = filterGVKs(op.name, gvks)
 
 	op.log.V(2).Info("registering GVKs", "API group", viewv1a1.Group(op.name),
-		"GVKs", gvks)
+		"GVKs", op.gvks)
 
-	op.gvks = uniq(gvks)
 	return op.apiServer.RegisterGVKs(op.gvks)
 }
 
-func uniq(gvks []schema.GroupVersionKind) []schema.GroupVersionKind {
+// filterGVKs keeps only the gvks of this operator group and removes duplicate GVKs
+func filterGVKs(op string, gvks []schema.GroupVersionKind) []schema.GroupVersionKind {
 	var ret []schema.GroupVersionKind
 	set := make(map[schema.GroupVersionKind]bool)
 	for _, item := range gvks {
+		if item.Group != viewv1a1.Group(op) {
+			continue
+		}
 		if !set[item] {
 			set[item] = true
 			ret = append(ret, item)

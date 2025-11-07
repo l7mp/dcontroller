@@ -10,7 +10,7 @@ import (
 
 var _ = Describe("StatusReporter", func() {
 	It("should be able to push errors and return the last", func() {
-		c := &Controller{name: "test-ctrl", op: "test-op"}
+		c := &DeclarativeController{name: "test-ctrl", op: "test-op"}
 		ch := make(chan error, 1)
 		r := NewErrorReporter(c, ch)
 
@@ -77,7 +77,7 @@ var _ = Describe("StatusReporter", func() {
 
 	It("should hold the last 10 errors", func() {
 		ch := make(chan error, ErrorReporterStackSize+11)
-		c := &Controller{name: "test-ctrl", op: "test-op"}
+		c := &DeclarativeController{name: "test-ctrl", op: "test-op"}
 		r := NewErrorReporter(c, ch)
 
 		errs := [ErrorReporterStackSize + 10]error{}

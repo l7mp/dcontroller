@@ -18,12 +18,12 @@ import (
 // It processes requests directly through the pipeline.
 type IncrementalReconciler struct {
 	manager    runtimeManager.Manager
-	controller *Controller
+	controller *DeclarativeController
 	log        logr.Logger
 }
 
 // NewIncrementalReconciler creates a new incremental reconciler.
-func NewIncrementalReconciler(mgr runtimeManager.Manager, c *Controller) *IncrementalReconciler {
+func NewIncrementalReconciler(mgr runtimeManager.Manager, c *DeclarativeController) *IncrementalReconciler {
 	return &IncrementalReconciler{
 		manager:    mgr,
 		controller: c,
@@ -115,12 +115,12 @@ func (r *IncrementalReconciler) Reconcile(ctx context.Context, req reconciler.Re
 // StateOfTheWorldReconciler is a reconciler for periodic sources that triggers full reconciliation.
 type StateOfTheWorldReconciler struct {
 	manager    runtimeManager.Manager
-	controller *Controller
+	controller *DeclarativeController
 	log        logr.Logger
 }
 
 // NewStateOfTheWorldReconciler creates a new state-of-the-world reconciler.
-func NewStateOfTheWorldReconciler(mgr runtimeManager.Manager, c *Controller) *StateOfTheWorldReconciler {
+func NewStateOfTheWorldReconciler(mgr runtimeManager.Manager, c *DeclarativeController) *StateOfTheWorldReconciler {
 	return &StateOfTheWorldReconciler{
 		manager:    mgr,
 		controller: c,

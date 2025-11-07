@@ -115,15 +115,17 @@ func (g *Group) AddOperatorFromSpec(name string, spec *opv1a1.OperatorSpec) (*Op
 	}
 
 	errorChan := make(chan error, StatusChannelBufferSize)
-	operator := New(name, mgr, spec, Options{
+	op := New(name, mgr, Options{
 		APIServer:    g.apiServer,
 		ErrorChannel: errorChan,
 		Logger:       g.logger,
 	})
+	op.AddSpec(spec)
+	op.Commit()
 
-	g.AddOperator(operator)
+	g.AddOperator(op)
 
-	return operator, nil
+	return op, nil
 }
 
 func (g *Group) AddOperator(op *Operator) {

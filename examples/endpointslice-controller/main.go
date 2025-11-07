@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -20,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/yaml"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	dmanager "github.com/l7mp/dcontroller/pkg/manager"
@@ -27,6 +29,8 @@ import (
 	doperator "github.com/l7mp/dcontroller/pkg/operator"
 	dreconciler "github.com/l7mp/dcontroller/pkg/reconciler"
 )
+
+type NativeController controller.TypedController[dreconciler.Request]
 
 const (
 	OperatorName                    = "test-ep-operator"
@@ -83,19 +87,36 @@ func main() {
 		Logger:       logger,
 	}
 
-	// Load the operator from file
-	if _, err := doperator.NewFromFile(OperatorName, mgr, specFile, opts); err != nil {
-		log.Error(err, "unable to create endpointslice operator operator")
+	// Load the operator from file. Do not call NewFromFile as that would commit the operator.
+	op := doperator.New(OperatorName, mgr, opts)
+	b, err := os.ReadFile(specFile)
+	if err != nil {
+		log.Error(err, "failed to load spec")
+		os.Exit(1)
+	}
+	var spec opv1a1.OperatorSpec
+	if err := yaml.Unmarshal(b, &spec); err != nil {
+		log.Error(err, "failed to parse spec")
 		os.Exit(1)
 	}
 
+	op.AddSpec(&spec)
+
 	// Create the endpointslice controller
-	if _, err := NewEndpointSliceController(mgr, logger); err != nil {
+	r, err := NewEndpointSliceController(mgr, logger)
+	if err != nil {
 		log.Error(err, "failed to create endpointslice controller")
 		os.Exit(1)
 	}
 
 	log.Info("created endpointslice controller")
+
+	if err := op.AddNativeController("endpointslice-ctrl", r.GetController(), []schema.GroupVersionKind{}); err != nil {
+		log.Error(err, "failed to add endpointslice controller to the operator")
+		os.Exit(1)
+	}
+
+	op.Commit()
 
 	// Create an error reporter thread
 	ctx := ctrl.SetupSignalHandler()
@@ -119,7 +140,8 @@ func main() {
 // endpointSliceController implements the endpointSlice controller
 type endpointSliceController struct {
 	client.Client
-	log logr.Logger
+	ctrl controller.TypedController[dreconciler.Request]
+	log  logr.Logger
 }
 
 func NewEndpointSliceController(mgr manager.Manager, log logr.Logger) (*endpointSliceController, error) {
@@ -136,6 +158,7 @@ func NewEndpointSliceController(mgr manager.Manager, log logr.Logger) (*endpoint
 	if err != nil {
 		return nil, err
 	}
+	r.ctrl = c
 
 	src, err := dreconciler.NewSource(mgr, OperatorName, opv1a1.Source{
 		Resource: opv1a1.Resource{
@@ -152,6 +175,10 @@ func NewEndpointSliceController(mgr manager.Manager, log logr.Logger) (*endpoint
 	r.log.Info("created endpointslice controller")
 
 	return r, nil
+}
+
+func (r *endpointSliceController) GetController() controller.TypedController[dreconciler.Request] {
+	return r.ctrl
 }
 
 func (r *endpointSliceController) Reconcile(ctx context.Context, req dreconciler.Request) (reconcile.Result, error) {

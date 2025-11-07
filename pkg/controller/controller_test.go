@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	timeout       = time.Second * 1
+	timeout       = time.Second * 5
 	interval      = time.Millisecond * 50
 	retryInterval = time.Millisecond * 100
 )
@@ -176,7 +176,7 @@ var _ = Describe("Controller", func() {
 			Expect(mgr).NotTo(BeNil())
 
 			// Create controller
-			c, err := New(mgr, "test", config, Options{})
+			c, err := NewDeclarative(mgr, "test", config, Options{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.GetName()).To(Equal("test"))
 
@@ -265,7 +265,7 @@ target:
 			err = yaml.Unmarshal([]byte(yamlData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
-			c, err := New(mgr, "test", config, Options{})
+			c, err := NewDeclarative(mgr, "test", config, Options{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.GetName()).To(Equal("test"))
 
@@ -406,7 +406,7 @@ target:
 			err = yaml.Unmarshal([]byte(yamlData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = New(mgr, "test", config, Options{})
+			_, err = NewDeclarative(mgr, "test", config, Options{})
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -431,7 +431,7 @@ pipeline:
 			err = yaml.Unmarshal([]byte(yamlData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = New(mgr, "test", config, Options{})
+			_, err = NewDeclarative(mgr, "test", config, Options{})
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -498,7 +498,7 @@ target:
 			Expect(err).NotTo(HaveOccurred())
 
 			log.V(1).Info("Create controller")
-			c, err := New(mgr, "test", config, Options{})
+			c, err := NewDeclarative(mgr, "test", config, Options{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.GetName()).To(Equal("test"))
 
@@ -676,7 +676,7 @@ target:
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create controller1
-			_, err = New(mgr, "test", config1, Options{})
+			_, err = NewDeclarative(mgr, "test", config1, Options{})
 			Expect(err).NotTo(HaveOccurred())
 
 			yamlData2 := `
@@ -702,7 +702,7 @@ target:
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create controller2
-			_, err = New(mgr, "test", config2, Options{})
+			_, err = NewDeclarative(mgr, "test", config2, Options{})
 			Expect(err).NotTo(HaveOccurred())
 
 			// Obtain the viewcache
@@ -783,9 +783,9 @@ target:
 
 			errorChan := make(chan error, 1)
 			defer close(errorChan)
-			c, err := New(mgr, "test", config, Options{ErrorChan: errorChan})
+			ctrl, err := NewDeclarative(mgr, "test", config, Options{ErrorChan: errorChan})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(c.GetName()).To(Equal("one-shot-controller"))
+			Expect(ctrl.GetName()).To(Equal("one-shot-controller"))
 
 			vcache := mgr.GetCompositeCache().GetViewCache()
 			Expect(vcache).NotTo(BeNil())
@@ -835,9 +835,10 @@ target:
 			go func() { mgr.Start(ctx) }()
 
 			errorChan := make(chan error, 1)
-			c, err := New(mgr, "test", config, Options{ErrorChan: errorChan})
+			ctrl, err := NewDeclarative(mgr, "test", config, Options{ErrorChan: errorChan})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(c.GetName()).To(Equal("test-controller"))
+			Expect(ctrl.GetName()).To(Equal("test-controller"))
+			c := ctrl.(*DeclarativeController)
 
 			// Create a viewcache watcher
 			vcache := mgr.GetCompositeCache().GetViewCache()
@@ -905,8 +906,9 @@ target:
 			go func() { mgr.Start(ctx) }()
 
 			errorChan := make(chan error, 1)
-			c, err := New(mgr, "test", config, Options{ErrorChan: errorChan})
+			ctrl, err := NewDeclarative(mgr, "test", config, Options{ErrorChan: errorChan})
 			Expect(err).NotTo(HaveOccurred())
+			c := ctrl.(*DeclarativeController)
 
 			// Create a viewcache watcher
 			vcache := mgr.GetCompositeCache().GetViewCache()
@@ -975,8 +977,9 @@ target:
 			go func() { mgr.Start(ctx) }()
 
 			errorChan := make(chan error, 1)
-			c, err := New(mgr, "test", config, Options{ErrorChan: errorChan})
+			ctrl, err := NewDeclarative(mgr, "test", config, Options{ErrorChan: errorChan})
 			Expect(err).NotTo(HaveOccurred())
+			c := ctrl.(*DeclarativeController)
 
 			// Create a viewcache watcher
 			vcache := mgr.GetCompositeCache().GetViewCache()

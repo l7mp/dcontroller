@@ -81,7 +81,7 @@ var _ = Describe("Headless Operator", func() {
 			Logger:       logger,
 		}
 
-		op := New("test", mgr, &opv1a1.OperatorSpec{}, opts)
+		op := New("test", mgr, opts)
 		Expect(op).NotTo(BeNil())
 
 		go func() {
@@ -161,8 +161,10 @@ var _ = Describe("Headless Operator", func() {
 			}},
 		}
 
-		op := New("test", mgr, operatorSpec, opts)
+		op := New("test", mgr, opts)
 		Expect(op).NotTo(BeNil())
+		op.AddSpec(operatorSpec)
+		op.Commit()
 
 		go func() {
 			defer GinkgoRecover()

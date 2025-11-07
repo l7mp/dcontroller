@@ -102,7 +102,7 @@ target:
 			var config opv1a1.Controller
 			Expect(yaml.Unmarshal([]byte(yamlData), &config)).NotTo(HaveOccurred())
 
-			c, err := controller.New(mgr, "service-type-op", config, controller.Options{})
+			c, err := controller.NewDeclarative(mgr, "service-type-op", config, controller.Options{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.GetName()).To(Equal("svc-annotator"))
 		})
