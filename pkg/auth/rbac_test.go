@@ -134,9 +134,14 @@ var _ = Describe("RBAC Access Control", func() {
 			Expect(auth.CheckRBACAccess(userInfo, "get", "", "pods", "other-pod")).To(BeFalse())
 		})
 
-		It("should allow list without specifying name (empty resourceNames = all allowed)", func() {
-			// When checking list operations, we typically don't provide a specific name
+		It("should allow get without specifying name when resourceNames is set", func() {
+			// When resourceName parameter is empty, the check passes (typically for checking if verb is allowed).
 			Expect(auth.CheckRBACAccess(userInfo, "get", "", "pods", "")).To(BeTrue())
+		})
+
+		It("should deny list operations (verb not in rule)", func() {
+			// List verb is not in the rule (only get and update are), so it should be denied.
+			Expect(auth.CheckRBACAccess(userInfo, "list", "", "pods", "")).To(BeFalse())
 		})
 	})
 
@@ -224,6 +229,78 @@ var _ = Describe("RBAC Access Control", func() {
 
 		It("should deny access when rules cannot be deserialized", func() {
 			Expect(auth.CheckRBACAccess(userInfo, "get", "", "pods", "")).To(BeFalse())
+		})
+	})
+
+	Context("CheckRBACAccess with resourceNames and collection verbs (Kubernetes semantics)", func() {
+		BeforeEach(func() {
+			rules := []rbacv1.PolicyRule{
+				{
+					Verbs:         []string{"get", "list", "watch", "create", "delete"},
+					APIGroups:     []string{""},
+					Resources:     []string{"pods"},
+					ResourceNames: []string{"allowed-pod"},
+				},
+			}
+
+			rulesJSON := mustMarshalJSON(rules)
+			userInfo = &user.DefaultInfo{
+				Name:  "collection-test-user",
+				Extra: map[string][]string{"rules": {rulesJSON}},
+			}
+		})
+
+		It("should allow list operations regardless of resourceNames (collection verb)", func() {
+			// List operates on collections, not specific names.
+			Expect(auth.CheckRBACAccess(userInfo, "list", "", "pods", "")).To(BeTrue())
+		})
+
+		It("should allow watch operations regardless of resourceNames (collection verb)", func() {
+			// Watch operates on collections, not specific names.
+			Expect(auth.CheckRBACAccess(userInfo, "watch", "", "pods", "")).To(BeTrue())
+		})
+
+		It("should allow create operations regardless of resourceNames (collection verb)", func() {
+			// Create doesn't have a resource name at authorization time.
+			Expect(auth.CheckRBACAccess(userInfo, "create", "", "pods", "")).To(BeTrue())
+			// Even if a name is provided in the check, create still ignores it.
+			Expect(auth.CheckRBACAccess(userInfo, "create", "", "pods", "new-pod")).To(BeTrue())
+		})
+
+		It("should restrict get to specific resource names (non-collection verb)", func() {
+			// Get operates on specific names, so resourceNames is enforced.
+			Expect(auth.CheckRBACAccess(userInfo, "get", "", "pods", "allowed-pod")).To(BeTrue())
+			Expect(auth.CheckRBACAccess(userInfo, "get", "", "pods", "other-pod")).To(BeFalse())
+		})
+
+		It("should restrict delete to specific resource names (non-collection verb)", func() {
+			// Delete operates on specific names, so resourceNames is enforced.
+			Expect(auth.CheckRBACAccess(userInfo, "delete", "", "pods", "allowed-pod")).To(BeTrue())
+			Expect(auth.CheckRBACAccess(userInfo, "delete", "", "pods", "other-pod")).To(BeFalse())
+		})
+	})
+
+	Context("CheckRBACAccess with deletecollection verb and resourceNames", func() {
+		BeforeEach(func() {
+			rules := []rbacv1.PolicyRule{
+				{
+					Verbs:         []string{"deletecollection"},
+					APIGroups:     []string{""},
+					Resources:     []string{"pods"},
+					ResourceNames: []string{"should-be-ignored"},
+				},
+			}
+
+			rulesJSON := mustMarshalJSON(rules)
+			userInfo = &user.DefaultInfo{
+				Name:  "deletecollection-user",
+				Extra: map[string][]string{"rules": {rulesJSON}},
+			}
+		})
+
+		It("should allow deletecollection regardless of resourceNames (collection verb)", func() {
+			// Deletecollection operates on collections, not specific names.
+			Expect(auth.CheckRBACAccess(userInfo, "deletecollection", "", "pods", "")).To(BeTrue())
 		})
 	})
 

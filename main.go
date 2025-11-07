@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -298,6 +299,7 @@ type generateConfigConfig struct {
 	namespaces         string
 	rules              string
 	rulesFile          string
+	resourceNames      string
 	expiry             time.Duration
 	output             string
 	keyFile            string
@@ -332,7 +334,17 @@ func generateConfigCmd() *cobra.Command {
   dctl generate-config --user=bob --namespaces=team-b --rules-file=rules.json > bob.config
 
   # Multiple namespaces
-  dctl generate-config --user=developer --namespaces=dev,staging > dev.config`,
+  dctl generate-config --user=developer --namespaces=dev,staging > dev.config
+
+  # Restrict access to specific resource names
+  dctl generate-config --user=restricted --namespaces=default \
+    --rules='[{"verbs":["get","update"],"apiGroups":[""],"resources":["pods"]}]' \
+    --resource-names=pod-1,pod-2 > restricted.config
+
+  # Rule with both list and get - list works on all, get restricted to specific names
+  dctl generate-config --user=viewer --namespaces=default \
+    --rules='[{"verbs":["get","list"],"apiGroups":[""],"resources":["pods"],"resourceNames":["pod-1"]}]' \
+    > viewer.config`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGenerateConfig(cfg)
 		},
@@ -342,6 +354,8 @@ func generateConfigCmd() *cobra.Command {
 	cmd.Flags().StringVar(&cfg.namespaces, "namespaces", "", "Comma-separated allowed namespaces, or * for all (empty = no restrictions)")
 	cmd.Flags().StringVar(&cfg.rules, "rules", "", "RBAC PolicyRules as JSON array (empty = full access)")
 	cmd.Flags().StringVar(&cfg.rulesFile, "rules-file", "", "Path to file containing RBAC PolicyRules JSON")
+	cmd.Flags().StringVar(&cfg.resourceNames, "resource-names", "",
+		"Comma-separated resource names to restrict access (applies to last rule only, ignored for list/watch/create verbs)")
 	cmd.Flags().DurationVar(&cfg.expiry, "expiry", 24*365*time.Hour, "Token expiry duration")
 	cmd.Flags().StringVar(&cfg.output, "output", "", "Output kubeconfig file (default: stdout)")
 	cmd.Flags().StringVar(&cfg.keyFile, "tls-key-file", "apiserver.key",
@@ -382,6 +396,24 @@ func runGenerateConfig(cfg generateConfigConfig) error {
 	}
 	// If both are empty, rulesList will be nil/empty = full access
 
+	// Apply resourceNames to last rule if specified
+	if cfg.resourceNames != "" && len(rulesList) > 0 {
+		resourceNamesList := parseCommaSeparated(cfg.resourceNames)
+		lastIdx := len(rulesList) - 1
+		rulesList[lastIdx].ResourceNames = resourceNamesList
+
+		// Warn if rule contains collection verbs (list, watch, create, deletecollection)
+		collectionVerbs := []string{"list", "watch", "create", "deletecollection"}
+		for _, verb := range rulesList[lastIdx].Verbs {
+			for _, collVerb := range collectionVerbs {
+				if verb == collVerb {
+					fmt.Fprintf(os.Stderr, "⚠️  Warning: resourceNames with '%s' verb will be ignored per Kubernetes RBAC semantics.\n", verb)
+					break
+				}
+			}
+		}
+	}
+
 	// Load private key
 	privateKey, err := auth.LoadPrivateKey(cfg.keyFile)
 	if err != nil {
@@ -404,17 +436,20 @@ func runGenerateConfig(cfg generateConfigConfig) error {
 		HTTPMode:         cfg.httpMode,
 	}
 
+	// Create kubeconfig structure
+	kubeconfigStruct := auth.GenerateKubeconfig(cfg.serverAddress, cfg.username, token, kubeconfigOpts)
+
 	// Output to stdout or file
 	if cfg.output == "" {
-		// Output to stdout
-		kubeconfigYAML, err := auth.GenerateKubeconfig(cfg.serverAddress, cfg.username, token, kubeconfigOpts)
+		// Output to stdout - stringify the config
+		kubeconfigYAML, err := clientcmd.Write(*kubeconfigStruct)
 		if err != nil {
-			return fmt.Errorf("failed to generate kubeconfig: %w", err)
+			return fmt.Errorf("failed to write kubeconfig YAML: %w", err)
 		}
-		fmt.Print(kubeconfigYAML)
+		fmt.Print(string(kubeconfigYAML))
 	} else {
 		// Output to file
-		if err := auth.WriteKubeconfig(cfg.output, cfg.serverAddress, cfg.username, token, kubeconfigOpts); err != nil {
+		if err := clientcmd.WriteToFile(*kubeconfigStruct, cfg.output); err != nil {
 			return fmt.Errorf("failed to write kubeconfig: %w", err)
 		}
 		// Print success message to stderr (so it doesn't interfere with file redirects)
@@ -429,8 +464,13 @@ func runGenerateConfig(cfg generateConfigConfig) error {
 		if len(rulesList) > 0 {
 			fmt.Fprintf(os.Stderr, "   Rules: %d RBAC policy rules\n", len(rulesList))
 			for i, rule := range rulesList {
-				fmt.Fprintf(os.Stderr, "     [%d] verbs=%v apiGroups=%v resources=%v\n",
-					i+1, rule.Verbs, rule.APIGroups, rule.Resources)
+				if len(rule.ResourceNames) > 0 {
+					fmt.Fprintf(os.Stderr, "     [%d] verbs=%v apiGroups=%v resources=%v resourceNames=%v\n",
+						i+1, rule.Verbs, rule.APIGroups, rule.Resources, rule.ResourceNames)
+				} else {
+					fmt.Fprintf(os.Stderr, "     [%d] verbs=%v apiGroups=%v resources=%v\n",
+						i+1, rule.Verbs, rule.APIGroups, rule.Resources)
+				}
 			}
 		} else {
 			fmt.Fprintf(os.Stderr, "   Rules: <none - full access>\n")

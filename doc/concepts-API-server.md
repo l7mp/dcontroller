@@ -23,6 +23,11 @@ The extension API server uses JWT (JSON Web Token) based authentication combined
 
 * **RBAC Rules**: Tokens include Kubernetes PolicyRules that define which operations (verbs) the user can perform on which API groups and resources. This follows the standard Kubernetes RBAC model.
 
+* **Resource-Level Restrictions**: The `resourceNames` field in PolicyRules allows restricting access to specific named resources. For example, a user might have permission to update `view-1` and `view-2` but not other views. Note that `resourceNames` follows Kubernetes RBAC semantics:
+  - **Compatible with**: `get`, `update`, `patch`, `delete` (operations on specific named resources)
+  - **Ignored for**: `list`, `watch`, `create`, `deletecollection` (collection-level operations)
+  - A rule with `verbs: ["get", "list"]` and `resourceNames: ["view-1"]` will allow listing ALL views but restrict `get` to only `view-1`.
+
 ### Authorization Flow
 
 When a request arrives at the API server, the authorization process works as follows:
@@ -116,7 +121,54 @@ kubectl get healthview.svc-operator.view.dcontroller.io test -n staging
 # Error: access to namespace staging denied
 ```
 
-#### Scenario 2: Full Access to Team Namespaces
+#### Scenario 2: Read-Only Access with Resource Name Restrictions
+
+Create a viewer role that can list all views but only get details for specific views:
+
+```bash
+cat > viewer-restricted-rules.json <<EOF
+[
+  {
+    "verbs": ["get", "list", "watch"],
+    "apiGroups": ["*.view.dcontroller.io"],
+    "resources": ["*"],
+    "resourceNames": ["web-app", "api-service"]
+  }
+]
+EOF
+
+dctl generate-config --user=restricted-viewer --namespaces=production \
+  --rules-file=viewer-restricted-rules.json \
+  --tls-key-file=apiserver.key --server-address=localhost:8443 > restricted-viewer.config
+```
+
+**Allowed operations**:
+```bash
+export KUBECONFIG=./restricted-viewer.config
+
+# ✓ Allowed: LIST in production namespace (resourceNames ignored for list)
+kubectl get healthview.svc-operator.view.dcontroller.io -n production
+
+# ✓ Allowed: GET specific allowed resources
+kubectl get healthview.svc-operator.view.dcontroller.io web-app -n production
+kubectl get healthview.svc-operator.view.dcontroller.io api-service -n production
+
+# ✓ Allowed: WATCH in production namespace (resourceNames ignored for watch)
+kubectl get healthview.svc-operator.view.dcontroller.io -n production --watch
+```
+
+**Denied operations**:
+```bash
+# ✗ Denied: GET resources not in resourceNames list
+kubectl get healthview.svc-operator.view.dcontroller.io database -n production
+# Error: forbidden: user not authorized to get healthview/database
+
+# ✗ Denied: UPDATE (verb not in rule)
+kubectl patch healthview.svc-operator.view.dcontroller.io web-app -n production --type=merge -p '{"status":"updated"}'
+# Error: forbidden: user not authorized to patch healthview in API group svc-operator.view.dcontroller.io
+```
+
+#### Scenario 3: Full Access to Team Namespaces
 
 Create a developer role with full access to multiple team namespaces:
 
@@ -148,7 +200,7 @@ kubectl get healthview.svc-operator.view.dcontroller.io -n production
 # Error: access to namespace production denied
 ```
 
-#### Scenario 3: Cluster-Wide Admin Access
+#### Scenario 4: Cluster-Wide Admin Access
 
 Create an admin role with unrestricted access:
 
@@ -182,10 +234,10 @@ dctl get-config --tls-cert-file=apiserver.crt
 Output:
 ```
 👤 User Information:
-   Username:   viewer
+   Username:   restricted-viewer
    Namespaces: [production]
    Rules: 1 RBAC policy rules
-     [1] verbs=[get list watch] apiGroups=[*.view.dcontroller.io] resources=[*]
+     [1] verbs=[get list watch] apiGroups=[*.view.dcontroller.io] resources=[*] resourceNames=[web-app api-service]
 
 ⏱️  Token Metadata:
    Issuer:     dcontroller

@@ -35,7 +35,18 @@ func CheckRBACAccess(userInfo user.Info, verb, apiGroup, resource, resourceName 
 	return false
 }
 
-// ruleMatches checks if a single PolicyRule matches the requested action
+// collectionVerbs are verbs that operate on resource collections rather than specific named resources.
+// Per Kubernetes RBAC semantics, resourceNames restrictions are ignored for these verbs.
+var collectionVerbs = map[string]bool{
+	"list":             true,
+	"watch":            true,
+	"create":           true,
+	"deletecollection": true,
+}
+
+// ruleMatches checks if a single PolicyRule matches the requested action.
+// It implements Kubernetes RBAC semantics where resourceNames restrictions are ignored
+// for collection verbs (list, watch, create, deletecollection).
 func ruleMatches(rule rbacv1.PolicyRule, verb, apiGroup, resource, resourceName string) bool {
 	// Check verb
 	if !matches(rule.Verbs, verb) {
@@ -52,8 +63,16 @@ func ruleMatches(rule rbacv1.PolicyRule, verb, apiGroup, resource, resourceName 
 		return false
 	}
 
-	// Check resource name (if specified in rule)
-	// Empty ResourceNames means all names are allowed
+	// Check resource name with Kubernetes RBAC semantics.
+	// Collection verbs (list, watch, create, deletecollection) ignore resourceNames restrictions
+	// because they operate at the collection level rather than on specific named resources.
+	if collectionVerbs[verb] {
+		// For collection verbs, resourceNames is ignored - rule matches regardless.
+		return true
+	}
+
+	// For non-collection verbs (get, update, patch, delete), enforce resourceNames restrictions.
+	// Empty ResourceNames means all names are allowed.
 	if len(rule.ResourceNames) > 0 && resourceName != "" {
 		if !matches(rule.ResourceNames, resourceName) {
 			return false

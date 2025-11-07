@@ -324,7 +324,8 @@ EOF
 
 ```console
 dctl generate-config --user=alice --namespaces=team-a \
-  --rules-file=alice-rules.json \
+  --rules='[{"verbs":["get","update"],"apiGroups":["*.view.dcontroller.io"],"resources":["*"]}]' \
+  --resource-names=web-app,api-service \
   --tls-key-file=apiserver.key \
   --server-address=${EXTERNAL_IP}:8443 > alice.config
 ```

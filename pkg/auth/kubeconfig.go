@@ -26,9 +26,9 @@ func DefaultKubeconfigOptions() *KubeconfigOptions {
 	}
 }
 
-// CreateKubeconfig creates a complete kubeconfig structure for a user with a JWT token.
+// GenerateKubeconfig creates a complete kubeconfig structure for a user with a JWT token.
 // This can be written to disk using clientcmd.WriteToFile().
-func CreateKubeconfig(addr, username, token string, opts *KubeconfigOptions) *clientcmdapi.Config {
+func GenerateKubeconfig(addr, username, token string, opts *KubeconfigOptions) *clientcmdapi.Config {
 	if opts == nil {
 		opts = DefaultKubeconfigOptions()
 	}
@@ -60,22 +60,6 @@ func CreateKubeconfig(addr, username, token string, opts *KubeconfigOptions) *cl
 	config.CurrentContext = opts.ContextName
 
 	return config
-}
-
-// GenerateKubeconfig creates a kubeconfig and returns it as a YAML string.
-func GenerateKubeconfig(addr, username, token string, opts *KubeconfigOptions) (string, error) {
-	config := CreateKubeconfig(addr, username, token, opts)
-	yaml, err := clientcmd.Write(*config)
-	if err != nil {
-		return "", err
-	}
-	return string(yaml), nil
-}
-
-// WriteKubeconfig creates a kubeconfig and writes it to a file.
-func WriteKubeconfig(filename, addr, username, token string, opts *KubeconfigOptions) error {
-	config := CreateKubeconfig(addr, username, token, opts)
-	return clientcmd.WriteToFile(*config, filename)
 }
 
 // ExtractTokenFromKubeconfig reads a kubeconfig file and extracts the bearer token

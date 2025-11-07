@@ -206,12 +206,13 @@ func (op *Operator) RegisterGVKs() error {
 		return nil
 	}
 
-	op.log.V(2).Info("registering GVKs", "API group", viewv1a1.Group(op.name))
-
 	gvks := []schema.GroupVersionKind{}
 	for _, c := range op.controllers {
 		gvks = append(gvks, c.GetGVKs()...)
 	}
+
+	op.log.V(2).Info("registering GVKs", "API group", viewv1a1.Group(op.name),
+		"GVKs", gvks)
 
 	op.gvks = uniq(gvks)
 	return op.apiServer.RegisterGVKs(op.gvks)

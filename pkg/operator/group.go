@@ -82,12 +82,15 @@ func (g *Group) GetErrorChannel() chan error {
 // GetOperator returns the operator with the given name.
 func (g *Group) GetOperator(name string) *Operator {
 	g.mu.Lock()
-	op := g.operators[name]
+	op, ok := g.operators[name]
 	g.mu.Unlock()
+	if !ok || op == nil {
+		return nil
+	}
 	return op.op
 }
 
-// NewFromFile creates a new operator from a serialized operator spec.
+// AddOperatorFromFile loads an operator from file.
 func (g *Group) AddOperatorFromFile(name string, file string) (*Operator, error) {
 	b, err := os.ReadFile(file)
 	if err != nil {
@@ -97,11 +100,11 @@ func (g *Group) AddOperatorFromFile(name string, file string) (*Operator, error)
 	if err := yaml.Unmarshal(b, &spec); err != nil {
 		return nil, fmt.Errorf("failed to parse operator spec: %w", err)
 	}
-	return g.AddOperator(name, &spec)
+	return g.AddOperatorFromSpec(name, &spec)
 }
 
-// AddOperator registers an operator with the group.
-func (g *Group) AddOperator(name string, spec *opv1a1.OperatorSpec) (*Operator, error) {
+// AddOperatorFromSpec registers an operator with the group.
+func (g *Group) AddOperatorFromSpec(name string, spec *opv1a1.OperatorSpec) (*Operator, error) {
 	g.log.V(4).Info("adding operator", "name", name)
 
 	// First create a manager for this operator
@@ -118,13 +121,20 @@ func (g *Group) AddOperator(name string, spec *opv1a1.OperatorSpec) (*Operator, 
 		Logger:       g.logger,
 	})
 
-	e := &opEntry{op: operator, errorChan: errorChan}
+	g.AddOperator(operator)
+
+	return operator, nil
+}
+
+func (g *Group) AddOperator(op *Operator) {
+	name := op.GetName()
+	e := &opEntry{op: op, errorChan: op.GetErrorChannel()}
 	g.mu.Lock()
 	g.operators[name] = e
 	g.mu.Unlock()
 
 	// register the operator in the client multiplexer
-	if err := g.clientMpx.RegisterClient(viewv1a1.Group(name), mgr.GetClient()); err != nil {
+	if err := g.clientMpx.RegisterClient(viewv1a1.Group(name), op.GetManager().GetClient()); err != nil {
 		g.log.Error(err, "failed to register operator in the multiplex client", "operator", name)
 	}
 
@@ -132,8 +142,6 @@ func (g *Group) AddOperator(name string, spec *opv1a1.OperatorSpec) (*Operator, 
 	if g.started {
 		g.startOp(e)
 	}
-
-	return operator, nil
 }
 
 func (g *Group) UpsertOperator(name string, spec *opv1a1.OperatorSpec) (*Operator, error) {
@@ -144,7 +152,7 @@ func (g *Group) UpsertOperator(name string, spec *opv1a1.OperatorSpec) (*Operato
 		g.DeleteOperator(name)
 	}
 
-	return g.AddOperator(name, spec)
+	return g.AddOperatorFromSpec(name, spec)
 }
 
 func (g *Group) DeleteOperator(name string) {

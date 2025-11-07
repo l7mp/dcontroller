@@ -40,7 +40,7 @@ var _ = Describe("Kubeconfig Generation", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			config := auth.CreateKubeconfig(
+			config := auth.GenerateKubeconfig(
 				"localhost:8443",
 				"test-user",
 				token,
@@ -73,7 +73,7 @@ var _ = Describe("Kubeconfig Generation", func() {
 				HTTPMode:         true,
 			}
 
-			config := auth.CreateKubeconfig("api.example.com:6443", "admin", token, opts)
+			config := auth.GenerateKubeconfig("api.example.com:6443", "admin", token, opts)
 
 			Expect(config.Clusters).To(HaveKey("my-cluster"))
 			Expect(config.Clusters["my-cluster"].InsecureSkipTLSVerify).To(BeTrue())
@@ -84,7 +84,7 @@ var _ = Describe("Kubeconfig Generation", func() {
 		})
 	})
 
-	Describe("WriteKubeconfig", func() {
+	Describe("Writing Kubeconfig to File", func() {
 		It("should write a valid kubeconfig file", func() {
 			token, err := tokenGen.GenerateToken("file-user", []string{"default"}, nil, time.Hour)
 			Expect(err).NotTo(HaveOccurred())
@@ -92,21 +92,24 @@ var _ = Describe("Kubeconfig Generation", func() {
 			tempFile := "/tmp/test-kubeconfig-" + time.Now().Format("20060102150405")
 			defer os.Remove(tempFile)
 
-			err = auth.WriteKubeconfig(
-				tempFile,
+			// Create config structure
+			config := auth.GenerateKubeconfig(
 				"https://localhost:8443",
 				"file-user",
 				token,
 				nil,
 			)
+
+			// Write to file
+			err = clientcmd.WriteToFile(*config, tempFile)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify file exists and can be read
-			config, err := clientcmd.LoadFromFile(tempFile)
+			loadedConfig, err := clientcmd.LoadFromFile(tempFile)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(config).NotTo(BeNil())
-			Expect(config.AuthInfos).To(HaveKey("file-user"))
-			Expect(config.AuthInfos["file-user"].Token).To(Equal(token))
+			Expect(loadedConfig).NotTo(BeNil())
+			Expect(loadedConfig.AuthInfos).To(HaveKey("file-user"))
+			Expect(loadedConfig.AuthInfos["file-user"].Token).To(Equal(token))
 		})
 	})
 
