@@ -22,7 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
@@ -45,7 +44,7 @@ type FakeManager struct {
 }
 
 // NewFakeManager creates a new fake manager.
-func NewFakeManager(operator string, opts manager.Options, objs ...client.Object) (*FakeManager, error) {
+func NewFakeManager(opts manager.Options, objs ...client.Object) (*FakeManager, error) {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -59,7 +58,7 @@ func NewFakeManager(operator string, opts manager.Options, objs ...client.Object
 		}
 	}
 
-	compositeCache, err := composite.NewCompositeCache(nil, viewv1a1.Group(operator), composite.CacheOptions{
+	compositeCache, err := composite.NewCompositeCache(nil, composite.CacheOptions{
 		DefaultCache: fakeRuntimeCache,
 		Logger:       logger,
 	})
@@ -73,7 +72,7 @@ func NewFakeManager(operator string, opts manager.Options, objs ...client.Object
 		WithObjectTracker(tracker).
 		WithObjects(objs...).
 		Build()
-	fakeCompositeClient, err := composite.NewCompositeClient(nil, viewv1a1.Group(operator), composite.ClientOptions{})
+	fakeCompositeClient, err := composite.NewCompositeClient(nil, composite.ClientOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +80,7 @@ func NewFakeManager(operator string, opts manager.Options, objs ...client.Object
 	fakeCompositeClient.SetCache(compositeCache)
 	fakeRuntimeManager := NewFakeRuntimeManager(compositeCache, fakeCompositeClient, logger)
 
-	mgr, err := New(nil, operator, Options{Options: opts, Manager: fakeRuntimeManager})
+	mgr, err := New(nil, Options{Options: opts, Manager: fakeRuntimeManager})
 	if err != nil {
 		return nil, err
 	}

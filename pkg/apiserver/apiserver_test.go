@@ -86,16 +86,16 @@ var _ = Describe("APIServerUnitTest", func() {
 		test2ViewGVK = viewv1a1.GroupVersionKind("test2", "TestView")
 
 		var err error
-		mgr, err = manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
 		port = rand.IntN(5000) + (32768) //nolint:gosec
-		config, err := NewDefaultConfig("", port, mgr.GetClient(), true, logger)
+		config, err := NewDefaultConfig("", port, mgr.GetClient(), true, false, logger)
 		Expect(err).NotTo(HaveOccurred())
 		server, err = NewAPIServer(config)
 		if err != nil {
 			port = rand.IntN(5000) + (32768) //nolint:gosec
-			config, err = NewDefaultConfig("", port, mgr.GetClient(), true, logger)
+			config, err = NewDefaultConfig("", port, mgr.GetClient(), true, false, logger)
 			Expect(err).NotTo(HaveOccurred())
 			server, err = NewAPIServer(config)
 		}
@@ -214,12 +214,12 @@ var _ = Describe("APIServerUnitTest", func() {
 
 			for _, tc := range testCases {
 				port = rand.IntN(15000) + (32768) //nolint:gosec
-				config, err := NewDefaultConfig(tc.addr, port, mgr.GetClient(), true, logger)
+				config, err := NewDefaultConfig(tc.addr, port, mgr.GetClient(), true, false, logger)
 				Expect(err).NotTo(HaveOccurred())
 				s, err := NewAPIServer(config)
 				if err != nil {
 					port = rand.IntN(15000) + (32768) //nolint:gosec
-					config, err = NewDefaultConfig(tc.addr, port, mgr.GetClient(), true, logger)
+					config, err = NewDefaultConfig(tc.addr, port, mgr.GetClient(), true, false, logger)
 					Expect(err).NotTo(HaveOccurred())
 					s, err = NewAPIServer(config)
 				}
@@ -235,7 +235,6 @@ var _ = Describe("APIServer Integration", func() {
 		apiServer     *APIServer
 		mgr           *manager.FakeManager
 		cacheClient   client.Client
-		clientMpx     composite.ClientMultiplexer
 		serverCtx     context.Context
 		serverCancel  context.CancelFunc
 		serverAddr    string
@@ -266,7 +265,7 @@ var _ = Describe("APIServer Integration", func() {
 
 		// Create mock manager
 		var err error
-		mgr, err = manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Add a view object and a native resource to the manager cache
@@ -280,11 +279,6 @@ var _ = Describe("APIServer Integration", func() {
 		err = fakeCache.GetViewCache().Add(podObj)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Create the client multiplexer
-		clientMpx = composite.NewClientMultiplexer(logger)
-		err = clientMpx.RegisterClient(viewv1a1.Group("test"), mgr.GetClient())
-		Expect(err).NotTo(HaveOccurred())
-
 		// Set API server logger
 		klog.SetLogger(logger.V(10).WithName("generic-apiserver"))
 		// klog.V(10).Enabled() // This forces klog to think level 10 is enabled
@@ -295,14 +289,14 @@ var _ = Describe("APIServer Integration", func() {
 		// Create API server at random port
 		serverAddr = "localhost"
 		port = rand.IntN(15000) + 32768 //nolint:gosec
-		config, err := NewDefaultConfig(serverAddr, port, clientMpx, true, logger)
+		config, err := NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, false, logger)
 		Expect(err).NotTo(HaveOccurred())
 		apiServer, err = NewAPIServer(config)
 		if err != nil {
 			// Try again of there was a port clash
 			serverAddr = "localhost"
 			port = rand.IntN(15000) + 32768 //nolint:gosec
-			config, err = NewDefaultConfig(serverAddr, port, clientMpx, true, logger)
+			config, err = NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, false, logger)
 			Expect(err).NotTo(HaveOccurred())
 			apiServer, err = NewAPIServer(config)
 			Expect(err).NotTo(HaveOccurred())
@@ -1286,7 +1280,7 @@ var _ = Describe("Authorization Tests", func() {
 		tokenGen = auth.NewTokenGenerator(privateKey)
 
 		// Create mock manager
-		mgr, err = manager.NewFakeManager("authtest", runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Add test objects to the cache
@@ -1323,15 +1317,10 @@ var _ = Describe("Authorization Tests", func() {
 		err = fakeCache.GetViewCache().Add(restrictedObj)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Create the client multiplexer
-		clientMpx := composite.NewClientMultiplexer(logger)
-		err = clientMpx.RegisterClient(testGroup, mgr.GetClient())
-		Expect(err).NotTo(HaveOccurred())
-
 		// Create API server with authentication enabled
 		serverAddr = "localhost"
 		port = rand.IntN(15000) + 32768 //nolint:gosec
-		config, err := NewDefaultConfig(serverAddr, port, clientMpx, true, logger)
+		config, err := NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, false, logger)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Configure authentication and authorization
@@ -1342,7 +1331,7 @@ var _ = Describe("Authorization Tests", func() {
 		if err != nil {
 			// Retry with different port on failure
 			port = rand.IntN(15000) + 32768 //nolint:gosec
-			config, err = NewDefaultConfig(serverAddr, port, clientMpx, true, logger)
+			config, err = NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, false, logger)
 			Expect(err).NotTo(HaveOccurred())
 			config.Authenticator = auth.NewJWTAuthenticator(publicKey)
 			config.Authorizer = auth.NewCompositeAuthorizer()

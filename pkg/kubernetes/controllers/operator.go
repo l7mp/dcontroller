@@ -85,7 +85,7 @@ func NewOpController(config *rest.Config, opts runtimeMgr.Options) (*OpControlle
 		return nil, err
 	}
 
-	ctrl.log.Info("watching operaror objects")
+	ctrl.log.Info("watching operator objects")
 
 	return ctrl, nil
 }
@@ -116,6 +116,7 @@ func (c *OpController) Reconcile(ctx context.Context, req reconcile.Request) (re
 
 	op, err := c.UpsertOperator(opName, &spec.Spec)
 	if err != nil {
+		log.Error(err, "failed to upsert Operator")
 		return reconcile.Result{}, err
 	}
 	c.updateStatus(ctx, op)
@@ -123,45 +124,43 @@ func (c *OpController) Reconcile(ctx context.Context, req reconcile.Request) (re
 	return reconcile.Result{}, nil
 }
 
-// Start starts runtimeCtrl. It blocks.
+// Start starts the controller. It blocks.
 func (c *OpController) Start(ctx context.Context) error {
-	// Start the operator group.
+	// Start the operator group (automatically starts the manager).
 	go func() {
 		if err := c.Group.Start(ctx); err != nil {
 			c.log.Error(err, "operator exited with an error")
 		}
 	}()
 
-	// Start the controller runtime manager that will start our watches.
+	// Surface errors from the operator group and generate CRD statuses.
 	go func() {
-		if err := c.mgr.Start(ctx); err != nil {
-			c.log.Error(err, "controller runtime manager exited with an error")
+		for {
+			select {
+			case err := <-c.GetErrorChannel():
+				var operr controller.Error
+				if errors.As(err, &operr) {
+					c.log.Error(err, "controller error", "operator", operr.Operator,
+						"controller", operr.Controller)
+
+					if op := c.GetOperator(operr.Operator); op == nil {
+						c.log.Error(err, "spurious controller error: operator no longer avalialble",
+							"operator", operr.Operator, "controller", operr.Controller)
+					} else {
+						c.updateStatus(ctx, op)
+					}
+				} else {
+					c.log.Error(err, "unknown error")
+				}
+
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 
-	// Surface errors from the operator group and generate CRD statuses.
-	for {
-		select {
-		case err := <-c.GetErrorChannel():
-			var operr controller.Error
-			if errors.As(err, &operr) {
-				c.log.Error(err, "controller error", "operator", operr.Operator,
-					"controller", operr.Controller)
-
-				if op := c.GetOperator(operr.Operator); op == nil {
-					c.log.Error(err, "spurious controller error: operator no longer avalialble",
-						"operator", operr.Operator, "controller", operr.Controller)
-				} else {
-					c.updateStatus(ctx, op)
-				}
-			} else {
-				c.log.Error(err, "unknown error")
-			}
-
-		case <-ctx.Done():
-			return nil
-		}
-	}
+	// Start the controller runtime manager that will start our watches.
+	return c.mgr.Start(ctx)
 }
 
 func (c *OpController) updateStatus(ctx context.Context, op *operator.Operator) {

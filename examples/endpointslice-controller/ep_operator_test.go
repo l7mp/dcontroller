@@ -126,14 +126,14 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 		It("should create and start the API server", func() {
 			suite.Log.Info("creating a dmanager")
 			var err error
-			mgr, err = dmanager.New(suite.Cfg, OperatorName, dmanager.Options{
+			mgr, err = dmanager.New(suite.Cfg, dmanager.Options{
 				Options: ctrl.Options{Scheme: scheme, Logger: suite.Log},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			suite.Log.Info("creating the API server")
 			port = rand.IntN(5000) + (32768) //nolint:gosec
-			config, err := apiserver.NewDefaultConfig("", port, mgr.GetClient(), true, suite.Log)
+			config, err := apiserver.NewDefaultConfig("", port, mgr.GetClient(), true, false, suite.Log)
 			Expect(err).NotTo(HaveOccurred())
 			server, err = apiserver.NewAPIServer(config)
 			Expect(err).NotTo(HaveOccurred())
@@ -534,7 +534,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 
 		It("should create and start the controller", func() {
 			// Create a dmanager
-			mgr, err := dmanager.New(suite.Cfg, OperatorName, dmanager.Options{
+			mgr, err := dmanager.New(suite.Cfg, dmanager.Options{
 				Options: ctrl.Options{Scheme: scheme},
 			})
 			Expect(err).NotTo(HaveOccurred())

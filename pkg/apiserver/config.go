@@ -27,8 +27,12 @@ type Config struct {
 	// Addr is the server address.
 	Addr *net.TCPAddr
 
-	// HTTPMode switches the API server to insecure serving mode.
+	// HTTPMode switches the API server to HTTP (no TLS).
 	HTTPMode bool
+
+	// Insecure allows accepting self-signed TLS certificates (HTTPS only).
+	// When true, internal controllers skip TLS certificate verification.
+	Insecure bool
 
 	// DelegatingClient allows to inject a controller runtime client into the API server that
 	// will be used by the server to serve requests.
@@ -49,9 +53,10 @@ type Config struct {
 	Logger logr.Logger
 }
 
-// NewDefaultConfig creates an API server configuration with sensible defaults, either using secure
-// serving (HTTPS) or insecure serving (HTTP) that can be used for testing.
-func NewDefaultConfig(addr string, port int, client client.Client, httpMode bool, log logr.Logger) (Config, error) {
+// NewDefaultConfig creates an API server configuration with sensible defaults.
+// - httpMode: use HTTP instead of HTTPS (no TLS)
+// - insecure: skip TLS certificate verification for self-signed certificates (HTTPS only)
+func NewDefaultConfig(addr string, port int, client client.Client, httpMode, insecure bool, log logr.Logger) (Config, error) {
 	if addr == "" {
 		addr = "localhost"
 	}
@@ -64,18 +69,19 @@ func NewDefaultConfig(addr string, port int, client client.Client, httpMode bool
 		return Config{}, fmt.Errorf("failed to resolve server address: %w", err)
 	}
 
-	// Create base config
+	// Create base config.
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
 	config := genericapiserver.NewConfig(codecs)
 
-	// Create loopback config
+	// Create loopback config.
 	config.LoopbackClientConfig = &rest.Config{}
 	if httpMode {
 		config.LoopbackClientConfig.Host = fmt.Sprintf("http://%s", bindAddr.String())
 	} else {
 		config.LoopbackClientConfig.Host = fmt.Sprintf("https://%s", bindAddr.String())
-		config.LoopbackClientConfig.TLSClientConfig = rest.TLSClientConfig{Insecure: httpMode}
+		// Skip TLS verification if using self-signed certificates.
+		config.LoopbackClientConfig.TLSClientConfig = rest.TLSClientConfig{Insecure: insecure}
 	}
 
 	// Set other required fields
@@ -85,6 +91,7 @@ func NewDefaultConfig(addr string, port int, client client.Client, httpMode bool
 		RecommendedConfig: &genericapiserver.RecommendedConfig{Config: *config},
 		Addr:              bindAddr,
 		HTTPMode:          httpMode,
+		Insecure:          insecure,
 		DelegatingClient:  client,
 		Logger:            log,
 	}, nil

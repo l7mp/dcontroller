@@ -29,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/composite"
 )
 
@@ -56,7 +55,7 @@ type Manager struct {
 // Kubernetes API access so it handles only view resources, not native objects. For native
 // Kubernetes object support, create a composite manager by providing a valid REST config to access
 // a full Kubernetes API server.
-func New(config *rest.Config, operator string, opts Options) (*Manager, error) {
+func New(config *rest.Config, opts Options) (*Manager, error) {
 	if opts.Logger.GetSink() == nil {
 		opts.Logger = logr.Discard()
 	}
@@ -68,19 +67,19 @@ func New(config *rest.Config, operator string, opts Options) (*Manager, error) {
 
 	// If no Kubernetes config is provided, fire up a standalone manager.
 	if config == nil {
-		return newHeadlessManager(operator, opts)
+		return newHeadlessManager(opts)
 	}
 
-	return newManager(config, operator, opts)
+	return newManager(config, opts)
 }
 
 // newHeadlessManager creates a new headless manager.
-func newHeadlessManager(operator string, opts Options) (*Manager, error) {
+func newHeadlessManager(opts Options) (*Manager, error) {
 	logger := opts.Logger
 
 	// We can create a static cache since we do not need to wait until NewCache/NewClient is
 	// callled by the controller runtime to reveal the cache options and client options.
-	c := composite.NewViewCache(viewv1a1.Group(operator), composite.CacheOptions{Logger: logger})
+	c := composite.NewViewCache(composite.CacheOptions{Logger: logger})
 	if opts.NewCache == nil {
 		opts.NewCache = func(_ *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
 			return c, nil
@@ -102,11 +101,11 @@ func newHeadlessManager(operator string, opts Options) (*Manager, error) {
 }
 
 // newManager creates a new manager backed by a Kubernetes API server.
-func newManager(config *rest.Config, operator string, opts Options) (*Manager, error) {
+func newManager(config *rest.Config, opts Options) (*Manager, error) {
 	logger := opts.Logger
 	if opts.NewCache == nil {
 		opts.NewCache = func(config *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
-			return composite.NewCompositeCache(config, viewv1a1.Group(operator), composite.CacheOptions{
+			return composite.NewCompositeCache(config, composite.CacheOptions{
 				Options: opts,
 				Logger:  logger,
 			})
@@ -124,7 +123,7 @@ func newManager(config *rest.Config, operator string, opts Options) (*Manager, e
 		}
 		// This, apparently, only affects the Writer of the split client!
 		opts.NewClient = func(config *rest.Config, options client.Options) (client.Client, error) {
-			return composite.NewCompositeClient(config, viewv1a1.Group(operator), options)
+			return composite.NewCompositeClient(config, options)
 		}
 	}
 

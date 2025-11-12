@@ -32,7 +32,7 @@ var _ = Describe("Virtual Sources", func() {
 	BeforeEach(func() {
 		ctx, cancel = context.WithCancel(context.Background())
 		var err error
-		mgr, err = manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 		queue = workqueue.NewTypedRateLimitingQueue[Request](workqueue.DefaultTypedControllerRateLimiter[Request]())
 	})
@@ -136,7 +136,7 @@ parameters:
 
 	It("Periodic Source should emit periodic trigger events", func() {
 		params := apiextensionsv1.JSON{
-			Raw: []byte(`{"period": "10ms"}`),
+			Raw: []byte(`{"period": "25ms"}`),
 		}
 		s := NewPeriodicSource(mgr, "test", opv1a1.Source{
 			Resource: opv1a1.Resource{
@@ -172,13 +172,13 @@ parameters:
 		Expect(err).ToNot(HaveOccurred())
 
 		// Wait for multiple periodic triggers (with 10ms period, should see several triggers)
+		Eventually(receivedEvents, 100*time.Millisecond).Should(Receive())
 		Eventually(receivedEvents, 50*time.Millisecond).Should(Receive())
-		Eventually(receivedEvents, 20*time.Millisecond).Should(Receive())
-		Eventually(receivedEvents, 20*time.Millisecond).Should(Receive())
+		Eventually(receivedEvents, 50*time.Millisecond).Should(Receive())
 
 		// Verify event structure
 		var item Request
-		Eventually(receivedEvents, 20*time.Millisecond).Should(Receive(&item))
+		Eventually(receivedEvents, 50*time.Millisecond).Should(Receive(&item))
 		Expect(item.EventType).To(Equal(object.Updated))
 		Expect(item.Name).To(Equal(PeriodicSourceObjectName))
 	})

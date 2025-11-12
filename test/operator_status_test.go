@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -20,7 +19,6 @@ import (
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
-	"github.com/l7mp/dcontroller/pkg/util"
 )
 
 var _ = Describe("Operator status report test:", Ordered, func() {
@@ -93,7 +91,6 @@ spec:
 				get := &opv1a1.Operator{}
 				err := k8sClient.Get(ctx, key, get)
 				if err != nil {
-					fmt.Println(util.Stringify(err))
 					return false
 				}
 				if len(get.Status.Controllers) != 1 {

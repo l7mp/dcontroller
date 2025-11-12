@@ -10,7 +10,6 @@
 //   - CompositeClient: Unified client interface for both views and native resources.
 //   - CompositeCache: Split caching system with view cache and native resource cache.
 //   - CompositeDiscoveryClient: Unified API discovery for views and native resources.
-//   - ClientMultiplexer: Routes client operations based on resource type.
 //   - ViewCache: Specialized cache for view objects with informer support.
 //
 // The composite system automatically determines whether a resource is a view or native Kubernetes
@@ -26,8 +25,6 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 )
 
 type ClientOptions = client.Options
@@ -74,7 +71,7 @@ func NewCompositeAPIClient(config *rest.Config, operator string, opts Options) (
 	compositeRESTMapper := NewCompositeRESTMapper(compositeDiscovery)
 
 	// Create composite cache
-	compositeCache, err := NewCompositeCache(config, viewv1a1.Group(operator), CacheOptions{
+	compositeCache, err := NewCompositeCache(config, CacheOptions{
 		Options:      opts.Options,
 		DefaultCache: opts.DefaultCache,
 		Logger:       logger,
@@ -84,7 +81,7 @@ func NewCompositeAPIClient(config *rest.Config, operator string, opts Options) (
 	}
 
 	// Create composite client
-	compositeClient, err := NewCompositeClient(config, viewv1a1.Group(operator), opts.ClientOptions)
+	compositeClient, err := NewCompositeClient(config, opts.ClientOptions)
 	if err != nil {
 		return nil, err
 	}

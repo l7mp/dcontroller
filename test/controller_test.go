@@ -54,7 +54,7 @@ var _ = Describe("Controller test:", Ordered, func() {
 		It("should create and start a manager succcessfully", func() {
 			setupLog.Info("setting up controller manager")
 			off := true
-			m, err := manager.New(cfg, "service-type-op", manager.Options{
+			m, err := manager.New(cfg, manager.Options{
 				Options: runtimeManager.Options{
 					LeaderElection:         false, // disable leader-election
 					HealthProbeBindAddress: "0",   // disable health-check

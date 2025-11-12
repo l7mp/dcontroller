@@ -39,7 +39,7 @@ var _ = Describe("APIServerUnitTest", func() {
 
 		// Create mock manager
 		var err error
-		mgr, err = manager.NewFakeManager("test", runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Set API server logger
@@ -52,13 +52,13 @@ var _ = Describe("APIServerUnitTest", func() {
 		// Create API server at random port
 		serverAddr = "localhost"
 		port = rand.IntN(15000) + 32768 //nolint:gosec
-		config, err := NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, logger)
+		config, err := NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, false, logger)
 		Expect(err).NotTo(HaveOccurred())
 		server, err = NewAPIServer(config)
 		if err != nil {
 			serverAddr = "localhost"
 			port = rand.IntN(15000) + 32768 //nolint:gosec
-			config, err = NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, logger)
+			config, err = NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, false, logger)
 			Expect(err).NotTo(HaveOccurred())
 			server, err = NewAPIServer(config)
 		}

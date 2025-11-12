@@ -162,7 +162,7 @@ func runGenerateKeys(_ *cobra.Command, cfg genKeysConfig) error {
 type apiServerConfig struct {
 	addr                                                          string
 	port                                                          int
-	httpMode                                                      bool
+	httpMode, insecure                                            bool
 	configFile                                                    string
 	disableAPIServer, disableAuthentication, enableLeaderElection bool
 	certFile, keyFile, metricsAddr, probeAddr                     string
@@ -175,17 +175,21 @@ func startServerCmd() *cobra.Command {
 		Use:   "start",
 		Short: "Start the Δ-controller operator",
 		Long:  "Start the Δ-controller operator",
-		Example: `  # Start with default settings (requires TLS cert/key)
-  dctl start --tls-cert-file=apiserver.crt --tls-key-file=apiserver.key
+		Example: `  # Start with default settings (HTTPS with self-signed cert)
+  dctl start --insecure --tls-cert-file=apiserver.crt --tls-key-file=apiserver.key
 
   # Start without authentication (for development/testing)
-  dctl start --disable-authentication
+  dctl start --insecure --disable-authentication
 
-  # Start in HTTP mode (no TLS)
+  # Start in HTTP mode (no TLS, no authentication)
   dctl start --http --disable-authentication
 
-  # Start on specific address and port
-  dctl start --addr=0.0.0.0 --port=8443 --tls-cert-file=/etc/server.crt --tls-key-file=/etc/server.key`,
+  # Start on specific address and port with proper TLS cert
+  dctl start --addr=0.0.0.0 --port=8443 --tls-cert-file=/etc/server.crt --tls-key-file=/etc/server.key
+
+  # Start with CA-signed certificate (no --insecure needed)
+  dctl start --tls-cert-file=/etc/letsencrypt/live/api.example.com/fullchain.pem \
+             --tls-key-file=/etc/letsencrypt/live/api.example.com/privkey.pem`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runStartServer(cmd, cfg)
 		},
@@ -193,7 +197,8 @@ func startServerCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&cfg.addr, "addr", "localhost", "API server bind address")
 	cmd.Flags().IntVar(&cfg.port, "port", 8443, "API server port")
-	cmd.Flags().BoolVar(&cfg.httpMode, "http", false, "Use insecure HTTP (no TLS)")
+	cmd.Flags().BoolVar(&cfg.httpMode, "http", false, "Use HTTP instead of HTTPS (no TLS)")
+	cmd.Flags().BoolVar(&cfg.insecure, "insecure", false, "Accept self-signed TLS certificates (HTTPS only)")
 	cmd.Flags().StringVar(&cfg.certFile, "tls-cert-file", "apiserver.crt",
 		"TLS cert file for secure mode and JWT validation (latter not required if --disable-authentication is set)")
 	cmd.Flags().StringVar(&cfg.keyFile, "tls-key-file", "apiserver.key", "TLS key file for secure mode")
@@ -239,7 +244,7 @@ func runStartServer(_ *cobra.Command, cfg apiServerConfig) error {
 
 	if !cfg.disableAPIServer {
 		clientMpx := c.GetClient()
-		apiServerCfg, err := apiserver.NewDefaultConfig("0.0.0.0", APIServerPort, clientMpx, cfg.httpMode, logger)
+		apiServerCfg, err := apiserver.NewDefaultConfig("0.0.0.0", APIServerPort, clientMpx, cfg.httpMode, cfg.insecure, logger)
 		if err != nil {
 			setupLog.Error(err, "failed to create the config for the embedded API server")
 			os.Exit(1)

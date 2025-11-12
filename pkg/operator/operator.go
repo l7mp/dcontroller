@@ -14,8 +14,6 @@
 package operator
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"os"
 
@@ -29,8 +27,6 @@ import (
 	"github.com/l7mp/dcontroller/pkg/apiserver"
 	dcontroller "github.com/l7mp/dcontroller/pkg/controller"
 )
-
-var _ runtimeMgr.Runnable = &Operator{}
 
 // Options can be used to customize the Operator's behavior.
 type Options struct {
@@ -55,10 +51,8 @@ type Operator struct {
 	apiServer   *apiserver.APIServer
 	specs       []*opv1a1.OperatorSpec
 	controllers []dcontroller.Controller // maybe nil
-	ctx         context.Context
 	gvks        []schema.GroupVersionKind
 	errorChan   chan error
-	started     bool
 	logger, log logr.Logger
 }
 
@@ -174,25 +168,6 @@ func (op *Operator) AddNativeController(name string, ctrl dcontroller.RuntimeCon
 	op.controllers = append(op.controllers, c)
 
 	return err
-}
-
-// Start starts the operator. It blocks
-func (op *Operator) Start(ctx context.Context) error {
-	if op.started {
-		return errors.New("operator already started")
-	}
-
-	op.log.Info("starting up")
-	op.ctx = ctx
-	op.started = true
-
-	defer func() {
-		if op.errorChan != nil {
-			close(op.errorChan)
-		}
-	}()
-
-	return op.mgr.Start(ctx)
 }
 
 // GetManager returns the controller runtime manager associated with the operator.

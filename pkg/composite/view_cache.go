@@ -28,25 +28,24 @@ var _ cache.Cache = &ViewCache{}
 const DefaultWatchChannelBuffer = 256
 
 // ViewCache implements an ephemeral store for view objects. The view cache has an internal cache
-// per each GVK that can be stored in the cache.
+// per each GVK that can be stored in the cache. ViewCache is now operator-agnostic and can store
+// views from any operator.
 type ViewCache struct {
 	mu          sync.RWMutex
-	group       string // group for all cached views
 	caches      map[schema.GroupVersionKind]toolscache.Indexer
 	informers   map[schema.GroupVersionKind]*ViewCacheInformer
 	discovery   ViewDiscoveryInterface
 	logger, log logr.Logger
 }
 
-// NewViewCache creates a new view cache.
-func NewViewCache(group string, opts CacheOptions) *ViewCache {
+// NewViewCache creates a new view cache that can store views from any operator.
+func NewViewCache(opts CacheOptions) *ViewCache {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
 	}
 
 	c := &ViewCache{
-		group:     group,
 		caches:    make(map[schema.GroupVersionKind]toolscache.Indexer),
 		informers: make(map[schema.GroupVersionKind]*ViewCacheInformer),
 		discovery: NewViewDiscovery(),
@@ -60,8 +59,8 @@ func NewViewCache(group string, opts CacheOptions) *ViewCache {
 func (c *ViewCache) RegisterCacheForKind(gvk schema.GroupVersionKind) error {
 	c.log.V(1).Info("registering cache for new GVK", "gvk", gvk)
 
-	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
-		return c.newGroupError(gvk)
+	if !viewv1a1.IsViewKind(gvk) {
+		return fmt.Errorf("not a view GVK: %s", gvk)
 	}
 
 	c.mu.Lock()
@@ -84,8 +83,8 @@ func (c *ViewCache) RegisterCacheForKind(gvk schema.GroupVersionKind) error {
 
 // GetCacheForKind returns the internal cache for a given GVK.
 func (c *ViewCache) GetCacheForKind(gvk schema.GroupVersionKind) (toolscache.Indexer, error) {
-	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
-		return nil, c.newGroupError(gvk)
+	if !viewv1a1.IsViewKind(gvk) {
+		return nil, fmt.Errorf("not a view GVK: %s", gvk)
 	}
 
 	c.mu.RLock()
@@ -110,8 +109,8 @@ func (c *ViewCache) GetCacheForKind(gvk schema.GroupVersionKind) (toolscache.Ind
 
 // RegisterInformerForKind registers an informer for a GVK.
 func (c *ViewCache) RegisterInformerForKind(gvk schema.GroupVersionKind) error {
-	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
-		return c.newGroupError(gvk)
+	if !viewv1a1.IsViewKind(gvk) {
+		return fmt.Errorf("not a view GVK: %s", gvk)
 	}
 
 	c.log.V(4).Info("registering informer for new GVK", "gvk", gvk)
@@ -144,8 +143,8 @@ func (c *ViewCache) GetInformer(ctx context.Context, obj client.Object, opts ...
 // GetInformerForKind is similar to GetInformer, except that it takes a group-version-kind, instead
 // of the underlying object.
 func (c *ViewCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind, _ ...cache.InformerGetOption) (cache.Informer, error) {
-	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
-		return nil, c.newGroupError(gvk)
+	if !viewv1a1.IsViewKind(gvk) {
+		return nil, fmt.Errorf("not a view GVK: %s", gvk)
 	}
 
 	c.mu.RLock()
@@ -191,8 +190,8 @@ func (c *ViewCache) RemoveInformer(ctx context.Context, obj client.Object) error
 func (c *ViewCache) Add(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
-		return c.newGroupError(gvk)
+	if !viewv1a1.IsViewKind(gvk) {
+		return fmt.Errorf("not a view GVK: %s", gvk)
 	}
 
 	c.log.V(5).Info("add", "gvk", gvk, "key", client.ObjectKeyFromObject(obj).String(),
@@ -233,8 +232,8 @@ func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 	object.WithUID(newObj)
 
 	gvk := newObj.GetObjectKind().GroupVersionKind()
-	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
-		return c.newGroupError(gvk)
+	if !viewv1a1.IsViewKind(gvk) {
+		return fmt.Errorf("not a view GVK: %s", gvk)
 	}
 
 	if object.DeepEqual(oldObj, newObj) {
@@ -268,8 +267,8 @@ func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 func (c *ViewCache) Delete(obj object.Object) error {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
-		return c.newGroupError(gvk)
+	if !viewv1a1.IsViewKind(gvk) {
+		return fmt.Errorf("not a view GVK: %s", gvk)
 	}
 
 	c.log.V(5).Info("delete", "gvk", gvk, "key", client.ObjectKeyFromObject(obj).String(),
@@ -327,8 +326,8 @@ func (c *ViewCache) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	if !viewv1a1.HasViewGroupVersionKind(c.group, gvk) {
-		return c.newGroupError(gvk)
+	if !viewv1a1.IsViewKind(gvk) {
+		return fmt.Errorf("not a view GVK: %s", gvk)
 	}
 
 	cache, err := c.GetCacheForKind(gvk)
@@ -362,8 +361,8 @@ func (c *ViewCache) List(ctx context.Context, list client.ObjectList, opts ...cl
 	listGVK := list.GetObjectKind().GroupVersionKind()
 	objGVK := c.discovery.ObjectGVKFromListGVK(listGVK)
 
-	if !viewv1a1.HasViewGroupVersionKind(c.group, objGVK) {
-		return c.newGroupError(objGVK)
+	if !viewv1a1.IsViewKind(objGVK) {
+		return fmt.Errorf("not a view GVK: %s", objGVK)
 	}
 
 	cache, err := c.GetCacheForKind(objGVK)
@@ -668,10 +667,6 @@ func (w *ViewCacheWatcher) Stop() {
 // ResultChan returns the event channel of the watcher.
 func (w *ViewCacheWatcher) ResultChan() <-chan watch.Event {
 	return w.eventChan
-}
-
-func (c *ViewCache) newGroupError(gvk schema.GroupVersionKind) error {
-	return fmt.Errorf("unknown view object group %s, expected %s", gvk.Group, c.group)
 }
 
 // clientKeyToCacheKey converts a controller-runtime client.ObjectKey to a cache.ObjectName.  This
