@@ -143,8 +143,6 @@ func (g *Group) AddOperatorFromSpec(name string, spec *opv1a1.OperatorSpec) (*Op
 		Logger:       g.logger,
 	})
 	op.AddSpec(spec)
-	op.Commit()
-
 	g.AddOperator(op)
 
 	return op, nil

@@ -116,8 +116,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	op.Commit()
-
 	// Create an error reporter thread
 	ctx := ctrl.SetupSignalHandler()
 	go func() {

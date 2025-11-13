@@ -76,8 +76,7 @@ func New(name string, mgr runtimeMgr.Manager, opts Options) *Operator {
 	}
 }
 
-// AddSpec adds a declarative controller spec to the operator. Make sure to call Commit
-// once all control loops are added.
+// AddSpec adds a declarative controller spec to the operator.
 func (op *Operator) AddSpec(spec *opv1a1.OperatorSpec) {
 	op.specs = append(op.specs, spec)
 
@@ -88,14 +87,6 @@ func (op *Operator) AddSpec(spec *opv1a1.OperatorSpec) {
 			op.log.V(5).Info("failed to create controller", "controller", config.Name,
 				"error", err)
 		}
-	}
-}
-
-// Commit finishes the setup of the operator by registering the GVKs in the API server.
-func (op *Operator) Commit() {
-	if err := op.RegisterGVKs(); err != nil {
-		// this is not fatal
-		op.log.Error(err, "failed to register GKVs with the API server")
 	}
 }
 
@@ -112,7 +103,6 @@ func NewFromFile(name string, mgr runtimeMgr.Manager, file string, opts Options)
 
 	op := New(name, mgr, opts)
 	op.AddSpec(&spec)
-	op.Commit()
 
 	return op, nil
 }
@@ -153,6 +143,11 @@ func (op *Operator) AddDeclarativeController(config opv1a1.Controller) error {
 	// status update triggers to show the controller errors to the user
 	op.controllers = append(op.controllers, c)
 
+	if err := op.RegisterGVKs(); err != nil {
+		// this is not fatal
+		op.log.Error(err, "failed to register GKVs with the API server")
+	}
+
 	return err
 }
 
@@ -166,6 +161,11 @@ func (op *Operator) AddNativeController(name string, ctrl dcontroller.RuntimeCon
 	// the controller returned is always valid: this makes sure we will receive the
 	// status update triggers to show the controller errors to the user
 	op.controllers = append(op.controllers, c)
+
+	if err := op.RegisterGVKs(); err != nil {
+		// this is not fatal
+		op.log.Error(err, "failed to register GKVs with the API server")
+	}
 
 	return err
 }

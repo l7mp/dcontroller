@@ -164,7 +164,6 @@ var _ = Describe("Headless Operator", func() {
 		op := New("test", mgr, opts)
 		Expect(op).NotTo(BeNil())
 		op.AddSpec(operatorSpec)
-		op.Commit()
 
 		go func() {
 			defer GinkgoRecover()
