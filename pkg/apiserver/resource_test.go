@@ -94,13 +94,13 @@ var _ = Describe("APIServerUnitTest", func() {
 			Expect(ok).To(BeFalse())
 		})
 
-		It("should err for duplicate group-GVK registration", func() {
+		It("should allow re-registration of the same group-GVK (idempotent)", func() {
 			err := server.RegisterAPIGroup(testGroup, []schema.GroupVersionKind{testViewGVK})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Register again - should err
+			// Register again - should succeed (idempotent)
 			err = server.RegisterAPIGroup(testGroup, []schema.GroupVersionKind{testViewGVK})
-			Expect(err).To(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should unregister a GVK", func() {

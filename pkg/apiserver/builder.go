@@ -42,7 +42,36 @@ func (s *APIServer) buildServer() error {
 	}
 	s.server = server
 
-	// Step 4: Register initial GVKs added before the server starts up.
+	// Step 4: Create dynamic discovery handlers.
+	// These handlers intercept /apis/<group> and /apis/<group>/<version> discovery requests.
+	// For paths they don't handle, delegate to GoRestfulContainer (which has /apis from DiscoveryGroupManager).
+	// IMPORTANT: We must NOT delegate to Director here because that would create a loop:
+	//   Director → NonGoRestfulMux (our handler) → dynamicHandlers → Director (LOOP!)
+	// Chain: dynamicVersionHandler → dynamicGroupHandler → GoRestfulContainer
+	goRestfulContainer := server.Handler.GoRestfulContainer
+	s.dynamicGroupHandler = newDynamicGroupHandler(goRestfulContainer, s.log)
+	s.dynamicVersionHandler = newDynamicVersionHandler(s.dynamicGroupHandler, s.log)
+
+	// Step 5: Create resourceHandler for CRUD operations.
+	// This handler dynamically routes resource requests (GET, LIST, CREATE, etc.) to their storage.
+	// Chain: resourceHandler -> dynamicVersionHandler -> dynamicGroupHandler -> go-restful
+	resourceHandler := newResourceHandler(resourceHandlerConfig{
+		delegatingClient: s.delegatingClient,
+		scheme:           s.scheme,
+		codecs:           s.codecs,
+		delegate:         s.dynamicVersionHandler,
+		log:              s.log,
+	})
+	s.resourceHandler = resourceHandler
+
+	// Step 6: Install resourceHandler into NonGoRestfulMux to intercept /apis/* requests.
+	// This is BEFORE go-restful processes them, similar to how CRDs work.
+	// Note: We only intercept /apis/ (with prefix), not /apis itself.
+	// The /apis endpoint is served by go-restful's DiscoveryGroupManager which we populate via AddGroup().
+	// Request flow: FullHandlerChain -> NonGoRestfulMux (resourceHandler for /apis/*) -> go-restful (for /apis and fallback) -> Director
+	server.Handler.NonGoRestfulMux.HandlePrefix("/apis/", resourceHandler)
+
+	// Step 7: Register initial GVKs added before the server starts up.
 	if err := s.initGVKs(); err != nil {
 		return fmt.Errorf("failed to register initial GVKs: %w", err)
 	}

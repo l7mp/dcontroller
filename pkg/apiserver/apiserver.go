@@ -62,6 +62,16 @@ type APIServer struct {
 	cachedOpenAPIDefs   map[string]openapicommon.OpenAPIDefinition
 	cachedOpenAPIV3Defs map[string]openapicommon.OpenAPIDefinition
 
+	// Dynamic handlers for API operations.
+	// resourceHandler: Routes CRUD operations (GET, LIST, CREATE, etc.) to storage.
+	// dynamicGroupHandler: Routes /apis/<group> discovery requests.
+	// dynamicVersionHandler: Routes /apis/<group>/<version> discovery requests.
+	// These allow idempotent re-registration of API groups without needing
+	// to remove and re-add WebServices from the go-restful container.
+	resourceHandler       *resourceHandler
+	dynamicGroupHandler   *dynamicGroupHandler
+	dynamicVersionHandler *dynamicVersionHandler
+
 	// Lifecycle management
 	running bool
 

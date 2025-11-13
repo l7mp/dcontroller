@@ -3,12 +3,11 @@ package apiserver
 import (
 	"fmt"
 
+	apidiscoveryv2 "k8s.io/api/apidiscovery/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	apiserverrest "k8s.io/apiserver/pkg/registry/rest"
-	genericapiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/pkg/endpoints/discovery"
 
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 )
@@ -48,130 +47,189 @@ func (s *APIServer) UnregisterGVKs(gvks []schema.GroupVersionKind) {
 }
 
 // RegisterAPIGroup installs an API group with all its registered GVKs to the API server.
+// This function is fully idempotent and can be called multiple times for the same group.
+// All registrations (first and subsequent) work identically using the dynamic resource handler.
 func (s *APIServer) RegisterAPIGroup(group string, gvks []schema.GroupVersionKind) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Ignore native Kubernetes API resources
+	// Ignore native Kubernetes API resources.
 	if !viewv1a1.IsViewGroup(group) {
 		return nil
 	}
 
-	// Err if group is already registered
-	if _, ok := s.groupGVKs[group]; ok {
-		return fmt.Errorf("API group %s already registered", group)
-	}
-
+	// 1. Add types to scheme (idempotent operation).
 	if err := s.addTypesToScheme(gvks); err != nil {
 		return fmt.Errorf("failed to add types to scheme: %w", err)
 	}
 
-	// Register the new group in the API server
-	if err := s.registerAPIGroup(group, gvks); err != nil {
-		return err
+	// 2. Register storage in resourceHandler (fully dynamic, no InstallAPIGroup).
+	for _, gvk := range gvks {
+		resource, err := s.findAPIResource(gvk)
+		if err != nil {
+			s.log.V(4).Info("skipping GVK", "gvk", gvk.String(), "error", err)
+			continue
+		}
+
+		gvr := schema.GroupVersionResource{
+			Group:    gvk.Group,
+			Version:  gvk.Version,
+			Resource: resource.APIResource.Name,
+		}
+
+		if err := s.resourceHandler.addStorage(gvr, gvk, resource); err != nil {
+			return fmt.Errorf("failed to add storage for %s: %w", gvk.String(), err)
+		}
 	}
 
-	// Update the GVK cache
+	// 3. Register discovery handlers (idempotent).
+	s.registerDiscoveryHandlers(group, gvks)
+
+	// 4. Update GVK cache.
 	groupedGVKs := make(map[schema.GroupVersionKind]bool)
 	for _, gvk := range gvks {
 		groupedGVKs[gvk] = true
 	}
 	s.groupGVKs[group] = groupedGVKs
 
-	// Invalidate OpenAPI caches
+	// 5. Invalidate OpenAPI caches.
 	s.cachedOpenAPIDefs = nil
 	s.cachedOpenAPIV3Defs = nil
 
 	s.log.Info("API group registered", "group", group, "GVKs", len(gvks))
-
 	return nil
 }
 
-// UnregisterGVK removes an API group with all its registered GVKs.
+// UnregisterAPIGroup removes an API group with all its registered GVKs.
 func (s *APIServer) UnregisterAPIGroup(group string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.groupGVKs[group]; !ok {
-		// Not registered, silently return
+	gvks, ok := s.groupGVKs[group]
+	if !ok {
+		// Not registered, silently return.
 		return
 	}
 
+	// Remove storage from resourceHandler.
+	for gvk := range gvks {
+		resource, err := s.findAPIResource(gvk)
+		if err != nil {
+			continue
+		}
+
+		gvr := schema.GroupVersionResource{
+			Group:    gvk.Group,
+			Version:  gvk.Version,
+			Resource: resource.APIResource.Name,
+		}
+
+		s.resourceHandler.removeStorage(gvr)
+	}
+
+	// Remove discovery handlers.
+	s.dynamicGroupHandler.removeHandler(group)
+	for gvk := range gvks {
+		s.dynamicVersionHandler.removeHandler(gvk.Group, gvk.Version)
+	}
+
+	// Remove from both discovery managers.
+	s.server.DiscoveryGroupManager.RemoveGroup(group)
+	if s.server.AggregatedDiscoveryGroupManager != nil {
+		s.server.AggregatedDiscoveryGroupManager.RemoveGroup(group)
+	}
+
+	// Remove from cache.
 	delete(s.groupGVKs, group)
 
-	// Invalidate OpenAPI caches
+	// Invalidate OpenAPI caches.
 	s.cachedOpenAPIDefs = nil
 	s.cachedOpenAPIV3Defs = nil
 
 	s.log.Info("API group unregistered", "group", group)
 }
 
-// registerAPIGroup registers a single API group with its resources
-func (s *APIServer) registerAPIGroup(group string, gvks []schema.GroupVersionKind) error {
-	// Group by version within this group
+// registerDiscoveryHandlers creates and registers discovery handlers for a group.
+// This function is idempotent and can be called multiple times to update discovery info.
+func (s *APIServer) registerDiscoveryHandlers(group string, gvks []schema.GroupVersionKind) {
+	// Group by version
 	versionedGVKs := make(map[string][]schema.GroupVersionKind)
 	for _, gvk := range gvks {
 		versionedGVKs[gvk.Version] = append(versionedGVKs[gvk.Version], gvk)
 	}
 
-	// Create storage map for all versions in this group
-	versionedResourcesStorageMap := make(map[string]map[string]apiserverrest.Storage)
+	// Build API group metadata for discovery
+	apiVersionsForDiscovery := []metav1.GroupVersionForDiscovery{}
+	for version := range versionedGVKs {
+		gv := schema.GroupVersion{Group: group, Version: version}
+		apiVersionsForDiscovery = append(apiVersionsForDiscovery, metav1.GroupVersionForDiscovery{
+			GroupVersion: gv.String(),
+			Version:      version,
+		})
+	}
 
-	failedGVKs := 0
+	// Create group-level discovery handler
+	apiGroup := metav1.APIGroup{
+		Name:             group,
+		Versions:         apiVersionsForDiscovery,
+		PreferredVersion: apiVersionsForDiscovery[0], // First version is preferred
+	}
+
+	// Register with our dynamic handler for /apis/<group>
+	s.dynamicGroupHandler.setHandler(group, discovery.NewAPIGroupHandler(s.codecs, apiGroup))
+
+	// Register with BOTH discovery managers for /apis endpoint:
+	// 1. Legacy v1 discovery (returns APIGroupList)
+	s.server.DiscoveryGroupManager.AddGroup(apiGroup)
+
+	// Create version-level discovery handlers for each version
 	for version, versionGVKs := range versionedGVKs {
-		resourceStorage := make(map[string]apiserverrest.Storage)
+		gv := schema.GroupVersion{Group: group, Version: version}
+
+		// Build API resources for this version (v1 format)
+		apiResources := []metav1.APIResource{}
+		// Build API resources for v2 aggregated discovery
+		discoveryResources := []apidiscoveryv2.APIResourceDiscovery{}
 
 		for _, gvk := range versionGVKs {
-			// Convert GVK to GVR
 			resource, err := s.findAPIResource(gvk)
 			if err != nil {
-				// This is not fatal: since no API discovery ius available when
-				// running without a real Kubernetes API server, we just note the
-				// failure and move on
-				// return fmt.Errorf("failed to complete API discovery for GVK %s: %w", gvk.String(), err)
-				failedGVKs++
+				s.log.V(4).Info("skipping resource for discovery", "GVK", gvk.String(), "error", err)
 				continue
 			}
-			resourceName := resource.APIResource.Name
 
-			// Create storage for this specific GVK
-			restOptionsGetter := &RESTOptionsGetter{}
-			storageProvider := NewClientDelegatedStorage(s.delegatingClient, resource, s.log)
-			storage, err := storageProvider(s.scheme, restOptionsGetter)
-			if err != nil {
-				return fmt.Errorf("failed to create delegaing storage for %s: %w", gvk.String(), err)
-			}
+			// v1 format
+			apiResources = append(apiResources, *resource.APIResource)
 
-			resourceStorage[resourceName] = storage
-			s.log.V(4).Info("registered storage", "GVK", gvk.String(), "resource", resourceName)
+			// v2 format for aggregated discovery
+			discoveryResources = append(discoveryResources, apidiscoveryv2.APIResourceDiscovery{
+				Resource:         resource.APIResource.Name,
+				ResponseKind:     &metav1.GroupVersionKind{Group: gvk.Group, Version: gvk.Version, Kind: gvk.Kind},
+				Scope:            apidiscoveryv2.ScopeNamespace, // All views are namespaced
+				SingularResource: resource.APIResource.SingularName,
+				Verbs:            []string{"get", "list", "create", "update", "patch", "delete", "watch"},
+			})
 		}
 
-		versionedResourcesStorageMap[version] = resourceStorage
-	}
+		// Register version handler for /apis/<group>/<version>
+		versionHandler := discovery.NewAPIVersionHandler(s.codecs, gv, discovery.APIResourceListerFunc(func() []metav1.APIResource {
+			return apiResources
+		}))
+		s.dynamicVersionHandler.setHandler(group, version, versionHandler)
 
-	// Create APIGroupInfo
-	groupVersions := make([]schema.GroupVersion, 0, len(versionedGVKs))
-	for version := range versionedGVKs {
-		groupVersions = append(groupVersions, schema.GroupVersion{Group: group, Version: version})
+		// 2. Register with Aggregated v2 discovery manager
+		// This is what modern discovery clients use (with Accept: apidiscovery.k8s.io/v2)
+		if s.server.AggregatedDiscoveryGroupManager != nil {
+			s.server.AggregatedDiscoveryGroupManager.AddGroupVersion(
+				group,
+				apidiscoveryv2.APIVersionDiscovery{
+					Freshness: apidiscoveryv2.DiscoveryFreshnessCurrent,
+					Version:   version,
+					Resources: discoveryResources,
+				},
+			)
+		}
 	}
-	apiGroupInfo := &genericapiserver.APIGroupInfo{
-		PrioritizedVersions:          groupVersions,
-		VersionedResourcesStorageMap: versionedResourcesStorageMap,
-		OptionsExternalVersion:       &schema.GroupVersion{Version: "v1"},
-		Scheme:                       s.scheme,
-		ParameterCodec:               runtime.NewParameterCodec(s.scheme),
-		NegotiatedSerializer:         s.codecs,
-	}
-
-	// Install the API group
-	if err := s.server.InstallAPIGroup(apiGroupInfo); err != nil {
-		return fmt.Errorf("failed to install API group %s: %w", group, err)
-	}
-
-	s.log.V(1).Info("API group registered", "group", group, "versions", groupVersions,
-		"failed-GVKs", failedGVKs)
-
-	return nil
 }
 
 // addTypesToScheme adds a set of GVKs to the scheme.

@@ -14,36 +14,15 @@ import (
 	"k8s.io/apimachinery/pkg/util/duration"
 	"k8s.io/apimachinery/pkg/watch"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
-	"k8s.io/apiserver/pkg/registry/generic"
 	"k8s.io/apiserver/pkg/registry/rest"
-	"k8s.io/apiserver/pkg/storage/storagebackend"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ rest.StandardStorage = &ClientDelegatedStorage{}
 var _ rest.Scoper = &ClientDelegatedStorage{}
 var _ rest.TableConvertor = &ClientDelegatedStorage{}
-var _ generic.RESTOptionsGetter = &RESTOptionsGetter{}
 
-// RESTOptionsGetter provides basic REST options for custom storage.
-type RESTOptionsGetter struct{}
-
-func (r *RESTOptionsGetter) GetRESTOptions(resource schema.GroupResource, example runtime.Object) (generic.RESTOptions, error) {
-	return generic.RESTOptions{
-		StorageConfig: &storagebackend.ConfigForResource{
-			// We don't actually use etcd storage, but we need to provide config
-			Config:        storagebackend.Config{Type: "memory"}, // or whatever makes sense
-			GroupResource: resource,
-		},
-		Decorator:               generic.UndecoratedStorage,
-		DeleteCollectionWorkers: 1,
-		EnableGarbageCollection: false,
-		ResourcePrefix:          resource.String(),
-		CountMetricPollPeriod:   0, // Disable metrics polling
-	}, nil
-}
-
-// Clientdelegatedstorage implements REST storage by delegating all operations
+// ClientDelegatedStorage implements REST storage by delegating all operations
 // to a controller-runtime client.
 type ClientDelegatedStorage struct {
 	delegatingClient      client.Client
@@ -53,39 +32,6 @@ type ClientDelegatedStorage struct {
 	namespaced, hasStatus bool
 	log                   logr.Logger
 }
-
-// NewClientDelegatedStorage creates a new storage provider that delegates to controller-runtime
-// client.
-func NewClientDelegatedStorage(delegatingClient client.Client, resource *Resource, log logr.Logger) StorageProvider {
-	delegatingWatcher, ok := delegatingClient.(client.WithWatch)
-	if !ok {
-		log.Info("cannot delegate Watch to backing client: Watch will be unavailable")
-	}
-
-	return func(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (rest.Storage, error) {
-		gvr := schema.GroupVersionResource{
-			Group:    resource.APIResource.Group,
-			Version:  resource.APIResource.Version,
-			Resource: resource.APIResource.Name,
-		}
-		storage := &ClientDelegatedStorage{
-			delegatingClient:  delegatingClient,
-			delegatingWatcher: delegatingWatcher,
-			gvk:               resource.GVK,
-			gvr:               gvr,
-			namespaced:        resource.APIResource.Namespaced,
-			hasStatus:         resource.HasStatus,
-			log:               log,
-		}
-
-		log.V(2).Info("delegated storage created", "GVK", resource.GVK.String(), "GVR", gvr.String())
-
-		return storage, nil
-	}
-}
-
-// StorageProvider is our own type alias, replacing builderrest.ResourceHandlerProvider.
-type StorageProvider func(*runtime.Scheme, generic.RESTOptionsGetter) (rest.Storage, error)
 
 // Implement the rest.Storage interface.
 
