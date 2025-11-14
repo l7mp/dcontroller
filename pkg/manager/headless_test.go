@@ -44,7 +44,7 @@ var _ = Describe("Headless Mode", func() {
 	})
 
 	It("should create a Manager", func() {
-		mgr, err := New(nil, Options{Options: manager.Options{Logger: logger}})
+		mgr, err := NewHeadless(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(mgr).NotTo(BeNil())
 
@@ -60,7 +60,7 @@ var _ = Describe("Headless Mode", func() {
 	})
 
 	It("should add and retrieve a view object", func() {
-		mgr, err := New(nil, Options{Options: manager.Options{Logger: logger}})
+		mgr, err := NewHeadless(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(mgr).NotTo(BeNil())
 
@@ -85,7 +85,7 @@ var _ = Describe("Headless Mode", func() {
 	})
 
 	It("should patch a view object", func() {
-		mgr, err := New(nil, Options{Options: manager.Options{Logger: logger}})
+		mgr, err := NewHeadless(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(mgr).NotTo(BeNil())
 
@@ -121,7 +121,7 @@ var _ = Describe("Headless Mode", func() {
 	})
 
 	It("should watch a view object", func() {
-		mgr, err := New(nil, Options{Options: manager.Options{Logger: logger}})
+		mgr, err := NewHeadless(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(mgr).NotTo(BeNil())
 

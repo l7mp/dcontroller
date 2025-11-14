@@ -19,12 +19,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	dmanager "github.com/l7mp/dcontroller/pkg/manager"
+	"github.com/l7mp/dcontroller/pkg/manager"
 	dobject "github.com/l7mp/dcontroller/pkg/object"
 	doperator "github.com/l7mp/dcontroller/pkg/operator"
 	dreconciler "github.com/l7mp/dcontroller/pkg/reconciler"
@@ -71,12 +70,13 @@ func main() {
 		specFile = OperatorSpec
 	}
 
-	// Create a dmanager
-	mgr, err := dmanager.New(ctrl.GetConfigOrDie(), dmanager.Options{
-		Options: ctrl.Options{Scheme: scheme},
+	// Create a manager
+	mgr, err := manager.New(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme: scheme,
+		Logger: logger,
 	})
 	if err != nil {
-		log.Error(err, "unable to set up dmanager")
+		log.Error(err, "unable to set up manager")
 		os.Exit(1)
 	}
 

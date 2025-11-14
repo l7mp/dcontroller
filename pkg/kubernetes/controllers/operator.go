@@ -43,7 +43,7 @@ type OpController struct {
 	k8sClient client.Client
 
 	// Manager for running operators and storing views
-	operatorMgr *manager.Manager
+	operatorMgr runtimeMgr.Manager
 	// Map of operator name to operator and error channel
 	operators map[string]*opEntry
 	// Mutex for thread-safe operator map access
@@ -92,19 +92,17 @@ func NewOpController(config *rest.Config, opts runtimeMgr.Options) (*OpControlle
 	// Create the operator manager for running operators and storing views
 	// This manager uses a composite cache that can store views from all operators
 	off := true
-	operatorMgr, err := manager.New(config, manager.Options{
-		Options: runtimeMgr.Options{
-			LeaderElection:         false,
-			HealthProbeBindAddress: "0",
-			// Disable global controller name uniqueness test
-			Controller: runtimeConfig.Controller{
-				SkipNameValidation: &off,
-			},
-			Metrics: metricsserver.Options{
-				BindAddress: "0",
-			},
-			Logger: logger,
+	operatorMgr, err := manager.New(config, runtimeMgr.Options{
+		LeaderElection:         false,
+		HealthProbeBindAddress: "0",
+		// Disable global controller name uniqueness test
+		Controller: runtimeConfig.Controller{
+			SkipNameValidation: &off,
 		},
+		Metrics: metricsserver.Options{
+			BindAddress: "0",
+		},
+		Logger: logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create operator manager: %w", err)

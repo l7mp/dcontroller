@@ -31,14 +31,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/apiserver"
-	dmanager "github.com/l7mp/dcontroller/pkg/manager"
+	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
 	doperator "github.com/l7mp/dcontroller/pkg/operator"
 	dreconciler "github.com/l7mp/dcontroller/pkg/reconciler"
@@ -124,10 +123,11 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 		AfterAll(func() { cancel() })
 
 		It("should create and start the API server", func() {
-			suite.Log.Info("creating a dmanager")
+			suite.Log.Info("creating a manager")
 			var err error
-			mgr, err = dmanager.New(suite.Cfg, dmanager.Options{
-				Options: ctrl.Options{Scheme: scheme, Logger: suite.Log},
+			mgr, err = manager.New(suite.Cfg, ctrl.Options{
+				Scheme: scheme,
+				Logger: suite.Log,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -533,9 +533,9 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 		AfterAll(func() { cancel() })
 
 		It("should create and start the controller", func() {
-			// Create a dmanager
-			mgr, err := dmanager.New(suite.Cfg, dmanager.Options{
-				Options: ctrl.Options{Scheme: scheme},
+			// Create a manager
+			mgr, err := manager.New(suite.Cfg, ctrl.Options{
+				Scheme: scheme,
 			})
 			Expect(err).NotTo(HaveOccurred())
 

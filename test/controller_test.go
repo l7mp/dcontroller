@@ -13,7 +13,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
@@ -33,7 +32,7 @@ var _ = Describe("Controller test:", Ordered, func() {
 			ctrlCancel context.CancelFunc
 			svc        object.Object
 			gvk        schema.GroupVersionKind
-			mgr        runtimeManager.Manager
+			mgr        manager.Manager
 		)
 
 		BeforeAll(func() {
@@ -55,17 +54,15 @@ var _ = Describe("Controller test:", Ordered, func() {
 			setupLog.Info("setting up controller manager")
 			off := true
 			m, err := manager.New(cfg, manager.Options{
-				Options: runtimeManager.Options{
-					LeaderElection:         false, // disable leader-election
-					HealthProbeBindAddress: "0",   // disable health-check
-					Metrics: metricsserver.Options{
-						BindAddress: "0", // disable the metrics server
-					},
-					Controller: config.Controller{
-						SkipNameValidation: &off,
-					},
-					Logger: logger,
+				LeaderElection:         false, // disable leader-election
+				HealthProbeBindAddress: "0",   // disable health-check
+				Metrics: metricsserver.Options{
+					BindAddress: "0", // disable the metrics server
 				},
+				Controller: config.Controller{
+					SkipNameValidation: &off,
+				},
+				Logger: logger,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			mgr = m

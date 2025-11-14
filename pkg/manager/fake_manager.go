@@ -26,14 +26,14 @@ import (
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
-var _ manager.Manager = &FakeRuntimeManager{}
-var _ manager.Manager = &FakeManager{}
+var _ Manager = &FakeRuntimeManager{}
+var _ Manager = &FakeManager{}
 
 // FakeManager is a fake manager that can be used for testing.
 type FakeManager struct {
-	*Manager
+	Manager
 	// runtime
-	fakeRuntimeManager manager.Manager
+	fakeRuntimeManager *FakeRuntimeManager
 	fakeRuntimeCache   *composite.FakeRuntimeCache
 	fakeRuntimeClient  client.WithWatch
 	tracker            testing.ObjectTracker
@@ -44,7 +44,7 @@ type FakeManager struct {
 }
 
 // NewFakeManager creates a new fake manager.
-func NewFakeManager(opts manager.Options, objs ...client.Object) (*FakeManager, error) {
+func NewFakeManager(opts Options, objs ...client.Object) (*FakeManager, error) {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -80,13 +80,8 @@ func NewFakeManager(opts manager.Options, objs ...client.Object) (*FakeManager, 
 	fakeCompositeClient.SetCache(compositeCache)
 	fakeRuntimeManager := NewFakeRuntimeManager(compositeCache, fakeCompositeClient, logger)
 
-	mgr, err := New(nil, Options{Options: opts, Manager: fakeRuntimeManager})
-	if err != nil {
-		return nil, err
-	}
-
 	return &FakeManager{
-		Manager:            mgr,
+		Manager:            fakeRuntimeManager,
 		fakeRuntimeManager: fakeRuntimeManager,
 		fakeRuntimeCache:   fakeRuntimeCache,
 		fakeRuntimeClient:  fakeRuntimeClient,
@@ -95,8 +90,8 @@ func NewFakeManager(opts manager.Options, objs ...client.Object) (*FakeManager, 
 	}, nil
 }
 
-func (m *FakeManager) GetManager() manager.Manager                  { return m.Manager }
-func (m *FakeManager) GetRuntimeManager() manager.Manager           { return m.fakeRuntimeManager }
+func (m *FakeManager) GetManager() Manager                          { return m.Manager }
+func (m *FakeManager) GetRuntimeManager() *FakeRuntimeManager       { return m.fakeRuntimeManager }
 func (m *FakeManager) GetRuntimeCache() *composite.FakeRuntimeCache { return m.fakeRuntimeCache }
 func (m *FakeManager) GetRuntimeClient() client.WithWatch           { return m.fakeRuntimeClient }
 func (m *FakeManager) GetCompositeCache() *composite.CompositeCache { return m.compositeCache }

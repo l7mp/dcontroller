@@ -14,12 +14,11 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/yaml"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
-	dmanager "github.com/l7mp/dcontroller/pkg/manager"
+	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
@@ -65,13 +64,13 @@ var _ = Describe("Headless Operator", func() {
 	})
 
 	It("should create an empty Operator", func() {
-		mgr, err := dmanager.New(nil, dmanager.Options{Options: manager.Options{
+		mgr, err := manager.NewHeadless(manager.Options{
 			Metrics: metrics.Options{
 				BindAddress: ":54322",
 			},
 			HealthProbeBindAddress: "",
 			Logger:                 logger,
-		}})
+		})
 		Expect(err).NotTo(HaveOccurred())
 
 		// closed by the operator
@@ -124,13 +123,13 @@ var _ = Describe("Headless Operator", func() {
 	})
 
 	It("should load an Operator", func() {
-		mgr, err := dmanager.New(nil, dmanager.Options{Options: manager.Options{
+		mgr, err := manager.NewHeadless(manager.Options{
 			Metrics: metrics.Options{
 				BindAddress: ":54321",
 			},
 			HealthProbeBindAddress: "",
 			Logger:                 logger,
-		}})
+		})
 		Expect(err).NotTo(HaveOccurred())
 
 		errorChan := make(chan error, 16)
