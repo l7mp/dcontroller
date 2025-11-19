@@ -49,7 +49,6 @@ type Operator struct {
 	name        string
 	mgr         runtimeMgr.Manager
 	apiServer   *apiserver.APIServer
-	specs       []*opv1a1.OperatorSpec
 	controllers []dcontroller.Controller // maybe nil
 	gvks        []schema.GroupVersionKind
 	errorChan   chan error
@@ -67,7 +66,6 @@ func New(name string, mgr runtimeMgr.Manager, opts Options) *Operator {
 		name:        name,
 		mgr:         mgr,
 		controllers: []dcontroller.Controller{},
-		specs:       []*opv1a1.OperatorSpec{},
 		apiServer:   opts.APIServer,
 		gvks:        []schema.GroupVersionKind{},
 		errorChan:   opts.ErrorChannel,
@@ -78,8 +76,6 @@ func New(name string, mgr runtimeMgr.Manager, opts Options) *Operator {
 
 // AddSpec adds a declarative controller spec to the operator.
 func (op *Operator) AddSpec(spec *opv1a1.OperatorSpec) {
-	op.specs = append(op.specs, spec)
-
 	// Create the controllers for the operator (manager.Start() will automatically start them)
 	for _, config := range spec.Controllers {
 		if err := op.AddDeclarativeController(config); err != nil {
@@ -90,7 +86,8 @@ func (op *Operator) AddSpec(spec *opv1a1.OperatorSpec) {
 	}
 }
 
-// NewFromFile creates a new operator from a serialized operator spec. Note that once this call finishes there is no way to add new controllers to the operator.
+// NewFromFile creates a new operator from a serialized operator spec. Note that once this call
+// finishes there is no way to add new controllers to the operator.
 func NewFromFile(name string, mgr runtimeMgr.Manager, file string, opts Options) (*Operator, error) {
 	b, err := os.ReadFile(file)
 	if err != nil {

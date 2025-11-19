@@ -24,6 +24,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -410,11 +411,9 @@ func runGenerateConfig(cfg generateConfigConfig) error {
 		// Warn if rule contains collection verbs (list, watch, create, deletecollection)
 		collectionVerbs := []string{"list", "watch", "create", "deletecollection"}
 		for _, verb := range rulesList[lastIdx].Verbs {
-			for _, collVerb := range collectionVerbs {
-				if verb == collVerb {
-					fmt.Fprintf(os.Stderr, "⚠️  Warning: resourceNames with '%s' verb will be ignored per Kubernetes RBAC semantics.\n", verb)
-					break
-				}
+			if slices.Contains(collectionVerbs, verb) {
+				fmt.Fprintf(os.Stderr, "⚠️  Warning: resourceNames with '%s' verb will "+
+					"be ignored per Kubernetes RBAC semantics.\n", verb)
 			}
 		}
 	}

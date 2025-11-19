@@ -31,6 +31,10 @@ import (
 	"github.com/l7mp/dcontroller/pkg/util"
 )
 
+// StatusChannelBufferSize determines the number if errors that can be buffered in the error
+// channel of an operator.
+const StatusChannelBufferSize = 64
+
 type opEntry struct {
 	op        *operator.Operator
 	errorChan chan error
@@ -204,9 +208,6 @@ func (c *OpController) AddOperator(op *operator.Operator) {
 // The operator will use the shared operator manager, enabling cross-operator watches.
 func (c *OpController) AddOperatorFromSpec(name string, spec *opv1a1.OperatorSpec) (*operator.Operator, error) {
 	c.log.V(4).Info("adding operator", "name", name)
-
-	// StatusChannelBufferSize is from the old group.go
-	const StatusChannelBufferSize = 64
 
 	// Use the shared operator manager for this operator
 	errorChan := make(chan error, StatusChannelBufferSize)
