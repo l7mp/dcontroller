@@ -34,6 +34,7 @@ import (
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
+	"github.com/l7mp/dcontroller/pkg/testsuite"
 )
 
 const (
@@ -48,7 +49,7 @@ const (
 )
 
 var (
-	suite            *testutils.SuiteContext
+	suite            *testsuite.Suite
 	cfg              *rest.Config
 	scheme           = runtime.NewScheme()
 	k8sClient        client.Client
@@ -71,7 +72,7 @@ var _ = BeforeSuite(func() {
 	opv1a1.AddToScheme(scheme)
 
 	var err error
-	suite, err = testutils.NewSuite(loglevel, "./configdeployment-crd.yaml")
+	suite, err = testsuite.New(loglevel, "./configdeployment-crd.yaml")
 	Expect(err).NotTo(HaveOccurred())
 	k8sClient = suite.K8sClient
 	cfg = suite.Cfg

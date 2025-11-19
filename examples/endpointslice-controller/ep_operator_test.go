@@ -41,10 +41,11 @@ import (
 	"github.com/l7mp/dcontroller/pkg/object"
 	doperator "github.com/l7mp/dcontroller/pkg/operator"
 	dreconciler "github.com/l7mp/dcontroller/pkg/reconciler"
+	"github.com/l7mp/dcontroller/pkg/testsuite"
 )
 
 var (
-	suite *testutils.SuiteContext
+	suite *testsuite.Suite
 	// loglevel = 1
 	// loglevel = -10
 	loglevel      = -5
@@ -60,7 +61,7 @@ var (
 
 var _ = BeforeSuite(func() {
 	var err error
-	suite, err = testutils.NewSuite(loglevel)
+	suite, err = testsuite.New(loglevel)
 	Expect(err).NotTo(HaveOccurred())
 })
 

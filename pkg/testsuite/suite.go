@@ -1,4 +1,4 @@
-package testutils
+package testsuite
 
 import (
 	"context"
@@ -19,10 +19,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 )
 
-type SuiteContext struct {
+type Suite struct {
 	Timeout, Interval time.Duration
 	LogLevel          int
 	Cfg               *rest.Config
@@ -34,8 +35,8 @@ type SuiteContext struct {
 	Log               logr.Logger
 }
 
-func NewSuite(loglevel int, crds ...string) (*SuiteContext, error) {
-	s := &SuiteContext{
+func New(loglevel int, crds ...string) (*Suite, error) {
+	s := &Suite{
 		Timeout:  time.Second * 5,
 		Interval: time.Millisecond * 250,
 		LogLevel: loglevel,
@@ -92,23 +93,23 @@ func NewSuite(loglevel int, crds ...string) (*SuiteContext, error) {
 	}
 
 	// create default test namespace
-	if err := s.K8sClient.Create(s.Ctx, TestNs); err != nil {
+	if err := s.K8sClient.Create(s.Ctx, testutils.TestNs); err != nil {
 		return nil, err
 	}
 
 	// create another testing namespace
-	if err := s.K8sClient.Create(s.Ctx, TestNs2); err != nil {
+	if err := s.K8sClient.Create(s.Ctx, testutils.TestNs2); err != nil {
 		return nil, err
 	}
 
 	return s, nil
 }
 
-func (s *SuiteContext) Close() {
-	if err := s.K8sClient.Delete(s.Ctx, TestNs); err != nil {
+func (s *Suite) Close() {
+	if err := s.K8sClient.Delete(s.Ctx, testutils.TestNs); err != nil {
 		s.Log.Error(err, "removing test namespace")
 	}
-	if err := s.K8sClient.Delete(s.Ctx, TestNs2); err != nil {
+	if err := s.K8sClient.Delete(s.Ctx, testutils.TestNs2); err != nil {
 		s.Log.Error(err, "removing test namespace")
 	}
 
