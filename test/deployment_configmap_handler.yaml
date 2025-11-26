@@ -11,24 +11,23 @@ spec:
         - apiGroup: "apps"
           kind: Deployment
       pipeline:
-        "@join":
-          "@and":
-            - '@eq':
-                - $.ConfigMap.metadata.name
-                - '$["Deployment"]["metadata"]["annotations"]["dcontroller.io/related-configmap"]'
-            - '@eq':
-                - $.ConfigMap.metadata.namespace
-                - $.Deployment.metadata.namespace
-        "@aggregate":
-          - "@project":
-              metadata:
-                name: "$.Deployment.metadata.name"
-                namespace: "$.Deployment.metadata.namespace"
-              spec:
-                template:
-                  metadata:
-                    annotations:
-                      "dcontroller.io/configmap-version": "$.ConfigMap.metadata.resourceVersion"
+        - "@join":
+            "@and":
+              - '@eq':
+                  - $.ConfigMap.metadata.name
+                  - '$["Deployment"]["metadata"]["annotations"]["dcontroller.io/related-configmap"]'
+              - '@eq':
+                  - $.ConfigMap.metadata.namespace
+                  - $.Deployment.metadata.namespace
+        - "@project":
+            metadata:
+              name: "$.Deployment.metadata.name"
+              namespace: "$.Deployment.metadata.namespace"
+            spec:
+              template:
+                metadata:
+                  annotations:
+                    "dcontroller.io/configmap-version": "$.ConfigMap.metadata.resourceVersion"
       target:
         apiGroup: "apps"
         kind: Deployment

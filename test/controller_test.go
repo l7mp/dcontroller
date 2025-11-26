@@ -83,13 +83,12 @@ sources:
   - apiGroup: ""
     kind: Service
 pipeline:
-  "@aggregate":
-    - "@project":
-        metadata:
-          name: "$.metadata.name"
-          namespace: "$.metadata.namespace"
-          annotations:
-            "service-type": "$.spec.type"
+  - "@project":
+      metadata:
+        name: "$.metadata.name"
+        namespace: "$.metadata.namespace"
+        annotations:
+          "service-type": "$.spec.type"
 target:
   apiGroup: ""
   kind: Service

@@ -67,8 +67,8 @@ spec:
                       description: Name is the unique name of the controller.
                       type: string
                     pipeline:
-                      description: Pipeline is an aggregation pipeline applied to
-                        base objects.
+                      description: Pipeline is an processing pipeline applied to base
+                        objects.
                       x-kubernetes-preserve-unknown-fields: true
                     sources:
                       description: The base resource(s) the controller watches.

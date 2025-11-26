@@ -141,16 +141,15 @@ var _ = Describe("Controller", func() {
 		cancel()
 	})
 
-	Describe("With Controllers using simple aggregation pipelines", func() {
+	Describe("With Controllers using simple pipelines", func() {
 		It("should implement a basic controller on view objects", func() {
 			jsonData := `
-'@aggregate':
-  - '@project':
-      metadata:
-        name: $.metadata.name
-        namespace: $.metadata.namespace
-        annotations:
-          testannotation: $.testannotation`
+- '@project':
+    metadata:
+      name: $.metadata.name
+      namespace: $.metadata.namespace
+      annotations:
+        testannotation: $.testannotation`
 			var p opv1a1.Pipeline
 			err := yaml.Unmarshal([]byte(jsonData), &p)
 			Expect(err).NotTo(HaveOccurred())
@@ -248,14 +247,13 @@ sources:
   - apiGroup: ""
     kind: Pod
 pipeline:
-  '@aggregate':
-    - '@project':
-        metadata:
-          name: "$.metadata.name"
-          namespace: "$.metadata.namespace"
-          annotations:
-            containerNames:
-              '@concat': [ '@map': ["$$.name", $.spec.containers] ]
+  - '@project':
+      metadata:
+        name: "$.metadata.name"
+        namespace: "$.metadata.namespace"
+        annotations:
+          containerNames:
+            '@concat': [ '@map': ["$$.name", $.spec.containers] ]
 target:
   apiGroup: ""
   kind: Pod
@@ -394,9 +392,8 @@ target:
 			yamlData := `
 name: test
 pipeline:
-  '@aggregate':
-    - '@project':
-        "$.metadata": "$.metadata"
+  - '@project':
+      "$.metadata": "$.metadata"
 target:
   apiGroup: ""
   kind: Pod
@@ -423,9 +420,8 @@ sources:
   - apiGroup: ""
     kind: Pod
 pipeline:
-  '@aggregate':
-    - '@project':
-        "$.metadata": "$.metadata"`
+  - '@project':
+      "$.metadata": "$.metadata"`
 
 			var config opv1a1.Controller
 			err = yaml.Unmarshal([]byte(yamlData), &config)
@@ -447,7 +443,7 @@ sources:
   - apiGroup: ""
     kind: Pod
 pipeline:
-  '@aggregate': "AAAAAAAAAAAAAAAAAA"
+  '@dummmy': "AAAAAAAAAAAAAAAAAA"
 target:
   apiGroup: ""
   kind: Pod
@@ -476,20 +472,19 @@ sources:
   - kind: pod
   - kind: dep
 pipeline:
-  '@join':
-    '@and':
-      - '@eq':
-        - $.dep.metadata.name
-        - $.pod.spec.parent
-      - '@eq':
-          - $.dep.metadata.namespace
-          - $.pod.metadata.namespace
-  '@aggregate':
-    - '@project':
-        "$.metadata": "$.dep.metadata"
-        spec:
-          image: $.pod.spec.image
-          replicas: $.dep.spec.replicas
+  - '@join':
+      '@and':
+        - '@eq':
+          - $.dep.metadata.name
+          - $.pod.spec.parent
+        - '@eq':
+            - $.dep.metadata.namespace
+            - $.pod.metadata.namespace
+  - '@project':
+      "$.metadata": "$.dep.metadata"
+      spec:
+        image: $.pod.spec.image
+        replicas: $.dep.spec.replicas
 target:
   kind: rs
   type: Updater`
@@ -651,23 +646,22 @@ sources:
   - kind: pod
   - kind: dep
 pipeline:
-  '@join':
-    '@eq': ["$.pod.metadata.labels.app", "$.dep.metadata.labels.app"]
-  '@aggregate':
-    - '@project':
-        metadata:
-          name:
-           "@concat":
-             - "$.dep.metadata.namespace"
-             - ":"
-             - "$.dep.metadata.name"
-             - "-"
-             - "$.pod.metadata.namespace"
-             - ":"
-             - "$.pod.metadata.name"
-          namespace: "$.dep.metadata.namespace"
-        spec:
-          podName: "$.pod.metadata.name"
+  - '@join':
+      '@eq': ["$.pod.metadata.labels.app", "$.dep.metadata.labels.app"]
+  - '@project':
+      metadata:
+        name:
+         "@concat":
+           - "$.dep.metadata.namespace"
+           - ":"
+           - "$.dep.metadata.name"
+           - "-"
+           - "$.pod.metadata.namespace"
+           - ":"
+           - "$.pod.metadata.name"
+        namespace: "$.dep.metadata.namespace"
+      spec:
+        podName: "$.pod.metadata.name"
 target:
   kind: rs
   type: Updater`
@@ -685,15 +679,14 @@ sources:
   - kind: rs
   - kind: pod
 pipeline:
-  '@join':
-    '@eq': ["$.rs.spec.podName", "$.pod.metadata.name"]
-  '@aggregate':
-    - '@project':
-        metadata:
-          name: $.pod.metadata.name
-          namespace: $.pod.metadata.namespace
-          annotations:
-            rs-name: "$.rs.metadata.name"
+  - '@join':
+      '@eq': ["$.rs.spec.podName", "$.pod.metadata.name"]
+  - '@project':
+      metadata:
+        name: $.pod.metadata.name
+        namespace: $.pod.metadata.namespace
+        annotations:
+          rs-name: "$.rs.metadata.name"
 target:
   kind: pod
   type: Patcher`
@@ -764,11 +757,10 @@ sources:
   - type: OneShot
     kind: InitialTrigger
 pipeline:
- '@aggregate':
-   - '@project':
-       metadata:
-         name: test-name
-         namespace: ns
+ - '@project':
+     metadata:
+       name: test-name
+       namespace: ns
 target:
   kind: test-target`
 			var config opv1a1.Controller
@@ -817,11 +809,10 @@ sources:
     parameters:
       period: "20ms"
 pipeline:
- '@aggregate':
-   - '@project':
-       metadata:
-         name: test-name
-         namespace: ns
+ - '@project':
+     metadata:
+       name: test-name
+       namespace: ns
 target:
   kind: test-target`
 			var config opv1a1.Controller
@@ -888,11 +879,10 @@ sources:
     parameters:
       period: "20ms"
 pipeline:
- '@aggregate':
-   - '@project':
-       metadata:
-         name: from-source
-         namespace: ns
+ - '@project':
+     metadata:
+       name: from-source
+       namespace: ns
 target:
   kind: test-target`
 			var config opv1a1.Controller
@@ -957,13 +947,12 @@ sources:
     parameters:
       period: "20ms"
 pipeline:
- '@aggregate':
-   - '@project':
-       metadata:
-         name: refreshed-object
-         namespace: ns
-         labels:
-           refresh-count: "@string($.metadata.labels[\"dcontroller.io/last-triggered\"])"
+ - '@project':
+     metadata:
+       name: refreshed-object
+       namespace: ns
+       labels:
+         refresh-count: "@string($.metadata.labels[\"dcontroller.io/last-triggered\"])"
 target:
   kind: test-target`
 			var config opv1a1.Controller

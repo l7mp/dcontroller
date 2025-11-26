@@ -112,7 +112,7 @@ Use the `@eq` operator to check string and numeric equality. The `@and` op is ju
 
 This will create a big compound object that contains the HealthView-Service pairs with identical object key (name ane namespace).
 
-Then the next aggregation step projects the compound object into a shape that can be used to patch Service objects with the required annotation:
+Then the next pipeline stage projects the compound object into a shape that can be used to patch Service objects with the required annotation:
 
 ```yaml
 "@project":

@@ -116,18 +116,17 @@ var _ = Describe("Pipelines", func() {
 		Describe("Evaluating pipeline expressions for Added events", func() {
 			It("should evaluate a simple pipeline", func() {
 				jsonData := `
-'@join':
-  '@eq':
-    - $.dep.metadata.name
-    - $.pod.spec.parent
-'@aggregate':
-  - '@project':
-      $.metadata.name:
-        '@concat':
-          - $.dep.metadata.name
-          - "--"
-          - $.pod.metadata.name
-      $.metadata.namespace: $.pod.metadata.namespace`
+- '@join':
+    '@eq':
+      - $.dep.metadata.name
+      - $.pod.spec.parent
+- '@project':
+    $.metadata.name:
+      '@concat':
+        - $.dep.metadata.name
+        - "--"
+        - $.pod.metadata.name
+    $.metadata.namespace: $.pod.metadata.namespace`
 				p, err := newPipeline(jsonData, []string{"pod", "dep"})
 				Expect(err).NotTo(HaveOccurred())
 
@@ -158,9 +157,35 @@ var _ = Describe("Pipelines", func() {
 
 			It("should evaluate a pipeline without a @join", func() {
 				jsonData := `
-'@aggregate':
-  - '@project':
-      $.metadata: $.metadata`
+- '@project':
+    $.metadata: $.metadata`
+				p, err := newPipeline(jsonData, []string{"pod"})
+				Expect(err).NotTo(HaveOccurred())
+
+				deltas, err := p.Evaluate(object.Delta{Type: object.Added, Object: pod1})
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(deltas).To(HaveLen(1))
+				delta := deltas[0]
+				Expect(delta.IsUnchanged()).To(BeFalse())
+				Expect(delta.Object.GetName()).To(Equal("pod1"))
+				Expect(delta.Object.GetNamespace()).To(Equal("default"))
+				object.RemoveUID(delta.Object)
+				Expect(delta.Object.UnstructuredContent()).To(Equal(map[string]any{
+					"apiVersion": "test.view.dcontroller.io/v1alpha1",
+					"kind":       "view",
+					"metadata": map[string]any{
+						"name":      "pod1",
+						"namespace": "default",
+						"labels":    map[string]any{"app": "app1"},
+					},
+				}))
+			})
+
+			It("should evaluate a pipeline with a singlular op", func() {
+				jsonData := `
+'@project':
+  $.metadata: $.metadata`
 				p, err := newPipeline(jsonData, []string{"pod"})
 				Expect(err).NotTo(HaveOccurred())
 
@@ -186,9 +211,8 @@ var _ = Describe("Pipelines", func() {
 
 			It("should handle a @select returning an empty object", func() {
 				jsonData := `
-'@aggregate':
-  - '@select':
-      '@eq': [$.metadata.namespace, "dummy"]`
+- '@select':
+    '@eq': [$.metadata.namespace, "dummy"]`
 				p, err := newPipeline(jsonData, []string{"pod"})
 				Expect(err).NotTo(HaveOccurred())
 
@@ -201,19 +225,18 @@ var _ = Describe("Pipelines", func() {
 		Describe("Evaluating pipeline expressions for Update events", func() {
 			It("should evaluate a simple pipeline - 1", func() {
 				jsonData := `
-'@join':
-  '@and':
-    - '@eq':
-        - $.dep.metadata.name
-        - $.pod.spec.parent
-    - '@eq':
-        - $.dep.metadata.name
-        - $.rs.spec.dep
-'@aggregate':
-  - '@project':
-      $.metadata: $.pod.metadata
-      $.replicas: $.dep.spec.replicas
-      $.ready: $.rs.status.ready`
+- '@join':
+    '@and':
+      - '@eq':
+          - $.dep.metadata.name
+          - $.pod.spec.parent
+      - '@eq':
+          - $.dep.metadata.name
+          - $.rs.spec.dep
+- '@project':
+    $.metadata: $.pod.metadata
+    $.replicas: $.dep.spec.replicas
+    $.ready: $.rs.status.ready`
 				p, err := newPipeline(jsonData, []string{"pod", "dep", "rs"})
 				Expect(err).NotTo(HaveOccurred())
 
@@ -266,26 +289,25 @@ var _ = Describe("Pipelines", func() {
 			// almost the same as the previous but now the two updates (delete+add) must not collapse
 			It("should evaluate a simple pipeline - 2", func() {
 				jsonData := `
-'@join':
-  '@and':
-    - '@eq':
-        - $.dep.metadata.name
-        - $.pod.spec.parent
-    - '@eq':
-        - $.dep.metadata.name
-        - $.rs.spec.dep
-'@aggregate':
-  - '@project':
-      metadata:
-        namespace: $.dep.metadata.namespace
-        name:
-          "@concat":
-            - $.dep.metadata.name
-            - "--"
-            - $.pod.metadata.name
-      $.metadata.namespace: $.dep.metadata.namespace
-      $.replicas: $.dep.spec.replicas
-      $.ready: $.rs.status.ready`
+- '@join':
+    '@and':
+      - '@eq':
+          - $.dep.metadata.name
+          - $.pod.spec.parent
+      - '@eq':
+          - $.dep.metadata.name
+          - $.rs.spec.dep
+- '@project':
+    metadata:
+      namespace: $.dep.metadata.namespace
+      name:
+        "@concat":
+          - $.dep.metadata.name
+          - "--"
+          - $.pod.metadata.name
+    $.metadata.namespace: $.dep.metadata.namespace
+    $.replicas: $.dep.spec.replicas
+    $.ready: $.rs.status.ready`
 				p, err := newPipeline(jsonData, []string{"pod", "dep", "rs"})
 				Expect(err).NotTo(HaveOccurred())
 
@@ -362,7 +384,7 @@ var _ = Describe("Pipelines", func() {
 				// Add a 'distinct` op at the end to dedup:
 				//  ΔInput → I → select → distinct → D → ΔOutput
 
-				jsonData := `{'@aggregate': ['@select': true]}`
+				jsonData := `['@select': true]`
 				p, err := newPipeline(jsonData, []string{"dep"})
 				Expect(err).NotTo(HaveOccurred())
 
@@ -639,27 +661,26 @@ var _ = Describe("Pipelines", func() {
 	var _ = Describe("Pipelines", func() {
 		var gateway, route object.Object
 		var routeArrachmentRule = `
-'@join':
-  '@any':
-    - '@or':
-        - "@eq": ["$$.allowedRoutes.namespaces.from", "All"]
-        - "@and":
-            - "@eq": ["$$.allowedRoutes.namespaces.from", "Same"]
-            - "@eq": ["$.gateway.metadata.namespace", "$.route.metadata.namespace"]
-        - "@and":
-            - "@eq": ["$$.allowedRoutes.namespaces.from", "Selector"]
-            - "@exists": "$$.allowedRoutes.namespaces.selector"
-            - "@selector": ["$$.allowedRoutes.namespaces.selector", "$.route.metadata.labels"]
-    - $.gateway.spec.listeners
-'@aggregate':
-  - '@project':
-      metadata:
-        namespace: $.route.metadata.namespace
-        name:
-          "@concat":
-            - $.gateway.metadata.name
-            - "--"
-            - $.route.metadata.name`
+- '@join':
+    '@any':
+      - '@or':
+          - "@eq": ["$$.allowedRoutes.namespaces.from", "All"]
+          - "@and":
+              - "@eq": ["$$.allowedRoutes.namespaces.from", "Same"]
+              - "@eq": ["$.gateway.metadata.namespace", "$.route.metadata.namespace"]
+          - "@and":
+              - "@eq": ["$$.allowedRoutes.namespaces.from", "Selector"]
+              - "@exists": "$$.allowedRoutes.namespaces.selector"
+              - "@selector": ["$$.allowedRoutes.namespaces.selector", "$.route.metadata.labels"]
+      - $.gateway.spec.listeners
+- '@project':
+    metadata:
+      namespace: $.route.metadata.namespace
+      name:
+        "@concat":
+          - $.gateway.metadata.name
+          - "--"
+          - $.route.metadata.name`
 
 		BeforeEach(func() {
 			gateway = object.NewViewObject("test", "gateway")
@@ -807,21 +828,20 @@ var _ = Describe("Pipelines", func() {
 
 		It("evaluate the pipeline over a complex join expression", func() {
 			jsonData := `
-"@join":
-  "@and":
-    - '@eq':
-        - $.Service.metadata.name
-        - '$["EndpointSlice"]["metadata"]["labels"]["kubernetes.io/service-name"]'
-    - '@eq':
-        - $.Service.metadata.namespace
-        - $.EndpointSlice.metadata.namespace
-"@aggregate":
-  - "@project":
-      metadata:
-        name: "$.EndpointSlice.metadata.name"
-        namespace: "$.EndpointSlice.metadata.namespace"
-        annotations:
-          "dcontroller.io/service-type": "$.Service.spec.type"`
+- "@join":
+    "@and":
+      - '@eq':
+          - $.Service.metadata.name
+          - '$["EndpointSlice"]["metadata"]["labels"]["kubernetes.io/service-name"]'
+      - '@eq':
+          - $.Service.metadata.namespace
+          - $.EndpointSlice.metadata.namespace
+- "@project":
+    metadata:
+      name: "$.EndpointSlice.metadata.name"
+      namespace: "$.EndpointSlice.metadata.namespace"
+      annotations:
+        "dcontroller.io/service-type": "$.Service.spec.type"`
 
 			p, err := newPipeline(jsonData, []string{"Service", "EndpointSlice"})
 			Expect(err).NotTo(HaveOccurred())
@@ -854,14 +874,15 @@ var _ = Describe("Pipelines", func() {
 		})
 
 		It("survive a full JSON marshal-unmarshal roundtrip", func() {
-			jsonData := `{"@join":{"@and":[{"@eq":["$.Service.metadata.name","$[\"EndpointSlice\"][\"metadata\"][\"labels\"][\"kubernetes.io/service-name\"]"]},{"@eq":["$.Service.metadata.namespace","$.EndpointSlice.metadata.namespace"]}]},"@aggregate":[{"@project":{"metadata":{"name":"$.EndpointSlice.metadata.name","namespace":"$.EndpointSlice.metadata.namespace","annotations":{"dcontroller.io/service-type":"$.Service.spec.type"}}}}]}`
+			jsonData := `[{"@join":{"@and":[{"@eq":["$.Service.metadata.name","$[\"EndpointSlice\"][\"metadata\"][\"labels\"][\"kubernetes.io/service-name\"]"]},{"@eq":["$.Service.metadata.namespace","$.EndpointSlice.metadata.namespace"]}]}},{"@project":{"metadata":{"name":"$.EndpointSlice.metadata.name","namespace":"$.EndpointSlice.metadata.namespace","annotations":{"dcontroller.io/service-type":"$.Service.spec.type"}}}}]`
 			e1, err := newPipeline(jsonData, []string{"Service", "EndpointSlice"})
 			Expect(err).NotTo(HaveOccurred())
 
 			p1, ok := e1.(*Pipeline)
 			Expect(ok).To(BeTrue())
-			Expect(p1.config.Join).NotTo(BeNil())
-			Expect(p1.config.Aggregation).NotTo(BeNil())
+			Expect(p1.config.Ops).To(HaveLen(2))
+			Expect(p1.config.Ops[0].OpType()).To(Equal("@join"))
+			Expect(p1.config.Ops[1].OpType()).To(Equal("@project"))
 
 			js, err := json.Marshal(p1.config)
 			Expect(err).NotTo(HaveOccurred())
@@ -871,12 +892,12 @@ var _ = Describe("Pipelines", func() {
 			var p2 opv1a1.Pipeline
 			err = json.Unmarshal(js, &p2)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(p2.Join).NotTo(BeNil())
-			Expect(p2.Aggregation).NotTo(BeNil())
+			Expect(p2.Ops).To(HaveLen(2))
+			Expect(p2.Ops[0].OpType()).To(Equal("@join"))
+			Expect(p2.Ops[1].OpType()).To(Equal("@project"))
 
-			// compare the serializable representations
-			Expect(p2.Join).To(Equal(p1.config.Join))
-			Expect(p2.Aggregation).To(Equal(p1.config.Aggregation))
+			// compare the serializable representations - compare expressions
+			Expect(p2.Ops[0].GetExpression()).To(Equal(p1.config.Ops[0].GetExpression()))
 		})
 	})
 })

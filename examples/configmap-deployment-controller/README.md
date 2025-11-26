@@ -49,19 +49,18 @@ The most important field is `pipeline`, which specifies a declarative pipeline t
 ...
 ```
 
-The second part of the pipeline specifies how to aggregate the objects selected by the join into a patch that will be used to update the target. The operations is fairly simple: we copy the Deployment name and namespace from the metadata (these will make sure we actually update the selected Deployment) and writes the ConfigMap's resource version into an annotation in the pod template:
+The second part of the pipeline specifies how to transform the objects selected by the join into a patch that will be used to update the target. The operations is fairly simple: we copy the Deployment name and namespace from the metadata (these will make sure we actually update the selected Deployment) and writes the ConfigMap's resource version into an annotation in the pod template:
 
 ```yaml
-"@aggregate":
-  - "@project":
-      metadata:
-        name: "$.Deployment.metadata.name"
-        namespace: "$.Deployment.metadata.namespace"
-      spec:
-        template:
-          metadata:
-            annotations:
-              "dcontroller.io/configmap-version": "$.ConfigMap.metadata.resourceVersion"
+- "@project":
+    metadata:
+      name: "$.Deployment.metadata.name"
+      namespace: "$.Deployment.metadata.namespace"
+    spec:
+      template:
+        metadata:
+          annotations:
+            "dcontroller.io/configmap-version": "$.ConfigMap.metadata.resourceVersion"
 ...
 ```
 

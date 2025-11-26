@@ -25,8 +25,8 @@ These papers and projects are the theoretical bedrock for Δ-controller's effici
 
 Δ-controller's user-facing expression language was heavily inspired by successful data manipulation frameworks in the database and stream-processing worlds.
 
-*   **[MongoDB Aggregation Pipeline](https://www.mongodb.com/docs/manual/core/aggregation-pipeline/)**  
-    The inspiration for Δ-controller's `@aggregate` pipeline is immediately apparent here. The MongoDB documentation provides a rich set of examples for stages like `$match` (`@select`), `$project` (`@project`), and `$unwind` (`@unwind`), which have direct parallels in Δ-controller.
+*   **[MongoDB Aggregation Pipeline](https://www.mongodb.com/docs/manual/core/aggregation-pipeline/)**
+    The inspiration for Δ-controller's pipeline operations is immediately apparent here. The MongoDB documentation provides a rich set of examples for stages like `$match` (`@select`), `$project` (`@project`), and `$unwind` (`@unwind`), which have direct parallels in Δ-controller.
 
 *   **[jq - Command-Line JSON Processor](https://jqlang.github.io/jq/)**  
     The `jq` tool is a de-facto standard for anyone working with JSON in a shell. Its pipe-based syntax for filtering and transforming JSON data is a spiritual predecessor to how Δ-controller pipelines operate on Kubernetes objects.

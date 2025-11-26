@@ -47,7 +47,7 @@ var _ = Describe("Aggregations", func() {
 
 	Describe("Evaluating select aggregations", func() {
 		It("should evaluate true select expression", func() {
-			jsonData := `{"@aggregate":[{"@select":{"@eq":["$.metadata.name","name"]}}]}`
+			jsonData := `[{"@select":{"@eq":["$.metadata.name","name"]}}]`
 			p, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -64,7 +64,7 @@ var _ = Describe("Aggregations", func() {
 		})
 
 		It("should evaluate a false select expression", func() {
-			jsonData := `{"@aggregate":[{"@select":{"@eq":["$.spec.b.c",1]}}]}`
+			jsonData := `[{"@select":{"@eq":["$.spec.b.c",1]}}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -78,7 +78,7 @@ var _ = Describe("Aggregations", func() {
 		})
 
 		It("should evaluate an inverted false select expression", func() {
-			jsonData := `{"@aggregate":[{"@select":{"@not":{"@eq":["$.spec.b.c",1]}}}]}`
+			jsonData := `[{"@select":{"@not":{"@eq":["$.spec.b.c",1]}}}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -98,7 +98,7 @@ var _ = Describe("Aggregations", func() {
 		})
 
 		It("should not err for a select expression referring to a nonexistent field", func() {
-			jsonData := `{"@aggregate":[{"@select":{"@eq":["$.spec.x",true]}}]}`
+			jsonData := `[{"@select":{"@eq":["$.spec.x",true]}}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -110,23 +110,21 @@ var _ = Describe("Aggregations", func() {
 
 	Describe("Evaluating projection aggregations", func() {
 		It("should evaluate a simple projection expression", func() {
-			jsonData := `{"@aggregate":[{"@project":{"metadata":{"name":"$.metadata.name"}}}]}`
-			var a opv1a1.Aggregation
-			err := yaml.Unmarshal([]byte(jsonData), &a)
+			jsonData := `[{"@project":{"metadata":{"name":"$.metadata.name"}}}]`
+			var p opv1a1.Pipeline
+			err := yaml.Unmarshal([]byte(jsonData), &p)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(a.Expressions).To(HaveLen(1))
-			Expect(a.Expressions[0]).To(Equal(expression.Expression{
-				Op: "@project",
-				Arg: &expression.Expression{
-					Op: "@dict",
-					Literal: map[string]expression.Expression{
-						"metadata": {
-							Op: "@dict",
-							Literal: map[string]expression.Expression{
-								"name": {
-									Op:      "@string",
-									Literal: "$.metadata.name",
-								},
+			Expect(p.Ops).To(HaveLen(1))
+			Expect(p.Ops[0].OpType()).To(Equal("@project"))
+			Expect(p.Ops[0].GetExpression()).To(Equal(&expression.Expression{
+				Op: "@dict",
+				Literal: map[string]expression.Expression{
+					"metadata": {
+						Op: "@dict",
+						Literal: map[string]expression.Expression{
+							"name": {
+								Op:      "@string",
+								Literal: "$.metadata.name",
 							},
 						},
 					},
@@ -152,7 +150,7 @@ var _ = Describe("Aggregations", func() {
 		})
 
 		It("should evaluate a projection expression with multiple fields", func() {
-			jsonData := `{"@aggregate":[{"@project":{"metadata":{"name":"$.metadata.name","namespace":"$.metadata.namespace"}}}]}`
+			jsonData := `[{"@project":{"metadata":{"name":"$.metadata.name","namespace":"$.metadata.namespace"}}}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -171,7 +169,7 @@ var _ = Describe("Aggregations", func() {
 		})
 
 		It("should evaluate a projection expression that copies a subtree", func() {
-			jsonData := `{"@aggregate":[{"@project":{"metadata":"$.metadata"}}]}`
+			jsonData := `[{"@project":{"metadata":"$.metadata"}}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -190,15 +188,14 @@ var _ = Describe("Aggregations", func() {
 
 		It("should evaluate a projection expression that alters the name", func() {
 			jsonData := `
-'@aggregate':
-  - '@project':
-      metadata:
-        name:
-          '@concat':
-            - $.metadata.name
-            - ':'
-            - $.c
-        namespace: $.metadata.namespace`
+- '@project':
+    metadata:
+      name:
+        '@concat':
+          - $.metadata.name
+          - ':'
+          - $.c
+      namespace: $.metadata.namespace`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -235,12 +232,11 @@ var _ = Describe("Aggregations", func() {
 
 		It("should evaluate a projection expression that contains a list of setters", func() {
 			jsonData := `
-'@aggregate':
-  - '@project':
-      - metadata:
-          name: name
-          namespace: default
-      - spec: 123`
+- '@project':
+    - metadata:
+        name: name
+        namespace: default
+    - spec: 123`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -267,12 +263,11 @@ var _ = Describe("Aggregations", func() {
 
 		It("should evaluate a projection expression that contains a list of JSONpath setters", func() {
 			jsonData := `
-'@aggregate':
-  - '@project':
-      - $.metadata.name: $.metadata.name
-      - $.metadata.namespace: "default"
-      - $.spec.a: 123
-      - $.spec.b: $.spec.b`
+- '@project':
+  - $.metadata.name: $.metadata.name
+  - $.metadata.namespace: "default"
+  - $.spec.a: 123
+  - $.spec.b: $.spec.b`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -302,11 +297,10 @@ var _ = Describe("Aggregations", func() {
 
 		It("should evaluate a projection expression that contains a list of mixed (fix/JSONpath) setters", func() {
 			jsonData := `
-'@aggregate':
-  - '@project':
-      - {metadata: {name: name2}}
-      - $.metadata.namespace: "default2"
-      - $.spec.a: $.spec.b`
+- '@project':
+  - {metadata: {name: name2}}
+  - $.metadata.namespace: "default2"
+  - $.spec.a: $.spec.b`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -335,9 +329,8 @@ var _ = Describe("Aggregations", func() {
 
 		It("should collapse multiple adds that yield the same object name to an update", func() {
 			jsonData := `
-'@aggregate':
-  - '@project':
-      $.metadata.name: "fixed"`
+- '@project':
+    $.metadata.name: "fixed"`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -380,7 +373,7 @@ var _ = Describe("Aggregations", func() {
 		})
 
 		It("should err for a projection that drops .metadata.name", func() {
-			jsonData := `{"@aggregate":[{"@project":{"spec":"$.spec"}}]}`
+			jsonData := `[{"@project":{"spec":"$.spec"}}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -389,7 +382,7 @@ var _ = Describe("Aggregations", func() {
 		})
 
 		It("should err for a projection that asks for a non-existent field", func() {
-			jsonData := `{"@aggregate":[{"@project":{"x": "$.spec.x"}}]}`
+			jsonData := `[{"@project":{"x": "$.spec.x"}}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -408,18 +401,17 @@ var _ = Describe("Aggregations", func() {
 			//
 			// can be implemented as the below
 			jsonData := `
-"@aggregate":
-  - "@project":
-      - "$.metadata": "$.metadata"
-      - "$.c": "$.c"
-      - spec:
-          a:
-            "@map":
-              - "@cond":
-                  - "@eq": ["$$.name", "listener_2"]
-                  - {name: $$.name, port: 123}
-                  - "$$"
-              - "$.spec.a"`
+- "@project":
+  - "$.metadata": "$.metadata"
+  - "$.c": "$.c"
+  - spec:
+      a:
+        "@map":
+          - "@cond":
+              - "@eq": ["$$.name", "listener_2"]
+              - {name: $$.name, port: 123}
+              - "$$"
+          - "$.spec.a"`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -463,7 +455,7 @@ var _ = Describe("Aggregations", func() {
 
 	Describe("Evaluating aggregations on native Unstructured objects", func() {
 		It("should evaluate a simple projection expression", func() {
-			jsonData := `{"@aggregate":[{"@project":{"metadata":"$.metadata"}}]}`
+			jsonData := `[{"@project":{"metadata":"$.metadata"}}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -490,7 +482,7 @@ var _ = Describe("Aggregations", func() {
 		})
 
 		It("should evaluate true select expression", func() {
-			jsonData := `{"@aggregate":[{"@select":{"@eq":["$.spec.b",1]}}]}`
+			jsonData := `[{"@select":{"@eq":["$.spec.b",1]}}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -623,7 +615,7 @@ var _ = Describe("Aggregations", func() {
 			})
 			object.SetName(obj, "default", "name")
 
-			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}]}`
+			jsonData := `[{"@unwind": "$.spec.list"}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -702,7 +694,7 @@ var _ = Describe("Aggregations", func() {
 			})
 			object.SetName(obj, "default", "name")
 
-			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}, {"@unwind": "$.spec.list"}]}`
+			jsonData := `[{"@unwind": "$.spec.list"}, {"@unwind": "$.spec.list"}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -812,7 +804,7 @@ var _ = Describe("Aggregations", func() {
 			})
 			object.SetName(obj, "default", "name")
 
-			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}]}`
+			jsonData := `[{"@unwind": "$.spec.list"}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -831,7 +823,7 @@ var _ = Describe("Aggregations", func() {
 			})
 			object.SetName(obj, "default", "name")
 
-			jsonData := `{"@aggregate":[{"@unwind": "$.spec.list"}]}`
+			jsonData := `[{"@unwind": "$.spec.list"}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -850,7 +842,7 @@ var _ = Describe("Aggregations", func() {
 			})
 			object.SetName(obj, "default", "name")
 
-			jsonData := `{"@aggregate":[{"@unwind":"$.spec.list"},{"@project":{"metadata":{"name":"$.spec.list"}}}]}`
+			jsonData := `[{"@unwind":"$.spec.list"},{"@project":{"metadata":{"name":"$.spec.list"}}}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -964,7 +956,7 @@ var _ = Describe("Aggregations", func() {
 
 	Describe("Evaluating multiplexer aggregations", func() {
 		It("should evaluate a raw mux expression", func() {
-			jsonData := `{"@aggregate":[{"@gather":["$.metadata.namespace","$.spec.a"]}]}`
+			jsonData := `[{"@gather":["$.metadata.namespace","$.spec.a"]}]`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -1111,16 +1103,15 @@ var _ = Describe("Aggregations", func() {
 
 		It("should evaluate a mux expression that updates the same object name", func() {
 			jsonData := `
-'@aggregate':
-  - '@gather':
-      - $.metadata.namespace
-      - $.spec.a
-  - '@project':
-      metadata:
-        name: "gathered"
-        namespace: "default"
-      spec:
-        a: $.spec.a`
+- '@gather':
+    - $.metadata.namespace
+    - $.spec.a
+- '@project':
+    metadata:
+      name: "gathered"
+      namespace: "default"
+    spec:
+      a: $.spec.a`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -1207,16 +1198,15 @@ var _ = Describe("Aggregations", func() {
 
 		It("should allow a demux followd by a mux", func() {
 			jsonData := `
-'@aggregate':
-  - '@unwind': $.spec.list
-  - '@gather':
-      - $.metadata.namespace
-      - $.spec.list
-  - '@project':
-      metadata:
-        name: "gathered"
-        namespace: "default"
-      spec: $.spec`
+- '@unwind': $.spec.list
+- '@gather':
+    - $.metadata.namespace
+    - $.spec.list
+- '@project':
+    metadata:
+      name: "gathered"
+      namespace: "default"
+    spec: $.spec`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -1281,10 +1271,9 @@ var _ = Describe("Aggregations", func() {
 
 		It("should yield an empty delta for a mux expression using an invalid obj id", func() {
 			jsonData := `
-'@aggregate':
-  - '@gather':
-      - $.x.y.z
-      - $.spec.a`
+- '@gather':
+    - $.x.y.z
+    - $.spec.a`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -1295,10 +1284,9 @@ var _ = Describe("Aggregations", func() {
 
 		It("should yield an empty delta for a mux expression using an invalid obj elem", func() {
 			jsonData := `
-'@aggregate':
-  - '@gather':
-      - $.metadata.name
-      - $.spec.q`
+- '@gather':
+    - $.metadata.name
+    - $.spec.q`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -1310,12 +1298,12 @@ var _ = Describe("Aggregations", func() {
 })
 
 func newAggregation(data string) (Evaluator, error) {
-	var a opv1a1.Aggregation
-	err := yaml.Unmarshal([]byte(data), &a)
+	var pipeline opv1a1.Pipeline
+	err := yaml.Unmarshal([]byte(data), &pipeline)
 	if err != nil {
 		return nil, err
 	}
-	p, err := New("test", target, []schema.GroupVersionKind{gvk}, opv1a1.Pipeline{Aggregation: &a}, logger)
+	p, err := New("test", target, []schema.GroupVersionKind{gvk}, pipeline, logger)
 	if err != nil {
 		return nil, err
 	}

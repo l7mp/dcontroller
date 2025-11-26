@@ -4,7 +4,6 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/l7mp/dcontroller/pkg/expression"
 	"github.com/l7mp/dcontroller/pkg/predicate"
 )
 
@@ -16,30 +15,13 @@ type Controller struct {
 	Name string `json:"name"`
 	// The base resource(s) the controller watches.
 	Sources []Source `json:"sources"`
-	// Pipeline is an aggregation pipeline applied to base objects.
+	// Pipeline is an processing pipeline applied to base objects.
 	//
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Pipeline Pipeline `json:"pipeline"`
 	// The target resource the results are to be added.
 	Target Target `json:"target"`
-}
-
-// Pipeline is an optional join followed by an aggregation.
-type Pipeline struct {
-	*Join        `json:",inline"`
-	*Aggregation `json:",inline"`
-}
-
-// Join is an operation that can be used to perform an inner join on a list of views.
-type Join struct {
-	Expression expression.Expression `json:"@join"`
-}
-
-// Aggregation is an operation that can be used to process, objects, or alter the shape of a list
-// of objects in a view.
-type Aggregation struct {
-	Expressions []expression.Expression `json:"@aggregate"`
 }
 
 // Resource specifies a resource by the GVK.

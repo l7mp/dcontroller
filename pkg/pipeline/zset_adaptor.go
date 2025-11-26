@@ -144,7 +144,7 @@ func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, target schema.Gro
 		}
 		nameStr := name.(string)
 		if nameStr == "" {
-			return nil, NewInvalidObjectError("empty metadata/name in aggregation result")
+			return nil, NewInvalidObjectError("empty metadata/name in result")
 		}
 		metaMap["name"] = nameStr
 

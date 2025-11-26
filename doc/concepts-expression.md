@@ -6,7 +6,7 @@ In the previous sections, you've seen snippets of logic like `$.metadata.name` a
 
 Every expression is evaluated against a **subject** object, which provides the context for data access. This is similar to how `.` works in a shell script or `this` in many programming languages. In Δ-controller, the subject is the unstructured object emitted by a source after a watched resource has changed.
 
-When a pipeline starts, the subject is the **compound object** produced by the `@join` stage (or the single source object if there is no join). As data flows through the `@aggregate` stages, the output of one stage becomes the subject for the next.
+When a pipeline starts, the subject is the **compound object** produced by the `@join` stage (or the single source object if there is no join). As data flows through the pipeline stages, the output of one stage becomes the subject for the next.
 
 ## Accessing Data: JSONPath
 

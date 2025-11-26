@@ -9,22 +9,21 @@ spec:
       sources:
         - kind: PodView
       pipeline:
-        "@aggregate":
-          - "@project":
-              metadata:
-                name: "$.metadata.labels['app']"
-                namespace: "$.metadata.namespace"
-              pods:
-                podName: "$.metadata.name"
-                ready: "$.status.conditions[?(@.type=='Ready')].status"
-          - "@gather":
-              # Key: group by service (name + namespace)
-              - "@concat":
-                  - "$.metadata.name"
-                  - "--"
-                  - "$.metadata.namespace"
-              # Value: collapse the pods fields into a list (contains ready status)
-              - "$.pods"
+        - "@project":
+            metadata:
+              name: "$.metadata.labels['app']"
+              namespace: "$.metadata.namespace"
+            pods:
+              podName: "$.metadata.name"
+              ready: "$.status.conditions[?(@.type=='Ready')].status"
+        - "@gather":
+            # Key: group by service (name + namespace)
+            - "@concat":
+                - "$.metadata.name"
+                - "--"
+                - "$.metadata.namespace"
+            # Value: collapse the pods fields into a list (contains ready status)
+            - "$.pods"
       target:
         kind: HealthView
         type: Updater
@@ -35,12 +34,11 @@ spec:
         - apiGroup: ""
           kind: Service
       pipeline:
-        "@join":
-          "@and":
-            - "@eq": ["$.HealthView.metadata.name", "$.Service.metadata.name"]
-            - "@eq": ["$.HealthView.metadata.namespace", "$.Service.metadata.namespace"]
-        "@aggregate":
-          - "@project":
+        - "@join":
+            "@and":
+              - "@eq": ["$.HealthView.metadata.name", "$.Service.metadata.name"]
+              - "@eq": ["$.HealthView.metadata.namespace", "$.Service.metadata.namespace"]
+        - "@project":
               metadata:
                 name: "$.Service.metadata.name"
                 namespace: "$.Service.metadata.namespace"

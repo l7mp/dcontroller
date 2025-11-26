@@ -24,7 +24,7 @@ func (eval *SelectionOp) String() string {
 func (eval *SelectionOp) Evaluate(doc dbsp.Document) ([]dbsp.Document, error) {
 	ret := []dbsp.Document{}
 
-	res, err := eval.e.Arg.Evaluate(expression.EvalCtx{Object: doc, Log: eval.log})
+	res, err := eval.e.Evaluate(expression.EvalCtx{Object: doc, Log: eval.log})
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (eval *ProjectionOp) String() string {
 }
 
 func (eval *ProjectionOp) Evaluate(doc dbsp.Document) ([]dbsp.Document, error) {
-	res, err := eval.e.Arg.Evaluate(expression.EvalCtx{Object: doc, Log: eval.log})
+	res, err := eval.e.Evaluate(expression.EvalCtx{Object: doc, Log: eval.log})
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (eval *UnwindOp) Extract(doc dbsp.Document) (any, error) {
 		return nil, errors.New("valid .metadata.name required")
 	}
 
-	arg, err := eval.e.Arg.Evaluate(expression.EvalCtx{Object: doc, Log: eval.log})
+	arg, err := eval.e.Evaluate(expression.EvalCtx{Object: doc, Log: eval.log})
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func (eval *UnwindOp) Transform(doc dbsp.Document, v any) (dbsp.Document, error)
 	}
 
 	// the elem to the corresponding jsonpath
-	jp, err := eval.e.Arg.GetLiteralString()
+	jp, err := eval.e.GetLiteralString()
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func (eval *UnwindOp) Transform(doc dbsp.Document, v any) (dbsp.Document, error)
 }
 
 func (p *Pipeline) NewUnwindOp(e *expression.Expression) (dbsp.Operator, error) {
-	if _, err := e.Arg.GetLiteralString(); err != nil {
+	if _, err := e.GetLiteralString(); err != nil {
 		return nil, fmt.Errorf("expected a JSONpath expression")
 	}
 	eval := &UnwindOp{e: e, log: p.log.WithName("@unwind")}
@@ -214,7 +214,7 @@ func (eval *GatherOp) Transform(doc dbsp.Document, v any) (dbsp.Document, error)
 }
 
 func (p *Pipeline) NewGatherOp(e *expression.Expression) (dbsp.Operator, error) {
-	args, err := expression.AsExpOrExpList(e.Arg)
+	args, err := expression.AsExpOrExpList(e)
 	if err != nil {
 		return nil, err
 	}

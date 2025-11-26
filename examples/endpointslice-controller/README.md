@@ -12,7 +12,7 @@ This example demonstrates the use of Δ-controller in such a use case. The examp
 
 The declarative controller pipeline spec is read from a YAML manifest. There are two versions:
 - `endpointslice-controller-spec.yaml`: this is the default spec, which will generate a separate view object per each (service, service-port, endpoint-address) combination. This is the one we discuss below.
-- `endpointslice-controller-gather-spec.yaml`: the alternative spec gathers all endpoint addresses into a single view object per (service, service-port) combination. This pipeline is mostly the same as the default spec but it contains a final "gather" aggregation stage that will collapse the endpoint addresses into a list. See the YAML for the details.
+- `endpointslice-controller-gather-spec.yaml`: the alternative spec gathers all endpoint addresses into a single view object per (service, service-port) combination. This pipeline is mostly the same as the default spec but it contains a final "gather" stage that will collapse the endpoint addresses into a list. See the YAML for the details.
 
 The default declarative pipeline defines to controllers:
 - the `service-controller` will watch the Kubernetes core.v1 Service API, generate a separate object per each service-port, and load the resultant objects into an internal view called ServiceView.
@@ -36,7 +36,7 @@ The pipeline is as follows.
         kind: Service
    ```
 
-3. Create the **aggregation** pipeline. The aggregation consists of 3 stages:
+3. Create the processing **pipeline** . The pipeline consists of 3 stages:
    - filter the Services annotated with `dcontroller.io/endpointslice-controller-enabled`. Note that we use the long-form JSONpath expression format `$["metadata"][..."]` because the annotation contains a `/` that is incompatible with the simpler short-form,
    - remove some useless fields and convert the shape of the resultant objects,
    - demultiplex the result into multiple objects by blowing up the `$.spec.ports` list.
@@ -45,18 +45,17 @@ The pipeline is as follows.
 
    ```yaml
    pipeline:
-     "@aggregate":
-       - "@select":
-           "@exists": '$["metadata"]["annotations"]["dcontroller.io/endpointslice-controller-enabled"]'
-       - "@project":
-           metadata:
-             name: $.metadata.name
-             namespace: $.metadata.namespace
-           spec:
-             serviceName: $.metadata.name
-             type: $.spec.type
-             ports: $.spec.ports
-       - "@unwind": $.spec.ports
+     - "@select":
+         "@exists": '$["metadata"]["annotations"]["dcontroller.io/endpointslice-controller-enabled"]'
+     - "@project":
+         metadata:
+           name: $.metadata.name
+           namespace: $.metadata.namespace
+         spec:
+           serviceName: $.metadata.name
+           type: $.spec.type
+           ports: $.spec.ports
+     - "@unwind": $.spec.ports
    ```
 
 4. Set up the **target** that will store the resultant deltas into the `ServiceView` view. Note that you don't have to define an `apiGroup`: en empty `apiGroup` means the target is a local view.
@@ -96,7 +95,7 @@ The pipeline is as follows.
            - $.EndpointSlice.metadata.namespace
    ```
 
-4. Create the **aggregation** pipeline to convert the shape of the resultant, somewhat convoluted objects.  The aggregation again has multiple stages:
+4. Create the **pipeline** to convert the shape of the resultant, somewhat convoluted objects.  The pipeline again has multiple stages:
    - set up the metadata, copy the ServiceView spec and the endpoints from the EndpointSlice,
    - demultiplex on the `$.endpoint` list,
    - filter ready addresses,
@@ -104,35 +103,34 @@ The pipeline is as follows.
    - finally convert the object into a simple shape and set a unique stable object name by concatenating Service name with the hash of the object spec.
 
    ```yaml
-   "@aggregate":
-     - "@project":
-         metadata:
-           name: $.ServiceView.metadata.name
-           namespace: $.ServiceView.metadata.namespace
-         spec: $.ServiceView.spec
-         endpoints: $.EndpointSlice.endpoints
-     - "@unwind": $.endpoints
-     - "@select":
-         "@eq": ["$.endpoints.conditions.ready", true]
-     - "@unwind": $.endpoints.addresses
-     - "@project":
-         metadata:
-           namespace: $.metadata.namespace
-         spec:
-           serviceName: $.spec.serviceName
-           type: $.spec.type
-           port: $.spec.ports.port
-           targetPort: $.spec.ports.targetPort
-           protocol: $.spec.ports.protocol
-           address: $.endpoints.addresses
-     - "@project":
-         - "$.": $.
-         - metadata:
-             name:
-               "@concat":
-                 - $.spec.serviceName
-                 - "-"
-                 - { "@hash": $.spec }
+   - "@project":
+       metadata:
+         name: $.ServiceView.metadata.name
+         namespace: $.ServiceView.metadata.namespace
+       spec: $.ServiceView.spec
+       endpoints: $.EndpointSlice.endpoints
+   - "@unwind": $.endpoints
+   - "@select":
+       "@eq": ["$.endpoints.conditions.ready", true]
+   - "@unwind": $.endpoints.addresses
+   - "@project":
+       metadata:
+         namespace: $.metadata.namespace
+       spec:
+         serviceName: $.spec.serviceName
+         type: $.spec.type
+         port: $.spec.ports.port
+         targetPort: $.spec.ports.targetPort
+         protocol: $.spec.ports.protocol
+         address: $.endpoints.addresses
+   - "@project":
+       - "$.": $.
+       - metadata:
+           name:
+             "@concat":
+               - $.spec.serviceName
+               - "-"
+               - { "@hash": $.spec }
    ```
 
 5. Set up the **target** to update the EndpointView view with the results.
@@ -144,7 +142,7 @@ The pipeline is as follows.
 
 ### The endoint-discovery operator
 
-The endoint-discovery operator will process the events on the EndpointView view. Since the reconciliation logic often needs to interact with an imperative API (say, to program a service-mesh proxy), this part will be written in Go. Recall, the idea is that we don't want to write the tedious join+aggregation pipeline in imperative Go; rather we implement just a minimal part in Go while the complex data manipulation logic will be handled in a purely declarative style (see above).
+The endoint-discovery operator will process the events on the EndpointView view. Since the reconciliation logic often needs to interact with an imperative API (say, to program a service-mesh proxy), this part will be written in Go. Recall, the idea is that we don't want to write the tedious data processing pipeline in imperative Go; rather we implement just a minimal part in Go while the complex data manipulation logic will be handled in a purely declarative style (see above).
 
 The Go code itself will not differ too much from a standard [Kubernetes operator](https://book.kubebuilder.io/), just with the common packages taken from Δ-controller instead of the usual [Kubernetes controller runtime](https://pkg.go.dev/sigs.k8s.io/controller-runtime).
 

@@ -4,30 +4,37 @@ The `pipeline` field within a `Controller` defines the data transformation logic
 
 For a conceptual overview of how pipelines work, please see the [Concepts: Pipelines](./concepts-pipelines.md) guide.
 
-A pipeline consists of an optional `@join` stage followed by a required `@aggregate` stage.
+A pipeline consists of a sequence of operations. If multiple sources are used, the first operation
+must be `@join`. The pipeline can be specified as:
+- A single operation: `pipeline: {"@project": ...}`
+- An array of operations: `pipeline: [{"@join": ...}, {"@select": ...}, {"@project": ...}]`
 
 ```yaml
+# Single operation example
 pipeline:
-  "@join": <join_expression>
-  "@aggregate":
-    - <stage_1>
-    - <stage_2>
-    # ...
+  "@project": <projection_expression>
+
+# Multiple operations example
+pipeline:
+  - "@join": <join_expression>
+  - "@select": <filter_expression>
+  - "@project": <projection_expression>
+  # ...
 ```
 
 ## Combining multiple objects: `@join`
 
-The `@join` stage is used to perform an inner join on objects from multiple `sources`. If appears, this must be the first step in a pipeline.
+The `@join` operation is used to perform an inner join on objects from multiple `sources`. If present, this must be the first operation in a pipeline.
 
-| Field   | Type               | Presence |
-|---------|--------------------|----------|
-| `@join` | [Expression][expr] | Optional |
+| Field   | Type               | Presence                                    |
+|---------|--------------------|---------------------------------------------|
+| `@join` | [Expression][expr] | Required when multiple sources, otherwise optional |
 
 Behavior:
-*   If a controller has more than one `source` definitions, the `@join` stage is typically required.
+*   If a controller has more than one `source` definition, the `@join` operation is required and must be first.
 *   The value must be an [Expression][expr] that evaluates to a boolean.
 *   The expression is evaluated against a compound object formed by taking the Cartesian product of all source objects. This compound object contains each source object keyed by its `Kind`.
-*   If the expression evaluates to `true`, the resulting compound object is passed to the `@aggregate` pipeline.
+*   If the expression evaluates to `true`, the resulting compound object is passed to subsequent pipeline operations.
 
 This join combines `Gateway` and `UDPRoute` objects that are in the same namespace and where the route references the gateway.
 
@@ -44,21 +51,22 @@ This join combines `Gateway` and `UDPRoute` objects that are in the same namespa
     - "@in": ["$.Gateway.metadata.name", "@map": ["$$.name", "$.UDPRoute.spec.parentRefs"]]
 ```
 
-## Transforming objects: `@aggregate`
+## Pipeline Operations
 
-The `@aggregate` field contains an array of processing stages that are executed sequentially. The output of each stage serves as the input for the next.
+Pipeline operations are executed sequentially. The output of each operation serves as the input for the next.
 
-| Field        | Type                    | Presence |
-|--------------|-------------------------|----------|
-| `@aggregate` | list of aggregation ops | Required |
-
-The following sections describe the valid aggregation operators that can be used as stages within this list.
+The following sections describe the valid operations that can be used in a pipeline.
 
 ### Selection: `@select`
 
 Filters the stream of objects, passing through only those that satisfy a condition.
 
 **Syntax:**
+```yaml
+"@select": <boolean_expression>
+```
+
+Or in an array:
 ```yaml
 - "@select": <boolean_expression>
 ```
@@ -72,8 +80,8 @@ Here, `<boolean_expression>` is an [Expression][expr] that must evaluate to `tru
 
 The following example selects only objects where the `spec.replicas` field is greater than 3.
 ```yaml
-- "@select":
-    "@gt": ["$.spec.replicas", 3]
+"@select":
+  "@gt": ["$.spec.replicas", 3]
 ```
 
 ### Projection: `@project`
@@ -85,7 +93,7 @@ The `@project` operator transforms the structure of an object. This is the prima
 - "@project": <projection_expression>
 ```
 
-Here, `<projection_expression>` is an [Expression][expr] that can be a map (for object construction) or a list (for sequential transformation). Processing for the projection operator is initiated with the result from the previous pipeline or the delta object emitted by a Source as the global subject (i.e., the object that can be referenced by `$` in the aggregation step), and a completely empty result object. It is the **responsibility of the projection op to copy all the required fields** from the subject to the result (especially the `metadata`); there is no way to recover fields lost in an earlier projection phase.
+Here, `<projection_expression>` is an [Expression][expr] that can be a map (for object construction) or a list (for sequential transformation). Processing for the projection operator is initiated with the result from the previous pipeline or the delta object emitted by a Source as the global subject (i.e., the object that can be referenced by `$` in the projection), and a completely empty result object. It is the **responsibility of the projection op to copy all the required fields** from the subject to the result (especially the `metadata`); there is no way to recover fields lost in an earlier projection phase.
 
 **Behavior:**
 

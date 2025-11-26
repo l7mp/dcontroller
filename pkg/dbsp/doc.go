@@ -14,7 +14,7 @@
 //   - RewriteEngine: Performs operator fusion and optimization.
 //
 // Operator types:
-//   - Linear: Selection, projection, aggregation (preserve zero, commute with addition).
+//   - Linear: Selection, projection, etc (preserve zero, commute with addition).
 //   - Bilinear: Join operations (multiplication-like semantics).
 //   - Nonlinear: Complex transformations that don't preserve linearity.
 //

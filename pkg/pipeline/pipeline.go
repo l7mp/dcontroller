@@ -6,7 +6,7 @@
 // operations while maintaining incremental update semantics for efficiency.
 //
 // Pipeline operations:
-//   - @join: Combine multiple resource types with boolean conditions.
+//   - @join: Combine multiple resource types with boolean conditions (must be first if present).
 //   - @select: Filter objects based on boolean expressions.
 //   - @project: Transform object structure and extract fields.
 //   - @unwind: Expand array fields into multiple objects.
@@ -14,11 +14,12 @@
 //
 // Example usage:
 //
-//	pipeline, _ := pipeline.NewPipeline("my-op", "TargetView", sources,
+//	pipeline, _ := pipeline.New("my-op", target, sources,
 //	    opv1a1.Pipeline{
-//	        Join: &opv1a1.JoinExpression{...},
-//	        Aggregation: &opv1a1.AggregationExpression{...},
-//	     ...
+//	        Expressions: []expression.Expression{
+//	            {Op: "@join", Args: ...},
+//	            {Op: "@select", Args: ...},
+//	        },
 //	    }, logger)
 package pipeline
 
@@ -74,9 +75,11 @@ type Pipeline struct {
 // New creates a new pipeline from the set of base objects and a seralized pipeline that writes
 // into a given target.
 func New(operator string, target schema.GroupVersionKind, sources []schema.GroupVersionKind, config opv1a1.Pipeline, log logr.Logger) (Evaluator, error) {
-	if len(sources) > 1 && config.Join == nil {
+	// Check if first operation is @join when multiple sources exist.
+	hasJoin := len(config.Ops) > 0 && config.Ops[0].OpType() == "@join"
+	if len(sources) > 1 && !hasJoin {
 		return nil, errors.New("invalid controller configuration: controllers " +
-			"defined on multiple base resources must specify a Join in the pipeline")
+			"defined on multiple base resources must specify @join as the first operation in the pipeline")
 	}
 
 	p := &Pipeline{
@@ -96,47 +99,55 @@ func New(operator string, target schema.GroupVersionKind, sources []schema.Group
 		p.graph.AddInput(dbsp.NewInput(src.Kind))
 	}
 
-	// Add optional Join
-	if config.Join != nil {
-		joinOp := p.NewJoinOp(&config.Join.Expression, sources) //nolint:staticcheck
+	// Process operations.
+	startIdx := 0
+
+	// Add optional Join (if first operation is @join).
+	if hasJoin {
+		expr := config.Ops[0].GetExpression()
+		joinOp := p.NewJoinOp(expr, sources)
 		p.graph.SetJoin(joinOp)
+		startIdx = 1
 	}
 
-	// Add the the Aggregation chain
-	if config.Aggregation != nil {
-		for _, e := range config.Aggregation.Expressions { //nolint:staticcheck
-			var op dbsp.Operator
-
-			switch e.Op {
-			case "@select":
-				// @select is one-to-one or one-to-zero
-				op = p.NewSelectionOp(&e)
-
-			case "@project":
-				// @project is one-to-one
-				op = p.NewProjectionOp(&e)
-
-			case "@unwind", "@demux":
-				// @demux is one to many
-				o, err := p.NewUnwindOp(&e)
-				if err != nil {
-					return nil, NewPipelineError(fmt.Errorf("failed to instantiate unwind op: %w", err))
-				}
-				op = o
-			case "@gather", "@mux":
-				// @mux is many to one
-				o, err := p.NewGatherOp(&e)
-				if err != nil {
-					return nil, NewPipelineError(fmt.Errorf("failed to instantiate gather op: %w", err))
-				}
-				op = o
-
-			default:
-				return nil, NewPipelineError(errors.New("unknown aggregation op"))
-			}
-
-			p.graph.AddToChain(op)
+	// Add the remaining operations to the aggregation chain.
+	for i := startIdx; i < len(config.Ops); i++ {
+		pipelineOp := config.Ops[i]
+		expr := pipelineOp.GetExpression()
+		if expr == nil {
+			return nil, NewPipelineError(fmt.Errorf("pipeline operation %s has no expression", pipelineOp.OpType()))
 		}
+
+		var op dbsp.Operator
+		switch pipelineOp.OpType() {
+		case "@select":
+			// @select is one-to-one or one-to-zero
+			op = p.NewSelectionOp(expr)
+
+		case "@project":
+			// @project is one-to-one
+			op = p.NewProjectionOp(expr)
+
+		case "@unwind", "@demux":
+			// @demux is one to many
+			o, err := p.NewUnwindOp(expr)
+			if err != nil {
+				return nil, NewPipelineError(fmt.Errorf("failed to instantiate unwind op: %w", err))
+			}
+			op = o
+		case "@gather", "@mux":
+			// @mux is many to one
+			o, err := p.NewGatherOp(expr)
+			if err != nil {
+				return nil, NewPipelineError(fmt.Errorf("failed to instantiate gather op: %w", err))
+			}
+			op = o
+
+		default:
+			return nil, NewPipelineError(fmt.Errorf("unknown pipeline op: %s", pipelineOp.OpType()))
+		}
+
+		p.graph.AddToChain(op)
 	}
 
 	p.log.Info("pipeline initialization ready", "num-inputs", len(sources), "graph", p.graph.String())

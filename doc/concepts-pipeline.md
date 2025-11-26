@@ -2,18 +2,19 @@
 
 The **pipeline** is the core of every controller in Δ-controller. It's a declarative, multi-stage data processing workflow that defines how to transform incoming data from `sources` into the desired state for the `target`. Think of it as a sophisticated, Kubernetes-aware version of a Unix shell pipe or a database aggregation query.
 
-A pipeline is defined by an optional `@join` operation followed by a mandatory `@aggregate` operation, which itself is a sequence of transformation stages.
+A pipeline can be defined as either a single operation or as an array of operations. If multiple sources are used, the first operation must be `@join`.
 
 ```yaml
+# Single operation example
 pipeline:
-  # Optional: Joins objects from multiple sources
-  "@join": { ... }
+  "@project": { ... }
 
-  # Required: A sequence of transformation stages
-  "@aggregate":
-    - # Stage 1: e.g., @select
-    - # Stage 2: e.g., @project
-    - # ... and so on
+# Multiple operations example
+pipeline:
+  - "@join": { ... }    # Required when multiple sources
+  - "@select": { ... }  # Stage 1: filtering
+  - "@project": { ... } # Stage 2: transformation
+  # ... and so on
 ```
 
 ## The Workflow: From Delta to Delta
@@ -27,11 +28,11 @@ Understanding the flow of data through the pipeline is key to mastering Δ-contr
 "EndpointSlice": { "metadata": { "name": "my-svc-xyz" }, ... }
 }
 ```
-If there is no `@join`, the source object from the delta is passed directly to the aggregation stage; in this case the controller must have only a single source. Otherwise, a controller has as many sources are there are resources referenced in the join expression.
+If there is no `@join`, the source object from the delta is passed directly to the next pipeline stage; in this case the controller must have only a single source. Otherwise, a controller has as many sources are there are resources referenced in the join expression.
 
-**Aggregation Stages**: The object (or set of objects) from the previous stage is fed into the first stage of the `@aggregate` array. Each stage processes the data and passes its output as the input to the next stage. This sequential execution allows you to build up complex transformations step-by-step.
+**Pipeline Stages**: The object (or set of objects) from the previous stage is fed into the first transformation stage of the pipeline. Each stage processes the data and passes its output as the input to the next stage. This sequential execution allows you to build up complex transformations step-by-step.
 
-The result of the final aggregation stage is a set of deltas (adds, updates, or deletes, along with the processed object) that are then sent to the controller's `target` to be written to the Kubernetes API server or an internal view. 
+The result of the final pipeline stage is a set of deltas (adds, updates, or deletes, along with the processed object) that are then sent to the controller's `target` to be written to the Kubernetes API server or an internal view. 
 
 Note that *inside* the pipeline transient result and subject objects passed by one pipeline stage to the other do not need to adhere to the Kubernetes naming conventions (i.e., have a valid namespace/name in the metadata) or satisfy any schemata. That is, pipelines are completely free to produce and consume any key-value struct internally, depending the business logic. However, the final result emitted by the pipeline *must* be a valid object: if the target is a View then the [view naming rules](concepts-views.md#the-anatomy-of-a-view-api-promise) apply, and it is a native Kubernetes resource (e.g., a `Pod` or a `Deployment`) then it also must be accepted by the corresponding Kubernetes API schema.
 
@@ -39,7 +40,7 @@ Note that *inside* the pipeline transient result and subject objects passed by o
 
 The `@join` operation is the first step in any multi-source pipeline. It defines an **inner join** that combines objects from different sources into a single, compound object for further processing.
 
-The join is defined by a boolean expression that is evaluated against a Cartesian product of all source objects. If the expression evaluates to `true`, the combined object is passed to the aggregation pipeline.
+The join is defined by a boolean expression that is evaluated against a Cartesian product of all source objects. If the expression evaluates to `true`, the combined object is passed to the subsequent pipeline operations.
 
 The below example joins a `UDPRoute` with its parent `Gateway` (see the [Gateway API spec](https://gateway-api.sigs.k8s.io/)) if they are in the same namespace and the route's `spec.parentRefs` refers to the gateway's name.
 
@@ -56,9 +57,9 @@ pipeline:
       - "@in": ["$.Gateway.metadata.name", "@map": ["$$.name", "$.UDPRoute.spec.parentRefs"]]
 ```
 
-## The Aggregation Pipeline: `@aggregate`
+## Pipeline Operations
 
-This is where the main data transformation happens. The `@aggregate` spec is an array of processing stages, executed in order. Each stage receives the output of the previous one (this is called the "subject") and starts with an empty object that it will gradually populate from the subject.
+This is where the main data transformation happens. The pipeline is a sequence of processing stages, executed in order. Each stage receives the output of the previous one (this is called the "subject") and starts with an empty object that it will gradually populate from the subject.
 
 ### `@select`: Filtering Objects
 
@@ -181,16 +182,16 @@ The output is 2 summary objects:
 It is very common for a gathered object to end up with an incorrect shape. In the below example, the result would be an invalid object since the `metadata.name` field must be a single `string`, and not be a list. Therefore it is a common pattern to follow up a `@gather` operation with a subsequent `@project` that will get the shape right. In the below example we will copy the names out into a `podNames` list and add a sensible name, which will be just the name of the namespace followed by `-summary`.
 
 ```yaml
-"@aggregate":
-- "@gather":
-  - "$.metadata.namespace"
-  - "$.metadata.name"
-- "@project":
-    metadata:
-      name:
-        "@concat": ["$.metadata.namespace", "-summary"]
-      namespace: $.metadata.namespace
-    podNames: "$.metadata.name"
+pipeline:
+  - "@gather":
+      - "$.metadata.namespace"
+      - "$.metadata.name"
+  - "@project":
+      metadata:
+        name:
+          "@concat": ["$.metadata.namespace", "-summary"]
+        namespace: $.metadata.namespace
+      podNames: "$.metadata.name"
 ```
 
 This will result the following 2 result summaries:

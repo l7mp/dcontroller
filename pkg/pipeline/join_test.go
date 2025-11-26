@@ -83,17 +83,16 @@ var _ = Describe("Joins", func() {
 	Describe("Evaluating join expressions for Added events", func() {
 		It("should evaluate a join on the pod parent", func() {
 			jsonData := `
-'@join':
-  '@eq':
-    - $.dep.metadata.name
-    - $.pod.spec.parent
-'@aggregate':
-  - '@project':
-      metadata:
+- '@join':
+    '@eq':
+      - $.dep.metadata.name
+      - $.pod.spec.parent
+- '@project':
+    metadata:
         name: result
         namespace: default
-      pod: $.pod
-      dep: $.dep` //nolint:goconst
+    pod: $.pod
+    dep: $.dep` //nolint:goconst
 			j, err := newPipeline(jsonData, []string{"pod", "dep"})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -116,17 +115,16 @@ var _ = Describe("Joins", func() {
 
 		It("should evaluate a join on pod namespace", func() {
 			jsonData := `
-'@join':
-  '@eq':
-    - $.dep.metadata.namespace
-    - $.pod.metadata.namespace
-'@aggregate':
-  - '@project':
-      metadata:
-        name: result
-        namespace: default
-      pod: $.pod
-      dep: $.dep` //nolint:goconst
+- '@join':
+    '@eq':
+        - $.dep.metadata.namespace
+        - $.pod.metadata.namespace
+- '@project':
+    metadata:
+          name: result
+          namespace: default
+    pod: $.pod
+    dep: $.dep` //nolint:goconst
 			j, err := newPipeline(jsonData, []string{"pod", "dep"})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -149,21 +147,20 @@ var _ = Describe("Joins", func() {
 
 		It("should evaluate a join on labels", func() {
 			jsonData := `
-'@join':
-  '@eq':
-    - $.dep.metadata.labels.app
-    - $.pod.metadata.labels.app
-'@aggregate':
-  - '@project':
-      metadata:
-        name:
-          "@concat":
-            - $.pod.metadata.name
-            - "--"
-            - $.dep.metadata.name
-        namespace: $.pod.metadata.namespace
-      pod: $.pod
-      dep: $.dep` //nolint:goconst
+- '@join':
+    '@eq':
+        - $.dep.metadata.labels.app
+        - $.pod.metadata.labels.app
+- '@project':
+    metadata:
+      name:
+        "@concat":
+          - $.pod.metadata.name
+          - "--"
+          - $.dep.metadata.name
+      namespace: $.pod.metadata.namespace
+    pod: $.pod
+    dep: $.dep` //nolint:goconst
 			j, err := newPipeline(jsonData, []string{"pod", "dep"})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -185,17 +182,16 @@ var _ = Describe("Joins", func() {
 
 		It("should yield an empty delta when joining on a non-existent object", func() {
 			jsonData := `
-'@join':
-  '@eq':
-    - $.dep.metadata.labels.app
-    - $.rs.metadata.labels.app
-'@aggregate':
-  - '@project':
-      metadata:
-        name: result
-        namespace: default
-      pod: $.pod
-      dep: $.dep` //nolint:goconst
+- '@join':
+    '@eq':
+        - $.dep.metadata.labels.app
+        - $.rs.metadata.labels.app
+- '@project':
+    metadata:
+      name: result
+      namespace: default
+    pod: $.pod
+    dep: $.dep` //nolint:goconst
 			j, err := newPipeline(jsonData, []string{"pod", "dep"})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -213,16 +209,15 @@ var _ = Describe("Joins", func() {
 
 		It("should evaluate a join on a 3 views", func() {
 			jsonData := `
-'@join':
-  {"@and":[{"@eq":["$.dep.metadata.name","$.pod.spec.parent"]},{"@eq":["$.dep.metadata.name","$.rs.spec.dep"]}]}
-'@aggregate':
-  - '@project':
-      metadata:
-        name: result
-        namespace: default
-      pod: $.pod
-      dep: $.dep
-      rs: $.rs` //nolint:goconst
+- '@join':
+    {"@and":[{"@eq":["$.dep.metadata.name","$.pod.spec.parent"]},{"@eq":["$.dep.metadata.name","$.rs.spec.dep"]}]}
+- '@project':
+    metadata:
+      name: result
+      namespace: default
+    pod: $.pod
+    dep: $.dep
+    rs: $.rs` //nolint:goconst
 			j, err := newPipeline(jsonData, []string{"pod", "dep", "rs"})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -249,19 +244,18 @@ var _ = Describe("Joins", func() {
 	Describe("Evaluating join expressions for Deleted events", func() {
 		It("should evaluate a join on the pod parent", func() {
 			jsonData := `
-'@join':
-  {"@eq":["$.dep.metadata.name","$.pod.spec.parent"]}
-'@aggregate':
-  - '@project':
-      metadata:
-        name:
-          "@concat":
-            - $.pod.metadata.name
-            - "--"
-            - $.dep.metadata.name
-        namespace: default
-      pod: $.pod
-      dep: $.dep` //nolint:goconst
+- '@join':
+    {"@eq":["$.dep.metadata.name","$.pod.spec.parent"]}
+- '@project':
+    metadata:
+      name:
+        "@concat":
+          - $.pod.metadata.name
+          - "--"
+          - $.dep.metadata.name
+      namespace: default
+    pod: $.pod
+    dep: $.dep` //nolint:goconst
 			j, err := newPipeline(jsonData, []string{"pod", "dep"})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -293,19 +287,18 @@ var _ = Describe("Joins", func() {
 
 		It("should skip the join when deleting a non-existent object", func() {
 			jsonData := `
-'@join':
-  {"@eq":["$.dep.metadata.name","$.pod.spec.parent"]}
-'@aggregate':
-  - '@project':
-      metadata:
-        name:
-          "@concat":
-            - $.pod.metadata.name
-            - "--"
-            - $.dep.metadata.name
-        namespace: default
-      pod: $.pod
-      dep: $.dep` //nolint:goconst
+- '@join':
+    {"@eq":["$.dep.metadata.name","$.pod.spec.parent"]}
+- '@project':
+    metadata:
+      name:
+        "@concat":
+          - $.pod.metadata.name
+          - "--"
+          - $.dep.metadata.name
+      namespace: default
+    pod: $.pod
+    dep: $.dep` //nolint:goconst
 			j, err := newPipeline(jsonData, []string{"pod", "dep"})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -324,19 +317,18 @@ var _ = Describe("Joins", func() {
 	Describe("Evaluating join expressions for Updated events", func() {
 		It("should evaluate a simple join on labels", func() {
 			jsonData := `
-'@join':
-  {"@eq":["$.dep.metadata.name","$.pod.spec.parent"]}
-'@aggregate':
-  - '@project':
-      metadata:
-        name:
-          "@concat":
-            - $.pod.metadata.name
-            - "--"
-            - $.dep.metadata.name
-        namespace: default
-      pod: $.pod
-      dep: $.dep` //nolint:goconst
+- '@join':
+    {"@eq":["$.dep.metadata.name","$.pod.spec.parent"]}
+- '@project':
+    metadata:
+      name:
+        "@concat":
+          - $.pod.metadata.name
+          - "--"
+          - $.dep.metadata.name
+      namespace: default
+    pod: $.pod
+    dep: $.dep` //nolint:goconst
 			j, err := newPipeline(jsonData, []string{"pod", "dep"})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -371,19 +363,18 @@ var _ = Describe("Joins", func() {
 
 		It("should evaluate a join on labels that induces a remove followed by an add", func() {
 			jsonData := `
-'@join':
-  {"@eq":["$.dep.metadata.labels.app","$.pod.metadata.labels.app"]}
-'@aggregate':
-  - '@project':
-      metadata:
-        name:
-          "@concat":
-            - $.pod.metadata.name
-            - "--"
-            - $.dep.metadata.name
-        namespace: default
-      pod: $.pod
-      dep: $.dep` //nolint:goconst
+- '@join':
+    {"@eq":["$.dep.metadata.labels.app","$.pod.metadata.labels.app"]}
+- '@project':
+    metadata:
+      name:
+        "@concat":
+          - $.pod.metadata.name
+          - "--"
+          - $.dep.metadata.name
+      namespace: default
+    pod: $.pod
+    dep: $.dep` //nolint:goconst
 			j, err := newPipeline(jsonData, []string{"pod", "dep"})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -433,19 +424,18 @@ var _ = Describe("Joins", func() {
 
 		It("should evaluate a complex join", func() {
 			jsonData := `
-'@join':
-  {"@eq":["$.dep.metadata.labels.app","$.pod.metadata.labels.app"]}
-'@aggregate':
-  - '@project':
-      metadata:
-        name:
-          "@concat":
-            - $.pod.metadata.name
-            - "--"
-            - $.dep.metadata.name
-        namespace: default
-      pod: $.pod
-      dep: $.dep` //nolint:goconst
+- '@join':
+    {"@eq":["$.dep.metadata.labels.app","$.pod.metadata.labels.app"]}
+- '@project':
+    metadata:
+      name:
+        "@concat":
+          - $.pod.metadata.name
+          - "--"
+          - $.dep.metadata.name
+      namespace: default
+    pod: $.pod
+    dep: $.dep` //nolint:goconst
 			j, err := newPipeline(jsonData, []string{"pod", "dep"})
 			Expect(err).NotTo(HaveOccurred())
 

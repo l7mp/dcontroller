@@ -13,30 +13,29 @@ spec:
         - apiGroup: "dcontroller.io"
           kind: ConfigDeployment
       pipeline:
-        "@join":
-          "@and":
-            - '@eq':
-                - $.ConfigMap.metadata.name
-                - $.ConfigDeployment.spec.configMap
-            - '@eq':
-                - $.Deployment.metadata.name
-                - $.ConfigDeployment.spec.deployment
-            - '@eq':
-                - $.ConfigMap.metadata.namespace
-                - $.Deployment.metadata.namespace
-            - '@eq':
-                - $.ConfigMap.metadata.namespace
-                - $.ConfigDeployment.metadata.namespace
-        "@aggregate":
-          - "@project":
-              metadata:
-                name: "$.Deployment.metadata.name"
-                namespace: "$.Deployment.metadata.namespace"
-              spec:
-                template:
-                  metadata:
-                    annotations:
-                      "dcontroller.io/configmap-version": "$.ConfigMap.metadata.resourceVersion"
+        - "@join":
+            "@and":
+              - '@eq':
+                  - $.ConfigMap.metadata.name
+                  - $.ConfigDeployment.spec.configMap
+              - '@eq':
+                  - $.Deployment.metadata.name
+                  - $.ConfigDeployment.spec.deployment
+              - '@eq':
+                  - $.ConfigMap.metadata.namespace
+                  - $.Deployment.metadata.namespace
+              - '@eq':
+                  - $.ConfigMap.metadata.namespace
+                  - $.ConfigDeployment.metadata.namespace
+        - "@project":
+            metadata:
+              name: "$.Deployment.metadata.name"
+              namespace: "$.Deployment.metadata.namespace"
+            spec:
+              template:
+                metadata:
+                  annotations:
+                    "dcontroller.io/configmap-version": "$.ConfigMap.metadata.resourceVersion"
       target:
         apiGroup: "apps"
         kind: Deployment

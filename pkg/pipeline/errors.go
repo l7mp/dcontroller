@@ -13,7 +13,7 @@ func NewPipelineError(err error) ErrPipeline {
 type ErrAggregation = error
 
 func NewAggregationError(err error) ErrAggregation {
-	return fmt.Errorf("failed to evaluate aggregation expression: %w", err)
+	return fmt.Errorf("failed to evaluate expression: %w", err)
 }
 
 type ErrJoin = error

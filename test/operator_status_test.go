@@ -72,8 +72,7 @@ spec:
     - name: bogus-controller
       sources: []
       pipeline:
-        '@aggregate':
-          - '@select': whatever
+        - '@select': whatever
       target:
         kind: myview`
 
@@ -173,14 +172,13 @@ spec:
         - apiGroup: ""
           kind: Pod
       pipeline:
-        "@aggregate":
-          - "@project":                                
-              metadata:                                
-                name: "$.metadata.name"                # copy metadata.namespace and metadata.name
-                namespace: "$.metadata.namespace"      
-                annotations:                           
-                  "dcontroller.io/container-num":      # add a new annotation indicating the number of containers
-                    '@len': ["$.spec.containers"]      # this is deliberately wrong (needs string coercion)
+        - "@project":                                
+            metadata:                                
+              name: "$.metadata.name"                # copy metadata.namespace and metadata.name
+              namespace: "$.metadata.namespace"      
+              annotations:                           
+                "dcontroller.io/container-num":      # add a new annotation indicating the number of containers
+                  '@len': ["$.spec.containers"]      # this is deliberately wrong (needs string coercion)
       target:
         apiGroup: ""
         kind: Pod
@@ -258,15 +256,14 @@ spec:
         - apiGroup: ""
           kind: Pod
       pipeline:
-        "@aggregate":
-          - "@project":                                
-              metadata:                                
-                name: "$.metadata.name"                # copy metadata.namespace and metadata.name
-                namespace: "$.metadata.namespace"      
-                annotations:                           
-                  "dcontroller.io/container-num":      # add a new annotation indicating the number of containers
-                    '@string':                         # explicitly force string conversion
-                      '@len': ["$.spec.containers"]
+        - "@project":                                
+            metadata:                                
+              name: "$.metadata.name"                # copy metadata.namespace and metadata.name
+              namespace: "$.metadata.namespace"      
+              annotations:                           
+                "dcontroller.io/container-num":      # add a new annotation indicating the number of containers
+                  '@string':                         # explicitly force string conversion
+                    '@len': ["$.spec.containers"]
       target:
         apiGroup: ""
         kind: Pod

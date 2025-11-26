@@ -139,11 +139,10 @@ var _ = Describe("Headless Operator", func() {
 		}
 
 		jsonData := `
-'@aggregate':
-  - '@project':
-      metadata: $.metadata
-      x: z
-      a: b`
+- '@project':
+    metadata: $.metadata
+    x: z
+    a: b`
 		var p opv1a1.Pipeline
 		err = yaml.Unmarshal([]byte(jsonData), &p)
 		Expect(err).NotTo(HaveOccurred())

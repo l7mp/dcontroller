@@ -13,8 +13,7 @@ spec:
             matchLabels:
               "dcontroller.io/health-monitor": "enabled"
       pipeline:
-        "@aggregate":
-          - "@project":
+        "@project":
               metadata:
                 name: "$.metadata.labels['app']"
                 namespace: "$.metadata.namespace"
@@ -39,7 +38,7 @@ spec:
         - apiGroup: ""
           kind: Service
       pipeline:
-        "@join":
+        - "@join":
           "@and":
             - "@eq":
                 - "$.HealthView.metadata.name"
@@ -47,8 +46,7 @@ spec:
             - "@eq":
                 - "$.HealthView.metadata.namespace" 
                 - "$.Service.metadata.namespace"
-        "@aggregate":
-          - "@project":
+        - "@project":
               metadata:
                 name: "$.Service.metadata.name"
                 namespace: "$.Service.metadata.namespace"

@@ -50,16 +50,14 @@ This controller watches `Deployments` and creates a `DeploymentSummaryView` for 
     - apiGroup: "apps"
       kind: Deployment
   pipeline:
-    "@aggregate":
-      # Create one view object for each Deployment
-      - "@project":
-          metadata:
-            # The view will have the same name and namespace as the Deployment
-            name: "$.metadata.name"
-            namespace: "$.metadata.namespace"
-          spec:
-            # The view's spec contains only the replica count
-            replicas: "$.spec.replicas"
+    "@project":
+      metadata:
+        # The view will have the same name and namespace as the Deployment
+        name: "$.metadata.name"
+        namespace: "$.metadata.namespace"
+      spec:
+        # The view's spec contains only the replica count
+        replicas: "$.spec.replicas"
   target:
     # This controller writes to our custom view
     kind: DeploymentSummaryView
@@ -90,20 +88,18 @@ This second controller is triggered by changes to the `DeploymentSummaryView`. I
     # Source is the view created by the first controller
     - kind: DeploymentSummaryView
   pipeline:
-    "@aggregate":
-      # Only process views where spec.replicas is greater than 3
-      - "@select":
-          "@gt": ["$.spec.replicas", 3]
-      # Create a ConfigMap with alert details
-      - "@project":
-          metadata:
-            name:
-              "@concat": ["alert-", "$.metadata.name"] # e.g., "alert-my-app"
-            namespace: "$.metadata.namespace"
-          data:
-            message: "High replica count detected!"
-            replicas:
-              "@string": "$.spec.replicas" # Convert number to string for ConfigMap data
+    - "@select":
+        "@gt": ["$.spec.replicas", 3]
+    # Create a ConfigMap with alert details
+    - "@project":
+        metadata:
+          name:
+            "@concat": ["alert-", "$.metadata.name"] # e.g., "alert-my-app"
+          namespace: "$.metadata.namespace"
+        data:
+          message: "High replica count detected!"
+          replicas:
+            "@string": "$.spec.replicas" # Convert number to string for ConfigMap data
   target:
     # The target is a native Kubernetes ConfigMap
     apiGroup: ""

@@ -8,7 +8,7 @@
 //
 // Controllers support:
 //   - multiple source resource types with optional label selectors,
-//   - declarative pipeline processing with joins and aggregations,
+//   - declarative pipeline processing with joins and selection, projection, etc., aggregations,
 //   - incremental reconciliation using DBSP,
 //   - configurable error handling and status reporting, and
 //   - integration with the composite client system.

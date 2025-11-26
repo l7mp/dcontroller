@@ -54,7 +54,7 @@ type Expression struct {
 
 // Evaluate processes an expression.
 func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
-	if len(e.Op) == 0 {
+	if e == nil || len(e.Op) == 0 {
 		return nil, NewInvalidArgumentsError(fmt.Sprintf("empty operator in expession %q", e.String()))
 	}
 

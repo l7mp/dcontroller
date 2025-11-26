@@ -75,15 +75,14 @@ spec:
           kind: Pod
           namespace: default
       pipeline:
-        "@aggregate":
-          - "@project":
-              metadata:
-                name: "$.metadata.name"
-                namespace: "$.metadata.namespace"
-                annotations:
-                  "dcontroller.io/container-num":
-                    '@string':
-                      '@len': ["$.spec.containers"]
+        "@project":
+          metadata:
+            name: "$.metadata.name"
+            namespace: "$.metadata.namespace"
+            annotations:
+              "dcontroller.io/container-num":
+                '@string':
+                  '@len': ["$.spec.containers"]
       target:
         apiGroup: ""
         kind: Pod
@@ -104,18 +103,17 @@ and the target resources using standard [JSONPath
 notation](https://datatracker.ietf.org/doc/html/rfc9535).
 
 ```yaml
-"@aggregate":
-  - "@project":
-      metadata:
-        name: "$.metadata.name"
-        namespace: "$.metadata.namespace"
-        annotations:
-          "dcontroller.io/container-num":
-            '@string':
-              '@len': ["$.spec.containers"]
+"@project":
+  metadata:
+    name: "$.metadata.name"
+    namespace: "$.metadata.namespace"
+    annotations:
+      "dcontroller.io/container-num":
+        '@string':
+          '@len': ["$.spec.containers"]
 ```
 
-Our sample pipeline comprises a single aggregation operation, namely a projection. This `@project`
+Our sample pipeline comprises a single operation, namely a projection. This `@project`
 op will create a patch by copying the pod's name and namespace and adding the length of the
 `containers` list in the Pod spec as an annotation to the metadata. The `@string` op is included to
 explicitly cast the numeric length value into a string.

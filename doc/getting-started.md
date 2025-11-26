@@ -37,13 +37,12 @@ spec:
           namespace: default
       # PIPELINE: Create a patch for the watched Pod
       pipeline:
-        "@aggregate":
-          - "@project":
-              metadata:
-                name: "$.metadata.name"
-                namespace: "$.metadata.namespace"
-                annotations:
-                  "dcontroller.io/managed": "true"
+        "@project":
+          metadata:
+            name: "$.metadata.name"
+            namespace: "$.metadata.namespace"
+            annotations:
+              "dcontroller.io/managed": "true"
       # TARGET: Apply the patch back to the Pod
       target:
         apiGroup: ""
