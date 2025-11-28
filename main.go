@@ -48,6 +48,9 @@ import (
 	"github.com/l7mp/dcontroller/pkg/apiserver"
 	"github.com/l7mp/dcontroller/pkg/auth"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
+	"github.com/l7mp/dcontroller/pkg/visualize"
+
+	"sigs.k8s.io/yaml"
 )
 
 const APIServerPort = 8443
@@ -91,6 +94,7 @@ func main() {
 	rootCmd.AddCommand(startServerCmd())
 	rootCmd.AddCommand(generateConfigCmd())
 	rootCmd.AddCommand(getConfigCmd())
+	rootCmd.AddCommand(visualizeCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -585,6 +589,108 @@ func runGetConfig(cfg getConfigConfig) error {
 		fmt.Println("✅ Token is VALID")
 	} else {
 		fmt.Println("❌ Token is INVALID")
+	}
+
+	return nil
+}
+
+// ============================================================================
+// Command: visualize
+// ============================================================================
+
+type visualizeConfig struct {
+	format string
+	output string
+}
+
+func visualizeCmd() *cobra.Command {
+	cfg := visualizeConfig{}
+
+	cmd := &cobra.Command{
+		Use:   "visualize [operator.yaml]",
+		Short: "Visualize an operator as a diagram",
+		Long:  "Generate a visual diagram of an operator showing controllers, sources, targets, and their connections",
+		Example: `  # Generate Mermaid diagram to stdout
+  dctl visualize operator.yaml
+
+  # Generate Mermaid diagram to file
+  dctl visualize operator.yaml --output diagram.md
+
+  # Generate Graphviz DOT diagram
+  dctl visualize operator.yaml --format dot
+
+  # Generate DOT diagram to file
+  dctl visualize operator.yaml --format dot --output diagram.dot`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runVisualize(args[0], cfg)
+		},
+	}
+
+	cmd.Flags().StringVarP(&cfg.format, "format", "f", "mermaid", "Output format (mermaid, dot)")
+	cmd.Flags().StringVarP(&cfg.output, "output", "o", "", "Output file (default: stdout)")
+
+	return cmd
+}
+
+func runVisualize(operatorFile string, cfg visualizeConfig) error {
+	// Read operator file.
+	data, err := os.ReadFile(operatorFile)
+	if err != nil {
+		return fmt.Errorf("failed to read operator file: %w", err)
+	}
+
+	// Try to unmarshal as a full Operator CRD first.
+	var op opv1a1.Operator
+	if err := yaml.Unmarshal(data, &op); err != nil {
+		return fmt.Errorf("failed to parse operator file: %w", err)
+	}
+
+	// If the Kind is not set or empty, try parsing as OperatorSpec directly.
+	if op.Kind == "" {
+		var spec opv1a1.OperatorSpec
+		if err := yaml.Unmarshal(data, &spec); err != nil {
+			return fmt.Errorf("failed to parse as OperatorSpec: %w", err)
+		}
+		// Construct a minimal Operator from the spec.
+		op = opv1a1.Operator{
+			Spec: spec,
+		}
+		// Try to extract a name from the filename if available.
+		op.Name = strings.TrimSuffix(strings.TrimSuffix(operatorFile, ".yaml"), ".yml")
+		if strings.Contains(op.Name, "/") {
+			parts := strings.Split(op.Name, "/")
+			op.Name = parts[len(parts)-1]
+		}
+	}
+
+	// Build graph.
+	graph := visualize.BuildGraph(&op)
+
+	// Generate diagram.
+	var output string
+	switch strings.ToLower(cfg.format) {
+	case "mermaid":
+		gen := &visualize.MermaidGenerator{}
+		output = gen.Generate(graph)
+	case "dot", "graphviz":
+		gen := &visualize.DotGenerator{}
+		output = gen.Generate(graph)
+	default:
+		return fmt.Errorf("unknown format: %s (supported: mermaid, dot)", cfg.format)
+	}
+
+	// Write output.
+	if cfg.output == "" {
+		fmt.Print(output)
+	} else {
+		if err := os.WriteFile(cfg.output, []byte(output), 0644); err != nil { //nolint:gosec
+			return fmt.Errorf("failed to write output file: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "✅ Successfully generated %s diagram\n", cfg.format)
+		fmt.Fprintf(os.Stderr, "   Operator: %s\n", op.Name)
+		fmt.Fprintf(os.Stderr, "   Controllers: %d\n", len(op.Spec.Controllers))
+		fmt.Fprintf(os.Stderr, "   File: %s\n", cfg.output)
 	}
 
 	return nil

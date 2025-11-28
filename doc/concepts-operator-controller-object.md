@@ -54,3 +54,41 @@ spec:
 Δ-controller operates on a universal, schemaless **object** model. Internally, all Kubernetes resources, whether they are built-in types like `Pods` and `Services`, your own Custom Resources, or Δ-controller's internal views, are treated as "unstructured" objects. In Go speak, objects are represented as flexible key-value structures (a `map[string]any` structure in Go speak), just like their raw YAML or JSON counterparts. This design choice is fundamental to the framework's power, as it allows you to write controllers that operate on *any* resource kind without needing to import specific Go type definitions or recompile the controller.
 
 Because every object is just unstructured data, the entire pipeline and expression language is built around manipulating this data directly. You use JSONPath expressions to navigate and extract values (e.g., `$.spec.replicas`), and operators like `@project` to construct new object shapes dynamically. This approach trades the compile-time type safety of Go structs for the runtime flexibility of a dynamic, document-oriented model, reinforcing the core concept of treating the Kubernetes API as a queryable database. However, this model also comes with certain risks, as there are no API promises for Δ-controller objects apart from the pipeline logic that generates them.
+
+## Visualizing Operators
+
+Complex operators with multiple controllers and views can be difficult to understand from the YAML specification alone. Δ-controller provides the `dctl visualize` command to generate visual diagrams showing the data flow through your operator.
+
+The command accepts either a complete `Operator` CRD or just the `controllers` list (an `OperatorSpec`) and generates a flow diagram:
+- Generate Mermaid diagram (default)
+  ```bash
+  dctl visualize operator.yaml
+  ```
+- Save to file:
+  ```bash
+  dctl visualize operator.yaml --output diagram.md
+  ```
+- Generate Graphviz DOT format:
+  ```bash
+  dctl visualize operator.yaml --format dot
+  ```
+
+As an example, consider the [endpointslice-operator](../examples/endpointslice-controller/endpointslice-operator.yaml), which implements a custom EndpointSlice controller with two stages. Running `dctl visualize` on this operator produces:
+
+```mermaid
+flowchart LR;
+	n5("EndpointView");
+	style n5 filled,rounded
+	n3("Service");
+	style n3 filled
+	n4("discovery.k8s.io/EndpointSlice");
+	style n4 filled
+	n2("endpointslice-controller: @join -&gt; @project -&gt; @unwind -&gt; @select -&gt; @unwind -&gt; @project -&gt; @project");
+	style n2 filled,rounded
+	n1("service-controller: @select -&gt; @project -&gt; @unwind");
+	style n1 filled,rounded
+	n3-->|"Watcher"|n1;
+	n4-->|"Watcher"|n2;
+	n2-->|"Updater"|n5;
+	n1-->|"ServiceView (write:Updater, read:Watcher)"|n2;
+```
