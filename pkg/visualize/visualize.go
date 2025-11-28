@@ -270,8 +270,8 @@ func BuildDotGraph(g *Graph) *dot.Graph {
 				if g.IsTerminalView(ctrl) {
 					targetNode = graph.Node(key).
 						Attr("label", nodeLabel).
-						Attr("shape", "box").
-						Attr("style", "filled,rounded").
+						Attr("shape", "ellipse").
+						Attr("style", "filled").
 						Attr("fillcolor", "lightcyan")
 				} else {
 					targetNode = graph.Node(key).
@@ -294,29 +294,60 @@ func BuildDotGraph(g *Graph) *dot.Graph {
 		}
 	}
 
-	// Connect controllers via views.
+	// Connect controllers via views with explicit view nodes.
+	viewNodes := make(map[string]dot.Node)
+
 	for _, conn := range g.Connections {
 		fromNode, fromExists := controllerNodes[conn.FromController]
 		toNode, toExists := controllerNodes[conn.ToController]
-		if fromExists && toExists {
-			// Build label: ViewKind (write:TargetType, read:SourceType)
-			targetType := conn.TargetType
-			if targetType == "" {
-				targetType = "Updater"
-			}
-			sourceType := conn.SourceType
-			if sourceType == "" {
-				sourceType = "Watcher"
-			}
-			label := fmt.Sprintf("%s (write:%s, read:%s)", conn.ViewKind, targetType, sourceType)
-
-			graph.Edge(fromNode, toNode).
-				Attr("label", label).
-				Attr("style", "dashed").
-				Attr("color", "blue").
-				Attr("fontname", "helvetica").
-				Attr("fontsize", "10")
+		if !fromExists || !toExists {
+			continue
 		}
+
+		// Create or get the view node.
+		// We need to construct the resource key from the connection.
+		// Find the actual view resource from the target of the writing controller.
+		var viewRef ResourceRef
+		for _, ctrl := range g.Controllers {
+			if ctrl.Name == conn.FromController && isView(ctrl.Target) {
+				viewRef = ctrl.Target
+				break
+			}
+		}
+
+		viewKey := resourceKey(viewRef)
+		viewNode, exists := viewNodes[viewKey]
+		if !exists {
+			viewLabel := FormatGVK(viewRef)
+			viewNode = graph.Node(viewKey).
+				Attr("label", viewLabel).
+				Attr("shape", "ellipse").
+				Attr("style", "filled,dashed").
+				Attr("fillcolor", "lightcyan").
+				Attr("color", "blue").
+				Attr("penwidth", "2")
+			viewNodes[viewKey] = viewNode
+		}
+
+		// Create edge from writer to view node.
+		targetType := conn.TargetType
+		if targetType == "" {
+			targetType = "Updater"
+		}
+		graph.Edge(fromNode, viewNode).
+			Attr("label", targetType).
+			Attr("fontname", "helvetica").
+			Attr("fontsize", "10")
+
+		// Create edge from view node to reader.
+		sourceType := conn.SourceType
+		if sourceType == "" {
+			sourceType = "Watcher"
+		}
+		graph.Edge(viewNode, toNode).
+			Attr("label", sourceType).
+			Attr("fontname", "helvetica").
+			Attr("fontsize", "10")
 	}
 
 	return graph

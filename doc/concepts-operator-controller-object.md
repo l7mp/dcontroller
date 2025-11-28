@@ -78,9 +78,11 @@ As an example, consider the [endpointslice-operator](../examples/endpointslice-c
 ```mermaid
 flowchart LR;
 	n5("EndpointView");
-	style n5 filled,rounded
+	style n5 filled
 	n3("Service");
 	style n3 filled
+	n6("ServiceView");
+	style n6 filled,dashed
 	n4("discovery.k8s.io/EndpointSlice");
 	style n4 filled
 	n2("endpointslice-controller: @join -&gt; @project -&gt; @unwind -&gt; @select -&gt; @unwind -&gt; @project -&gt; @project");
@@ -88,7 +90,8 @@ flowchart LR;
 	n1("service-controller: @select -&gt; @project -&gt; @unwind");
 	style n1 filled,rounded
 	n3-->|"Watcher"|n1;
+	n6-->|"Watcher"|n2;
 	n4-->|"Watcher"|n2;
 	n2-->|"Updater"|n5;
-	n1-->|"ServiceView (write:Updater, read:Watcher)"|n2;
+	n1-->|"Updater"|n6;
 ```
