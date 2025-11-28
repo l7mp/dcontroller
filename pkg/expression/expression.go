@@ -306,50 +306,69 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 			return v, nil
 
+		case "@switch":
+			// Get the list of [case, action] pair expressions.
+			pairExprs, err := AsExpOrExpList(e.Arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			if len(pairExprs) == 0 {
+				return nil, NewExpressionError(e,
+					errors.New("invalid arguments: expected at least one [case, action] pair"))
+			}
+
+			// Iterate through each [case, action] pair expression.
+			for i, pairExpr := range pairExprs {
+				// Extract the [case, action] elements from this pair.
+				elements, err := AsExpOrExpList(&pairExpr)
+				if err != nil {
+					return nil, NewExpressionError(e,
+						fmt.Errorf("invalid pair at index %d: expected [case, action]: %w", i, err))
+				}
+
+				if len(elements) != 2 {
+					return nil, NewExpressionError(e,
+						fmt.Errorf("invalid pair at index %d: expected exactly 2 elements [case, action], got %d", i, len(elements)))
+				}
+
+				caseExpr := elements[0]
+				actionExpr := elements[1]
+
+				// Evaluate the case (condition).
+				ce, err := caseExpr.Evaluate(ctx)
+				if err != nil {
+					return nil, fmt.Errorf("failed to evaluate case at index %d: %w", i, err)
+				}
+
+				c, err := AsBool(ce)
+				if err != nil {
+					return nil, NewExpressionError(e,
+						fmt.Errorf("case at index %d must evaluate to boolean: %w", i, err))
+				}
+
+				// If case matches, evaluate and return the action.
+				if c {
+					v, err := actionExpr.Evaluate(ctx)
+					if err != nil {
+						return nil, fmt.Errorf("failed to evaluate action at index %d: %w", i, err)
+					}
+
+					ctx.Log.V(8).Info("eval ready", "expression", e.String(), "matched_index", i, "result", v)
+					return v, nil
+				}
+			}
+
+			// No case matched, return nil.
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", nil)
+			return nil, nil
+
 			// @set has been removed: it is too complex and the same effect can be
 			// achieved with the below projection steps:
 			//
 			// "@project":
 			// - "$.spec.a": "$.spec.a"
 			// - {".spec.a[?(@.name=='listener_2')].port", 123}
-			//
-			// 	case "@set":
-			// 		// @set[arg1,arg2,arg2] copies arg1, and updates arg2:arg3 and returns the result
-			// 		//
-			// 		// e.g., {"@set":["$.list","$.list[?(@.x=='y')].z",123}` takes the list at
-			// 		// "$.list" and updates the elem(s) selected by the conditional JSONpath
-			// 		// expression $.list[?(@.x=='y')].z to 123 and returns the result
-			// 		args, err := AsExpOrExpList(e.Arg)
-			// 		if err != nil {
-			// 			return nil, NewExpressionError(e, err)
-			// 		}
-
-			// 		if len(args) != 3 {
-			// 			return nil, NewExpressionError(e,
-			// 				errors.New("invalid arguments: expected 3 arguments"))
-			// 		}
-
-			// 		ret, err := args[0].Evaluate(ctx)
-			// 		if err != nil {
-			// 			return nil, err
-			// 		}
-
-			// 		// key and value both must be a literals but we must not eval them now,
-			// 		// SetJSONPath requires uneval'd keys and values
-			// 		key, err := AsString(args[1].Literal)
-			// 		if err != nil {
-			// 			return nil, NewExpressionError(e, err)
-			// 		}
-			// 		value := args[2].Literal
-
-			// 		if err := SetJSONPath(ctx, key, value, ret); err != nil {
-			// 			return nil, NewExpressionError(e,
-			// 				fmt.Errorf("could not deference JSON \"set\" expression: %w", err))
-			// 		}
-
-			// 		ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", ret)
-
-			// 		return ret, nil
 		}
 	}
 

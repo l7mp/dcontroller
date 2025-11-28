@@ -82,6 +82,40 @@ An `if-then-else` conditional.
         - "DEBUG"
     ```
 
+#### `@switch`
+A multi-way conditional that evaluates case/action pairs in order and returns the result of the first matching case.
+
+*   **Signature**: `{"@switch": [[<case1>, <action1>], [<case2>, <action2>], ...]}`
+*   **Arguments**: A list of `[case, action]` pairs. Each case must evaluate to a boolean. Evaluation stops at the first matching case (no fallthrough).
+*   **Returns**: The result of the action corresponding to the first case that evaluates to `true`. Returns `null` if no case matches.
+*   **Notes**:
+    *   Cases are evaluated in order, and only the action for the first matching case is executed (shortcut evaluation).
+    *   A default case can be implemented using a constant `true` as the final case condition.
+    *   If no case matches and no default is provided, the expression returns `null`.
+*   **Example**:
+    ```yaml
+    priority:
+      "@switch":
+        - - "@eq": ["$.metadata.labels.env", "prod"]
+          - "high"
+        - - "@eq": ["$.metadata.labels.env", "staging"]
+          - "medium"
+        - - true  # default case
+          - "low"
+    ```
+*   **Example (without default)**:
+    ```yaml
+    specialHandling:
+      "@switch":
+        - - "@eq": ["$.spec.type", "critical"]
+          - "alert-ops"
+        - - "@and":
+            - "@eq": ["$.spec.type", "important"]
+            - "@eq": ["$.metadata.namespace", "production"]
+          - "notify-team"
+        # Returns null if neither case matches
+    ```
+
 #### `@definedOr`
 Returns the result of the first expression if it is not `null`, otherwise returns the result of the second expression. Useful for setting default values.
 

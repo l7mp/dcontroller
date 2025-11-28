@@ -906,6 +906,143 @@ var _ = Describe("Expressions", func() {
 			Expect(v).To(Equal(int64(1)))
 		})
 
+		// @switch
+		It("should evaluate a basic @switch expression matching first case", func() {
+			jsonData := `{"@switch":[[true, "result_a"], [false, "result_b"]]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsString(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal("result_a"))
+		})
+
+		It("should evaluate a @switch expression matching second case", func() {
+			jsonData := `{"@switch":[[false, "result_a"], [true, "result_b"], [true, "result_c"]]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsString(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal("result_b"))
+		})
+
+		It("should evaluate a @switch expression with JSONPath conditions", func() {
+			jsonData := `{"@switch":[[{"@eq":["$.spec.a", 1]}, "matched_a"], [{"@eq":["$.spec.b.c", 2]}, "matched_b"], [true, "default"]]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsString(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal("matched_a"))
+		})
+
+		It("should evaluate a @switch expression with default case", func() {
+			jsonData := `{"@switch":[[{"@eq":["$.spec.a", 99]}, "no_match"], [true, "default"]]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsString(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal("default"))
+		})
+
+		It("should return nil when no @switch case matches", func() {
+			jsonData := `{"@switch":[[false, "result_a"], [false, "result_b"]]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(BeNil())
+		})
+
+		It("should shortcut @switch evaluation and not evaluate non-matching actions", func() {
+			// Second action would fail with "$.$$" but should not be evaluated.
+			jsonData := `{"@switch":[[true, "$.spec.a"], [false, "$.$$"]]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsInt(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(int64(1)))
+		})
+
+		It("should handle complex @switch expressions with nested conditions", func() {
+			jsonData := `{"@switch":[[{"@and":[{"@eq":["$.metadata.name", "name"]}, {"@eq":["$.spec.a", 1]}]}, "$.spec.b.c"], [true, 0]]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsInt(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(int64(2)))
+		})
+
+		It("should fail when @switch has empty cases", func() {
+			jsonData := `{"@switch":[]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			_, err = exp.Evaluate(ctx)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should fail when @switch has invalid pair length", func() {
+			jsonData := `{"@switch":[[true]]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			_, err = exp.Evaluate(ctx)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should fail when @switch case does not evaluate to boolean", func() {
+			jsonData := `{"@switch":[["not_a_bool", "result"]]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			_, err = exp.Evaluate(ctx)
+			Expect(err).To(HaveOccurred())
+		})
+
 		// @definedOr
 		It("should evaluate a basic true @definedOr expression", func() {
 			jsonData := `{"@definedOr":[1, 2]}`
