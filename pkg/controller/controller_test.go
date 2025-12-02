@@ -1005,6 +1005,78 @@ target:
 				return false
 			}, timeout*5, interval).Should(BeTrue(), "periodic reconciliation should recreate deleted object")
 		})
+
+		FIt("should filter source events by label selector", func() {
+			// Controller with label selector: only watch pods with app=app1
+			jsonData := `
+- '@project':
+    metadata:
+      name: $.metadata.name
+      namespace: $.metadata.namespace
+    spec:
+      image: $.spec.image`
+			var p opv1a1.Pipeline
+			err := yaml.Unmarshal([]byte(jsonData), &p)
+			Expect(err).NotTo(HaveOccurred())
+
+			config := opv1a1.Controller{
+				Name: "test-label-selector",
+				Sources: []opv1a1.Source{{
+					Resource: opv1a1.Resource{
+						Kind: "pod",
+					},
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"app": "app1"},
+					},
+				}},
+				Pipeline: p,
+				Target: opv1a1.Target{
+					Resource: opv1a1.Resource{
+						Kind: "result",
+					},
+				},
+			}
+
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = NewDeclarative(mgr, "test", config, Options{})
+			Expect(err).NotTo(HaveOccurred())
+
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			go func() { mgr.Start(ctx) }()
+
+			// Watch target to see which objects get created
+			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "result"))
+			Expect(err).NotTo(HaveOccurred())
+			defer watcher.Stop()
+
+			// Add pod1 (app=app1) - should be processed
+			err = vcache.Add(pod1)
+			Expect(err).NotTo(HaveOccurred())
+
+			event, ok := tryWatchWatcher(watcher, timeout)
+			Expect(ok).To(BeTrue())
+			Expect(event.Type).To(Equal(watch.Added))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod1"))
+
+			// Add pod2 (app=app2) - should NOT be processed
+			err = vcache.Add(pod2)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should not get any event
+			_, ok = tryWatchWatcher(watcher, 50*time.Millisecond)
+			Expect(ok).To(BeFalse(), "pod2 with app=app2 should be filtered out by label selector")
+
+			// Add pod3 (app=app1) - should be processed
+			err = vcache.Add(pod3)
+			Expect(err).NotTo(HaveOccurred())
+
+			event, ok = tryWatchWatcher(watcher, timeout)
+			Expect(ok).To(BeTrue())
+			Expect(event.Type).To(Equal(watch.Added))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod3"))
+		})
 	})
 })
 

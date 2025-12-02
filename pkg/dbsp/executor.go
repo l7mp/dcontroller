@@ -53,7 +53,7 @@ func (e *Executor) Process(inputs DeltaZSet) (*DocumentZSet, error) {
 	var err error
 
 	if e.graph.joinNode != "" {
-		e.log.V(2).Info("processing join", "inputs", strings.Join(inputStrs, ","))
+		e.log.V(2).Info("processing join", "input-delta", strings.Join(inputStrs, ","))
 
 		// Execute N-ary join
 		joinNode := e.graph.nodes[e.graph.joinNode]
@@ -73,7 +73,7 @@ func (e *Executor) Process(inputs DeltaZSet) (*DocumentZSet, error) {
 		currentResult = inputs[e.graph.inputIdx[e.graph.inputs[0]]]
 	}
 
-	e.log.V(2).Info("processing aggregations", "inputs", strings.Join(inputStrs, ","))
+	e.log.V(2).Info("processing aggregations", "input-delta", strings.Join(inputStrs, ","))
 
 	// Step 3: Execute linear chain (all operations are incremental-friendly)
 	for i, nodeID := range e.graph.chain {
@@ -89,7 +89,7 @@ func (e *Executor) Process(inputs DeltaZSet) (*DocumentZSet, error) {
 		// 	i, node.Op.Name(), previousSize, currentResult.Size())
 	}
 
-	e.log.V(4).Info("aggregations ready", "result", currentResult.String())
+	e.log.V(4).Info("executor ready", "result", currentResult.String())
 
 	return currentResult, nil
 }
