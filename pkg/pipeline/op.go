@@ -11,6 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+const trimEvalLen = 30
+
 // Selection operator.
 type SelectionOp struct {
 	e   *expression.Expression
@@ -18,7 +20,7 @@ type SelectionOp struct {
 }
 
 func (eval *SelectionOp) String() string {
-	return fmt.Sprintf("select:%s", eval.e.String())
+	return fmt.Sprintf("select:%s", trim(eval.e.String()))
 }
 
 func (eval *SelectionOp) Evaluate(doc dbsp.Document) ([]dbsp.Document, error) {
@@ -26,13 +28,14 @@ func (eval *SelectionOp) Evaluate(doc dbsp.Document) ([]dbsp.Document, error) {
 
 	res, err := eval.e.Evaluate(expression.EvalCtx{Object: doc, Log: eval.log})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to evaluate expression %s: %w",
+			eval.String(), err)
 	}
 
 	b, err := expression.AsBool(res)
 	if err != nil {
-		return nil, fmt.Errorf("expected conditional expression to evaluate to "+
-			"boolean: %w", err)
+		return nil, fmt.Errorf("failed to evaluate pipeline stage %s: %w",
+			eval.String(), err)
 	}
 
 	// default is no change
@@ -55,18 +58,20 @@ type ProjectionOp struct {
 }
 
 func (eval *ProjectionOp) String() string {
-	return fmt.Sprintf("project:%s", eval.e.String())
+	return fmt.Sprintf("project:%s", trim(eval.e.String()))
 }
 
 func (eval *ProjectionOp) Evaluate(doc dbsp.Document) ([]dbsp.Document, error) {
 	res, err := eval.e.Evaluate(expression.EvalCtx{Object: doc, Log: eval.log})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to evaluate expression %s: %w",
+			eval.String(), err)
 	}
 
 	us, err := expression.AsObjectOrObjectList(res)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to evaluate pipeline stage %s: %w",
+			eval.String(), err)
 	}
 
 	// if project receives a list, merge the resultant objects
@@ -98,7 +103,7 @@ type UnwindOp struct {
 }
 
 func (eval *UnwindOp) String() string {
-	return fmt.Sprintf("unwind:%s", eval.e.String())
+	return fmt.Sprintf("unwind:%s", trim(eval.e.String()))
 }
 
 type listElem struct {
@@ -136,18 +141,19 @@ func (eval *UnwindOp) Extract(doc dbsp.Document) (any, error) {
 func (eval *UnwindOp) Transform(doc dbsp.Document, v any) (dbsp.Document, error) {
 	elem, ok := v.(listElem)
 	if !ok {
-		return nil, errors.New("expected list-elem")
+		return nil, fmt.Errorf("list item not found in %s: expected list-elem", eval.String())
 	}
 
 	// the elem to the corresponding jsonpath
 	jp, err := eval.e.GetLiteralString()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to evaluate JSON expression in %s: %w",
+			eval.String(), err)
 	}
 
 	// must use the low-level jsonpath setter so that we retain the original object
 	if err := expression.SetJSONPathRaw(jp, elem.value, doc); err != nil {
-		return nil, fmt.Errorf("failed to set JSONpath %q to value %v: %w", jp, elem.value, err)
+		return nil, fmt.Errorf("failed to set JSONpath %s to value %v: %w", jp, elem.value, err)
 	}
 
 	name, err := expression.GetJSONPathRaw("$.metadata.name", doc)
@@ -190,7 +196,8 @@ type gatherExtractor struct {
 func (ext *gatherExtractor) Extract(doc dbsp.Document) (any, error) {
 	arg, err := ext.e.Evaluate(expression.EvalCtx{Object: doc, Log: ext.log})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to evaluate pipeline stage %s: %w",
+			ext.String(), err)
 	}
 	return arg, nil
 }
@@ -207,7 +214,7 @@ func (eval *GatherOp) Transform(doc dbsp.Document, v any) (dbsp.Document, error)
 	}
 
 	if err := expression.SetJSONPathRawExp(eval.e, aggrData.Values, doc); err != nil {
-		return nil, fmt.Errorf("failed to set elem %q at JSONpath %q: %w", v, eval.e.String(), err)
+		return nil, fmt.Errorf("failed to set elem %s at JSONpath %q: %w", v, eval.e.String(), err)
 	}
 
 	return doc, nil
@@ -240,18 +247,19 @@ type JoinOp struct {
 }
 
 func (eval *JoinOp) String() string {
-	return fmt.Sprintf("join:%s", eval.e.String())
+	return fmt.Sprintf("join:%s", trim(eval.e.String()))
 }
 
 func (eval *JoinOp) Evaluate(doc dbsp.Document) ([]dbsp.Document, error) {
 	res, err := eval.e.Evaluate(expression.EvalCtx{Object: doc, Log: eval.log})
 	if err != nil {
-		return nil, fmt.Errorf("failed to evaluate join expression: %w", err)
+		return nil, fmt.Errorf("failed to evaluate join expression %s: %w",
+			eval.String(), err)
 	}
 
 	arg, err := expression.AsBool(res)
 	if err != nil {
-		return nil, fmt.Errorf("expected boolean result from join expression: %w", err)
+		return nil, fmt.Errorf("expected boolean result in %s: %w", eval.String(), err)
 	}
 
 	ret := []dbsp.Document{}
@@ -269,4 +277,12 @@ func (p *Pipeline) NewJoinOp(e *expression.Expression, sources []schema.GroupVer
 	}
 	eval := &JoinOp{e: e, log: p.log.WithName("@join")}
 	return dbsp.NewIncrementalJoin(eval, inputs)
+}
+
+func trim(s string) string {
+	r := []rune(s)
+	if len(r) <= trimEvalLen+3 {
+		return s
+	}
+	return string(r[:trimEvalLen]) + "..."
 }

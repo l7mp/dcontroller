@@ -344,13 +344,14 @@ func AsObjectList(d any) ([]map[string]any, error) {
 
 // AsObjectOrObjectList returns an object or an expression list.
 func AsObjectOrObjectList(d any) ([]map[string]any, error) {
-	if vs, err := AsObject(d); err == nil {
-		return []map[string]any{vs}, nil
+	v, err := AsObject(d)
+	if err == nil {
+		return []map[string]any{v}, nil
 	}
-
 	if vs, err := AsObjectList(d); err == nil {
 		return vs, nil
 	}
 
-	return nil, fmt.Errorf("argument is not an object or an object list: %s", util.Stringify(d))
+	return nil, fmt.Errorf("argument %s is not an object or an object list: %w",
+		util.Stringify(d), err)
 }
