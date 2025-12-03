@@ -81,6 +81,10 @@ linters:
         - name: redefines-builtin-id
         - name: bool-literal-in-expr
         - name: constant-logical-expr
+    staticcheck:
+      dot-import-whitelist:
+        - "github.com/onsi/ginkgo/v2"
+        - "github.com/onsi/gomega"
   exclusions:
     generated: lax
     rules:
