@@ -363,16 +363,30 @@ func (c *OpController) Start(ctx context.Context) error {
 
 func (c *OpController) updateStatus(ctx context.Context, op *operator.Operator) {
 	key := types.NamespacedName{Name: op.GetName()}
+
+	// Fetch the Operator CRD once to get the generation, then capture the status snapshot.
+	// This ensures we're applying the same status on all retry attempts, preventing conflicts
+	// caused by the status changing between retries (e.g., new errors being pushed).
+	spec := opv1a1.Operator{}
+	if err := c.k8sClient.Get(ctx, key, &spec); err != nil {
+		c.log.Error(err, "failed to get operator for status update")
+		return
+	}
+
+	newStatus := op.GetStatus(spec.GetGeneration())
+
 	attempt := 0
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		attempt++
 
+		// Refetch the Operator to get the latest resourceVersion
 		spec := opv1a1.Operator{}
 		if err := c.k8sClient.Get(ctx, key, &spec); err != nil {
 			return err
 		}
 
-		spec.Status = op.GetStatus(spec.GetGeneration())
+		// Use the status snapshot captured before the retry loop
+		spec.Status = newStatus
 
 		c.log.V(2).Info("updating status", "attempt", attempt, "status", util.Stringify(spec.Status))
 
