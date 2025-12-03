@@ -45,7 +45,7 @@ const (
 	interval = time.Millisecond * 250
 	// loglevel = 1
 	// loglevel = -10
-	loglevel = -5
+	loglevel int8 = -5
 )
 
 var (

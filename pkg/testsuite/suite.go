@@ -25,7 +25,7 @@ import (
 
 type Suite struct {
 	Timeout, Interval time.Duration
-	LogLevel          int
+	LogLevel          int8
 	Cfg               *rest.Config
 	Scheme            *runtime.Scheme
 	K8sClient         client.Client
@@ -35,7 +35,7 @@ type Suite struct {
 	Log               logr.Logger
 }
 
-func New(loglevel int, crds ...string) (*Suite, error) {
+func New(loglevel int8, crds ...string) (*Suite, error) {
 	s := &Suite{
 		Timeout:  time.Second * 5,
 		Interval: time.Millisecond * 250,
@@ -48,7 +48,7 @@ func New(loglevel int, crds ...string) (*Suite, error) {
 		DestWriter:      GinkgoWriter,
 		StacktraceLevel: zapcore.Level(4),
 		TimeEncoder:     zapcore.RFC3339NanoTimeEncoder,
-		Level:           zapcore.Level(loglevel), //nolint:gosec
+		Level:           zapcore.Level(loglevel),
 	}
 	log := zap.New(zap.UseFlagOptions(&opts))
 	s.Log = log
