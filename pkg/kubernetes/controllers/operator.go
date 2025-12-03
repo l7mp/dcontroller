@@ -257,7 +257,12 @@ func (c *OpController) startOp(e *opEntry) {
 		for {
 			select {
 			case err := <-e.errorChan:
-				c.errorChan <- err
+				// Use non-blocking send to avoid writing to closed channel
+				select {
+				case c.errorChan <- err:
+				case <-c.ctx.Done():
+					return
+				}
 			case <-c.ctx.Done():
 				return
 			}
