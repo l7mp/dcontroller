@@ -3,6 +3,7 @@ package testutils
 import (
 	"time"
 
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -61,6 +62,7 @@ func TryWatchEvent(watcher watch.Interface, timeout time.Duration) (watch.Event,
 //	Expect(ok).To(BeTrue())
 //	testutils.MatchRequest(req, "default", "viewname", object.Added, gvk)
 func MatchRequest(req ReconcileRequest, ns, name string, eventType any, gvk schema.GroupVersionKind) {
+	GinkgoHelper()
 	Expect(req.GetObject()).NotTo(BeNil(), "Request should contain object snapshot")
 	Expect(req.GetNamespace()).To(Equal(ns))
 	Expect(req.GetName()).To(Equal(name))
