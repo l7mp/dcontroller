@@ -72,7 +72,8 @@ func (r *IncrementalReconciler) Reconcile(ctx context.Context, req reconciler.Re
 		r.log.V(4).Info("writing delta to target", "target", r.controller.target.String(),
 			"delta-type", d.Type, "object", object.Dump(d.Object))
 
-		if err := r.controller.target.Write(ctx, d); err != nil {
+		// Pass the original object from the request for optimistic concurrency control.
+		if err := r.controller.target.Write(ctx, d, req.Object); err != nil {
 			err = fmt.Errorf("cannot update target %s for delta %s: %w", req.GVK,
 				d.String(), err)
 			r.log.Error(r.controller.Push(err), "error", "request", req)
@@ -119,7 +120,8 @@ func (r *StateOfTheWorldReconciler) Reconcile(ctx context.Context, req reconcile
 		r.log.V(4).Info("writing delta to target", "target", r.controller.target.String(),
 			"delta-type", d.Type, "object", object.Dump(d.Object))
 
-		if err := r.controller.target.Write(ctx, d); err != nil {
+		// Pass nil for state-of-the-world reconciliation (eventual consistency is acceptable).
+		if err := r.controller.target.Write(ctx, d, nil); err != nil {
 			err = fmt.Errorf("cannot update target %s for delta %s: %w",
 				r.controller.target.String(), d.String(), err)
 			r.log.Error(r.controller.Push(err), "error", "request", req)

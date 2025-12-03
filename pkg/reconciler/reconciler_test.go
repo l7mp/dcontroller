@@ -505,7 +505,7 @@ var _ = Describe("Reconciler", func() {
 			go func() { mgr.Start(ctx) }()
 
 			// Push a view object to the target
-			err = target.Write(ctx, object.Delta{Type: object.Added, Object: view})
+			err = target.Write(ctx, object.Delta{Type: object.Added, Object: view}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Get view cache
@@ -524,7 +524,7 @@ var _ = Describe("Reconciler", func() {
 			view2 := object.DeepCopy(view)
 			object.SetContent(view2, map[string]any{"b": int64(2)})
 
-			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: view2})
+			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: view2}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok = testutils.TryWatchEvent(watcher, interval)
@@ -537,7 +537,7 @@ var _ = Describe("Reconciler", func() {
 			// Expect(res).To(Equal(event.Object.(object.Object)))
 
 			// Push a delete to the target
-			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: view2})
+			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: view2}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok = testutils.TryWatchEvent(watcher, interval)
@@ -566,7 +566,7 @@ var _ = Describe("Reconciler", func() {
 			})
 
 			// Push a view object to the target
-			err = target.Write(ctx, object.Delta{Type: object.Added, Object: pod2})
+			err = target.Write(ctx, object.Delta{Type: object.Added, Object: pod2}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Get from the object tracker: a normal get would go through the cache
@@ -605,7 +605,7 @@ var _ = Describe("Reconciler", func() {
 			unstructured.RemoveNestedField(newPod.UnstructuredContent(), "spec", "containers")
 			unstructured.SetNestedField(newPod.UnstructuredContent(), "Always", "spec", "restartPolicy")
 
-			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: newPod})
+			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: newPod}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			getFromTracker, err = tracker.Get(gvr, "testns", "testpod")
@@ -636,7 +636,7 @@ var _ = Describe("Reconciler", func() {
 				"reason":  "testreason",
 			}, "status")
 
-			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: newPod})
+			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: newPod}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			getFromTracker, err = tracker.Get(gvr, "testns", "testpod")
@@ -659,7 +659,7 @@ var _ = Describe("Reconciler", func() {
 			}))
 
 			// Delete from the target
-			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: newPod})
+			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: newPod}, nil)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -695,7 +695,7 @@ var _ = Describe("Reconciler", func() {
 			view2 := object.DeepCopy(view)
 			object.SetContent(view2, map[string]any{"b": int64(2)})
 
-			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: view2})
+			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: view2}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok = testutils.TryWatchEvent(watcher, interval)
@@ -711,7 +711,7 @@ var _ = Describe("Reconciler", func() {
 			// view3 := object.DeepCopy(view2)
 			// Expect(unstructured.SetNestedField(view3.UnstructuredContent(),
 			// 	map[string]any{"b": int64(2)}, "status")).NotTo(HaveOccurred())
-			// err = target.Write(ctx, object.Delta{Type: object.Updated, Object: view3})
+			// err = target.Write(ctx, object.Delta{Type: object.Updated, Object: view3}, nil)
 			// Expect(err).NotTo(HaveOccurred())
 
 			// event, ok = testutils.TryWatchEvent(watcher, interval)
@@ -730,7 +730,7 @@ var _ = Describe("Reconciler", func() {
 			object.SetContent(view4, map[string]any{"a": int64(1)})
 			// TODO: this will work in a patch but how do do this from a pipeline???
 			Expect(unstructured.SetNestedField(view4.UnstructuredContent(), nil, "status")).NotTo(HaveOccurred())
-			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: view4})
+			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: view4}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok = testutils.TryWatchEvent(watcher, interval)
@@ -781,7 +781,7 @@ var _ = Describe("Reconciler", func() {
 			view2 := object.DeepCopy(view)
 			Expect(unstructured.SetNestedField(view2.UnstructuredContent(),
 				map[string]any{"ready": "true"}, "status")).NotTo(HaveOccurred())
-			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: view2})
+			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: view2}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok = testutils.TryWatchEvent(watcher, interval)
@@ -799,7 +799,7 @@ var _ = Describe("Reconciler", func() {
 			view3 := object.NewViewObject("test", "view")
 			Expect(unstructured.SetNestedField(view3.UnstructuredContent(), "", "status")).NotTo(HaveOccurred())
 			object.SetName(view3, "default", "viewname")
-			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: view3})
+			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: view3}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok = testutils.TryWatchEvent(watcher, interval)
@@ -843,7 +843,7 @@ var _ = Describe("Reconciler", func() {
 			newPod := object.DeepCopy(pod2)
 			unstructured.RemoveNestedField(newPod.UnstructuredContent(), "spec", "containers")
 			unstructured.SetNestedField(newPod.UnstructuredContent(), "Always", "spec", "restartPolicy")
-			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: newPod})
+			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: newPod}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			tracker := mgr.GetObjectTracker()
@@ -884,7 +884,7 @@ var _ = Describe("Reconciler", func() {
 			// newPod.SetName("testpod")
 			// newPod.SetNamespace("testns")
 			// unstructured.SetNestedField(newPod.UnstructuredContent(), nil, "spec", "containers")
-			// err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: newPod})
+			// err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: newPod}, nil)
 			// Expect(err).NotTo(HaveOccurred())
 			// getFromTracker, err = tracker.Get(gvr, "testns", "testpod")
 			// Expect(err).NotTo(HaveOccurred())
@@ -930,7 +930,7 @@ var _ = Describe("Reconciler", func() {
 			go func() { mgr.Start(ctx) }()
 
 			// Push a view object to the target
-			err = target.Write(ctx, object.Delta{Type: object.Added, Object: view})
+			err = target.Write(ctx, object.Delta{Type: object.Added, Object: view}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Get view cache

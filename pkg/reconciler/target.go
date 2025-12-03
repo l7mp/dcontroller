@@ -22,7 +22,7 @@ import (
 // Target is a generic writer that knows how to create controller runtime objects in a target resource.
 type Target interface {
 	Resource
-	Write(context.Context, object.Delta) error
+	Write(context.Context, object.Delta, object.Object) error
 	fmt.Stringer
 }
 
@@ -57,7 +57,10 @@ func (t *target) String() string {
 //   - For Patchers the delta object is applied as a strategic merge patch: for Add and Update
 //     deltas the target is patched with the delta object, while for Delete the delta object
 //     content is removed from the target using a strategic merge patch.
-func (t *target) Write(ctx context.Context, delta object.Delta) error {
+//
+// The originalObject parameter is the object snapshot from the reconcile request, used for
+// optimistic concurrency control in Patcher mode. If nil, the current object is fetched.
+func (t *target) Write(ctx context.Context, delta object.Delta, originalObject object.Object) error {
 	if delta.Object == nil {
 		return errors.New("write: empty object in delta")
 	}
@@ -77,7 +80,7 @@ func (t *target) Write(ctx context.Context, delta object.Delta) error {
 	case opv1a1.Updater, "":
 		return t.update(ctx, delta)
 	case opv1a1.Patcher:
-		return t.patch(ctx, delta)
+		return t.patch(ctx, delta, originalObject)
 	default:
 		return fmt.Errorf("unknown target type: %s", t.target.Type)
 	}
@@ -161,7 +164,7 @@ func (t *target) update(ctx context.Context, delta object.Delta) error {
 	}
 }
 
-func (t *target) patch(ctx context.Context, delta object.Delta) error {
+func (t *target) patch(ctx context.Context, delta object.Delta, originalObject object.Object) error {
 	t.log.V(5).Info("patching target", "delta-type", delta.Type, "object", object.Dump(delta.Object))
 
 	c := t.mgr.GetClient()
@@ -172,38 +175,56 @@ func (t *target) patch(ctx context.Context, delta object.Delta) error {
 		t.log.V(4).Info("update-patch", "event-type", delta.Type,
 			"key", client.ObjectKeyFromObject(delta.Object).String())
 
-		obj := object.New()
+		// Check if we can use the original object snapshot (same GVK, namespace, name)
+		useOriginal := originalObject != nil &&
+			originalObject.GroupVersionKind() == delta.Object.GroupVersionKind() &&
+			originalObject.GetNamespace() == delta.Object.GetNamespace() &&
+			originalObject.GetName() == delta.Object.GetName()
+
+		var obj object.Object
+		if useOriginal {
+			// Use the original object snapshot (has correct resourceVersion)
+			obj = object.DeepCopy(originalObject)
+			t.log.V(4).Info("using original object snapshot for patch",
+				"resourceVersion", obj.GetResourceVersion())
+		} else {
+			// Fetch current target object
+			obj = object.New()
+			obj.SetGroupVersionKind(delta.Object.GroupVersionKind())
+			obj.SetName(delta.Object.GetName())
+			obj.SetNamespace(delta.Object.GetNamespace())
+			if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+				return err
+			}
+			t.log.V(4).Info("fetched target object for patch",
+				"resourceVersion", obj.GetResourceVersion())
+		}
+
+		// Apply delta changes to the object in-place using merge-patch semantics (RFC 7386).
+		// This properly merges nested objects and arrays rather than replacing them.
+		if err := object.Patch(obj, delta.Object.UnstructuredContent()); err != nil {
+			return err
+		}
+
+		// Restore critical metadata that must not be overwritten
 		obj.SetGroupVersionKind(delta.Object.GroupVersionKind())
 		obj.SetName(delta.Object.GetName())
 		obj.SetNamespace(delta.Object.GetNamespace())
-		if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+
+		// Use Update instead of Patch (Kubernetes will reject if resourceVersion is stale)
+		if err := c.Update(ctx, obj); err != nil {
 			return err
 		}
 
-		// TODO: strategic merge patch would need the schema, so we must fall back to
-		// simple merge-patches here
-		patch, err := json.Marshal(object.DeepCopy(delta.Object).UnstructuredContent())
-		if err != nil {
-			return err
-		}
-		if err := c.Patch(ctx, obj, client.RawPatch(types.MergePatchType, patch)); err != nil {
-			return err
-		}
-
-		// Patch does not update the status so we have to do this separately
-		// must copy status here otherwise Patch may reewrite it
+		// Update status separately if present
 		newStatus, hasStatus, err := unstructured.NestedMap(delta.Object.UnstructuredContent(), "status")
 		if err == nil && hasStatus {
 			if err := unstructured.SetNestedMap(obj.Object, newStatus, "status"); err != nil {
 				return err
 			}
-
-			patch, err = json.Marshal(obj)
-			if err != nil {
+			if err := c.Status().Update(ctx, obj); err != nil {
 				return err
 			}
-
-			return c.Status().Patch(ctx, obj, client.RawPatch(types.MergePatchType, patch))
 		}
 
 		return nil
