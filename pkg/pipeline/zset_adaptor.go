@@ -165,7 +165,7 @@ func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, target schema.Gro
 // Reconcile processes a delta set containing only unordered(!) add/delete ops into a proper
 // ordered(!) delete/upsert delta list.
 //
-// DBSP outputs onordered zsets so there is no way to know for documents that map to the same
+// DBSP outputs unordered zsets so there is no way to know for documents that map to the same
 // primary key whether an add or a delete comes first, and the two orders yield different
 // results. To remove this ambiguity, we maintain a target cache that contains the latest known
 // state of the target view and we take the (doc->+/-1) pairs in any order from the zset result
@@ -182,7 +182,7 @@ func (p *Pipeline) ConvertZSetToDelta(zset *dbsp.DocumentZSet, target schema.Gro
 //     and the result delta, otherwise we drop the delete event and move on.
 //
 // NOTE: this heuristics may still lead to problems, e.g., if there is a delete followed by an add
-// to an object that contains a dynami field (e.g., @now), in which case the delete will fail to
+// to an object that contains a dynamic field (e.g., @now), in which case the delete will fail to
 // find the exact same object in the target cache (since the timestamps differ)
 type deltaCounter struct {
 	count int

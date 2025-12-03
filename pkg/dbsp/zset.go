@@ -355,7 +355,11 @@ func (dz *DocumentZSet) String() string {
 		}
 
 		doc := dz.docs[key]
-		result += fmt.Sprintf("%v×%d", doc, count)
+		str, err := computeJSONKey(doc)
+		if err != nil {
+			continue
+		}
+		result += fmt.Sprintf("%v×%d", str, count)
 		first = false
 	}
 
