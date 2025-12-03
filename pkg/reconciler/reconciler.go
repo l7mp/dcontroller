@@ -62,11 +62,37 @@ type Request struct {
 	Namespace, Name string
 	EventType       object.DeltaType
 	GVK             schema.GroupVersionKind
+	Object          object.Object // Snapshot of the object at event time (fixes TOCTOU races)
 }
 
 // String stringifies a reconciliation request.
 func (r *Request) String() string {
 	return fmt.Sprintf("req:{ns:%s/name:%s/type:%s/gvk:%s}", r.Namespace, r.Name, r.EventType, r.GVK)
+}
+
+// GetNamespace returns the namespace of the request.
+func (r Request) GetNamespace() string {
+	return r.Namespace
+}
+
+// GetName returns the name of the request.
+func (r Request) GetName() string {
+	return r.Name
+}
+
+// GetEventType returns the event type of the request.
+func (r Request) GetEventType() object.DeltaType {
+	return r.EventType
+}
+
+// GetGVK returns the GroupVersionKind of the request.
+func (r Request) GetGVK() schema.GroupVersionKind {
+	return r.GVK
+}
+
+// GetObject returns the object snapshot from the request.
+func (r Request) GetObject() object.Object {
+	return r.Object
 }
 
 // Create createa a "create" event.
@@ -93,10 +119,18 @@ func (h EventHandler[O]) Generic(ctx context.Context, evt event.TypedGenericEven
 }
 
 func (h EventHandler[O]) enqueue(obj O, eventType object.DeltaType, q workqueue.TypedRateLimitingInterface[Request]) {
+	// DeepCopy the object to create a snapshot at event time.
+	// This prevents TOCTOU races where the object changes between predicate check and reconciliation.
+	var snapshot object.Object
+	if o, ok := any(obj).(object.Object); ok {
+		snapshot = object.DeepCopy(o)
+	}
+
 	q.Add(Request{
 		Name:      obj.GetName(),
 		Namespace: obj.GetNamespace(),
 		EventType: eventType,
 		GVK:       obj.GetObjectKind().GroupVersionKind(),
+		Object:    snapshot,
 	})
 }

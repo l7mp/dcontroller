@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/go-logr/logr"
-	. "github.com/onsi/ginkgo/v2" //nolint:staticcheck
+	. "github.com/onsi/ginkgo/v2"
 
+	"github.com/go-logr/logr"
 	"go.uber.org/zap/zapcore"
 	appsv1 "k8s.io/api/apps/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"

@@ -52,7 +52,7 @@ var (
 	port          int
 	epCtrl        *testEpCtrl
 	errorCh       chan error
-	eventCh       chan dreconciler.Request
+	eventCh       chan testutils.ReconcileRequest
 	server        *apiserver.APIServer
 	dynamicClient dynamic.Interface
 	watcher       watch.Interface
@@ -151,7 +151,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 
 		It("should create and start the controller", func() {
 			suite.Log.Info("loading the operator from file")
-			eventCh = make(chan dreconciler.Request, 16)
+			eventCh = make(chan testutils.ReconcileRequest, 16)
 			errorCh = make(chan error, 16)
 			opts := doperator.Options{
 				ErrorChannel: errorCh,
@@ -247,61 +247,53 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			Expect(suite.K8sClient.Create(ctx, es1)).Should(Succeed())
 
 			specs = []map[string]any{}
-			req, err := watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Added))
-			obj := object.NewViewObject(OperatorName, req.GVK.Kind)
-			err = epCtrl.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, obj)
-			Expect(err).Should(Succeed())
+			req, ok := testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Added))
+			obj := req.GetObject()
 			Expect(obj.GetName()).To(HavePrefix("test-service"))
 			Expect(obj.GetNamespace()).To(Equal("testnamespace"))
 			spec, ok, err := unstructured.NestedMap(obj.Object, "spec")
 			Expect(err).Should(Succeed())
 			Expect(ok).To(BeTrue())
 			specs = append(specs, spec)
-			epNames = append(epNames, req.Name)
+			epNames = append(epNames, req.GetName())
 
-			req, err = watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Added))
-			obj = object.NewViewObject(OperatorName, req.GVK.Kind)
-			err = epCtrl.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, obj)
-			Expect(err).Should(Succeed())
+			req, ok = testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Added))
+			obj = req.GetObject()
 			Expect(obj.GetName()).To(HavePrefix("test-service"))
 			Expect(obj.GetNamespace()).To(Equal("testnamespace"))
 			spec, ok, err = unstructured.NestedMap(obj.Object, "spec")
 			Expect(err).Should(Succeed())
 			Expect(ok).To(BeTrue())
 			specs = append(specs, spec)
-			epNames = append(epNames, req.Name)
+			epNames = append(epNames, req.GetName())
 
-			req, err = watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Added))
-			obj = object.NewViewObject(OperatorName, req.GVK.Kind)
-			err = epCtrl.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, obj)
-			Expect(err).Should(Succeed())
+			req, ok = testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Added))
+			obj = req.GetObject()
 			Expect(obj.GetName()).To(HavePrefix("test-service"))
 			Expect(obj.GetNamespace()).To(Equal("testnamespace"))
 			spec, ok, err = unstructured.NestedMap(obj.Object, "spec")
 			Expect(err).Should(Succeed())
 			Expect(ok).To(BeTrue())
 			specs = append(specs, spec)
-			epNames = append(epNames, req.Name)
+			epNames = append(epNames, req.GetName())
 
-			req, err = watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Added))
-			obj = object.NewViewObject(OperatorName, req.GVK.Kind)
-			err = epCtrl.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, obj)
-			Expect(err).Should(Succeed())
+			req, ok = testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Added))
+			obj = req.GetObject()
 			Expect(obj.GetName()).To(HavePrefix("test-service"))
 			Expect(obj.GetNamespace()).To(Equal("testnamespace"))
 			spec, ok, err = unstructured.NestedMap(obj.Object, "spec")
 			Expect(err).Should(Succeed())
 			Expect(ok).To(BeTrue())
 			specs = append(specs, spec)
-			epNames = append(epNames, req.Name)
+			epNames = append(epNames, req.GetName())
 
 			Expect(epNames).To(HaveLen(4))
 			checkSpecs(specs, []string{"192.0.2.1", "192.0.2.2"})
@@ -406,23 +398,21 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			epNames = []string{}
 			specs = []map[string]any{}
 			for i := 0; i < 4; i++ {
-				req, err := watchEvent(suite.Timeout)
-				Expect(err).Should(Succeed())
-				switch req.EventType {
+				req, ok := testutils.TryWatchReq(eventCh, suite.Timeout)
+				Expect(ok).To(BeTrue())
+				switch req.GetEventType() {
 				case object.Deleted:
-					Expect(req.Name).To(HavePrefix("test-service"))
-					Expect(req.Namespace).To(Equal("testnamespace"))
+					Expect(req.GetName()).To(HavePrefix("test-service"))
+					Expect(req.GetNamespace()).To(Equal("testnamespace"))
 				case object.Upserted, object.Added:
-					obj := object.NewViewObject(OperatorName, req.GVK.Kind)
-					err = epCtrl.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, obj)
-					Expect(err).Should(Succeed())
+					obj := req.GetObject()
 					Expect(obj.GetName()).To(HavePrefix("test-service"))
 					Expect(obj.GetNamespace()).To(Equal("testnamespace"))
 					spec, ok, err := unstructured.NestedMap(obj.Object, "spec")
 					Expect(err).Should(Succeed())
 					Expect(ok).To(BeTrue())
 					specs = append(specs, spec)
-					epNames = append(epNames, req.Name)
+					epNames = append(epNames, req.GetName())
 				default:
 					Fail("unexpected delta type")
 				}
@@ -466,29 +456,29 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			})
 			Expect(err).ToNot(HaveOccurred())
 
-			req, err := watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Deleted))
-			Expect(req.Name).To(HavePrefix("test-service"))
-			Expect(req.Namespace).To(Equal("testnamespace"))
+			req, ok := testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Deleted))
+			Expect(req.GetName()).To(HavePrefix("test-service"))
+			Expect(req.GetNamespace()).To(Equal("testnamespace"))
 
-			req, err = watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Deleted))
-			Expect(req.Name).To(HavePrefix("test-service"))
-			Expect(req.Namespace).To(Equal("testnamespace"))
+			req, ok = testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Deleted))
+			Expect(req.GetName()).To(HavePrefix("test-service"))
+			Expect(req.GetNamespace()).To(Equal("testnamespace"))
 
-			req, err = watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Deleted))
-			Expect(req.Name).To(HavePrefix("test-service"))
-			Expect(req.Namespace).To(Equal("testnamespace"))
+			req, ok = testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Deleted))
+			Expect(req.GetName()).To(HavePrefix("test-service"))
+			Expect(req.GetNamespace()).To(Equal("testnamespace"))
 
-			req, err = watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Deleted))
-			Expect(req.Name).To(HavePrefix("test-service"))
-			Expect(req.Namespace).To(Equal("testnamespace"))
+			req, ok = testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Deleted))
+			Expect(req.GetName()).To(HavePrefix("test-service"))
+			Expect(req.GetNamespace()).To(Equal("testnamespace"))
 		})
 
 		It("should delete the objects added", func() {
@@ -541,7 +531,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Load the operator from file
-			eventCh = make(chan dreconciler.Request, 16)
+			eventCh = make(chan testutils.ReconcileRequest, 16)
 			errorCh = make(chan error, 16)
 			opts := doperator.Options{
 				ErrorChannel: errorCh,
@@ -601,12 +591,10 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			Expect(suite.K8sClient.Create(ctx, es1)).Should(Succeed())
 
 			specs = []map[string]any{}
-			req, err := watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Added))
-			obj := object.NewViewObject(OperatorName, req.GVK.Kind)
-			err = epCtrl.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, obj)
-			Expect(err).Should(Succeed())
+			req, ok := testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Added))
+			obj := req.GetObject()
 			Expect(obj.GetName()).To(HavePrefix("test-service"))
 			Expect(obj.GetNamespace()).To(Equal("testnamespace"))
 			spec, ok, err := unstructured.NestedMap(obj.Object, "spec")
@@ -614,12 +602,10 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			Expect(ok).To(BeTrue())
 			specs = append(specs, spec)
 
-			req, err = watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Added))
-			obj = object.NewViewObject(OperatorName, req.GVK.Kind)
-			err = epCtrl.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, obj)
-			Expect(err).Should(Succeed())
+			req, ok = testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Added))
+			obj = req.GetObject()
 			Expect(obj.GetName()).To(HavePrefix("test-service"))
 			Expect(obj.GetNamespace()).To(Equal("testnamespace"))
 			spec, ok, err = unstructured.NestedMap(obj.Object, "spec")
@@ -663,12 +649,10 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			Expect(err).Should(Succeed())
 
 			specs = []map[string]any{}
-			req, err := watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Updated))
-			obj := object.NewViewObject(OperatorName, req.GVK.Kind)
-			err = epCtrl.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, obj)
-			Expect(err).Should(Succeed())
+			req, ok := testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Updated))
+			obj := req.GetObject()
 			Expect(obj.GetName()).To(HavePrefix("test-service"))
 			Expect(obj.GetNamespace()).To(Equal("testnamespace"))
 			spec, ok, err := unstructured.NestedMap(obj.Object, "spec")
@@ -676,12 +660,10 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			Expect(ok).To(BeTrue())
 			specs = append(specs, spec)
 
-			req, err = watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Updated))
-			obj = object.NewViewObject(OperatorName, req.GVK.Kind)
-			err = epCtrl.Get(ctx, types.NamespacedName{Name: req.Name, Namespace: req.Namespace}, obj)
-			Expect(err).Should(Succeed())
+			req, ok = testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Updated))
+			obj = req.GetObject()
 			Expect(obj.GetName()).To(HavePrefix("test-service"))
 			Expect(obj.GetNamespace()).To(Equal("testnamespace"))
 			spec, ok, err = unstructured.NestedMap(obj.Object, "spec")
@@ -723,17 +705,17 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 
 			time.Sleep(5 * time.Second)
 
-			req, err := watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Deleted))
-			Expect(req.Name).To(HavePrefix("test-service"))
-			Expect(req.Namespace).To(Equal("testnamespace"))
+			req, ok := testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Deleted))
+			Expect(req.GetName()).To(HavePrefix("test-service"))
+			Expect(req.GetNamespace()).To(Equal("testnamespace"))
 
-			req, err = watchEvent(suite.Timeout)
-			Expect(err).Should(Succeed())
-			Expect(req.EventType).To(Equal(object.Deleted))
-			Expect(req.Name).To(HavePrefix("test-service"))
-			Expect(req.Namespace).To(Equal("testnamespace"))
+			req, ok = testutils.TryWatchReq(eventCh, suite.Timeout)
+			Expect(ok).To(BeTrue())
+			Expect(req.GetEventType()).To(Equal(object.Deleted))
+			Expect(req.GetName()).To(HavePrefix("test-service"))
+			Expect(req.GetNamespace()).To(Equal("testnamespace"))
 		})
 
 		It("should delete the objects added", func() {
@@ -743,16 +725,6 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 		})
 	})
 })
-
-// wait for some configurable time for a watch event
-func watchEvent(d time.Duration) (dreconciler.Request, error) {
-	select {
-	case e := <-eventCh:
-		return e, nil
-	case <-time.After(d):
-		return dreconciler.Request{}, errors.New("timeout")
-	}
-}
 
 // wait for some configurable time for a watch event
 func apiServerWatchEvent(d time.Duration) (watch.Event, error) {

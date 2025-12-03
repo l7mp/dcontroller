@@ -41,6 +41,8 @@ type opEntry struct {
 }
 
 type OpController struct {
+	// Base context, only valid after started==true
+	ctx context.Context
 	// Manager for watching Operator CRDs from Kubernetes
 	crdMgr runtimeMgr.Manager
 	// Client for accessing Kubernetes API (Operator CRDs)
@@ -245,10 +247,20 @@ func (c *OpController) DeleteOperator(name string) {
 
 // startOp starts error channel aggregation for an operator.
 func (c *OpController) startOp(e *opEntry) {
+	if !c.started {
+		c.log.Error(errors.New("attempt to call startOp before operator started"),
+			"operator", e.op.GetName())
+		return
+	}
 	// Pass the errors on to our caller
 	go func() {
-		for err := range e.errorChan {
-			c.errorChan <- err
+		for {
+			select {
+			case err := <-e.errorChan:
+				c.errorChan <- err
+			case <-c.ctx.Done():
+				return
+			}
 		}
 	}()
 }
@@ -285,8 +297,6 @@ func (c *OpController) Reconcile(ctx context.Context, req reconcile.Request) (re
 // Starts both the CRD manager (for watching Operator CRDs) and the operator manager
 // (for running operators and storing views).
 func (c *OpController) Start(ctx context.Context) error {
-	defer close(c.errorChan)
-
 	c.log.V(2).Info("starting operator controller", "num-operators", len(c.operators),
 		"APIServer", fmt.Sprintf("%t", c.apiServer != nil))
 
@@ -297,6 +307,7 @@ func (c *OpController) Start(ctx context.Context) error {
 		es = append(es, e)
 	}
 	c.started = true
+	c.ctx = ctx
 	c.mu.Unlock()
 
 	// Start all operators
@@ -307,6 +318,7 @@ func (c *OpController) Start(ctx context.Context) error {
 	// Start the operator manager (in a goroutine)
 	go func() {
 		c.log.V(2).Info("starting operator manager")
+
 		if err := c.operatorMgr.Start(ctx); err != nil {
 			c.log.Error(err, "operator manager error")
 		}
@@ -314,6 +326,7 @@ func (c *OpController) Start(ctx context.Context) error {
 
 	// Surface errors from operators and generate CRD statuses.
 	go func() {
+		defer close(c.errorChan)
 		for {
 			select {
 			case err := <-c.errorChan:

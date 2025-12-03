@@ -7,6 +7,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +22,7 @@ import (
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/composite"
@@ -55,7 +57,7 @@ var (
 			RestartPolicy: corev1.RestartPolicyOnFailure,
 		},
 	}
-	watcher chan Request
+	watcher chan testutils.ReconcileRequest
 )
 
 func TestReconciler(t *testing.T) {
@@ -63,7 +65,9 @@ func TestReconciler(t *testing.T) {
 	RunSpecs(t, "Controller")
 }
 
-type testReconciler struct{ watcher chan Request }
+type testReconciler struct {
+	watcher chan testutils.ReconcileRequest
+}
 
 func (r *testReconciler) Reconcile(ctx context.Context, req Request) (reconcile.Result, error) {
 	log.V(4).Info("reconcile", "request", req)
@@ -105,7 +109,7 @@ var _ = Describe("Reconciler", func() {
 		})
 
 		ctx, cancel = context.WithCancel(context.Background())
-		watcher = make(chan Request, 10)
+		watcher = make(chan testutils.ReconcileRequest, 10)
 	})
 
 	AfterEach(func() {
@@ -151,18 +155,13 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Try to obtain the view from the watcher
-			req, ok := tryWatchReq(watcher, interval)
+			req, ok := testutils.TryWatchReq(watcher, interval)
 			Expect(ok).To(BeTrue())
-			Expect(req).To(Equal(Request{
-				Namespace: "default",
-				Name:      "viewname",
-				EventType: object.Added,
-				GVK: schema.GroupVersionKind{
-					Group:   "test." + viewv1a1.GroupSuffix,
-					Version: viewv1a1.Version,
-					Kind:    "view",
-				},
-			}))
+			testutils.MatchRequest(req, "default", "viewname", object.Added, schema.GroupVersionKind{
+				Group:   "test." + viewv1a1.GroupSuffix,
+				Version: viewv1a1.Version,
+				Kind:    "view",
+			})
 
 			// Modify the view object
 			newObj := object.DeepCopy(oldObj)
@@ -171,36 +170,26 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Try to obtain the view from the watcher
-			req, ok = tryWatchReq(watcher, interval)
+			req, ok = testutils.TryWatchReq(watcher, interval)
 			Expect(ok).To(BeTrue())
-			Expect(req).To(Equal(Request{
-				Namespace: "default",
-				Name:      "viewname",
-				EventType: object.Updated,
-				GVK: schema.GroupVersionKind{
-					Group:   "test." + viewv1a1.GroupSuffix,
-					Version: viewv1a1.Version,
-					Kind:    "view",
-				},
-			}))
+			testutils.MatchRequest(req, "default", "viewname", object.Updated, schema.GroupVersionKind{
+				Group:   "test." + viewv1a1.GroupSuffix,
+				Version: viewv1a1.Version,
+				Kind:    "view",
+			})
 
 			// Delete the view object
 			err = vcache.Delete(oldObj)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Try to obtain the view from the watcher
-			req, ok = tryWatchReq(watcher, interval)
+			req, ok = testutils.TryWatchReq(watcher, interval)
 			Expect(ok).To(BeTrue())
-			Expect(req).To(Equal(Request{
-				Namespace: "default",
-				Name:      "viewname",
-				EventType: object.Deleted,
-				GVK: schema.GroupVersionKind{
-					Group:   "test." + viewv1a1.GroupSuffix,
-					Version: viewv1a1.Version,
-					Kind:    "view",
-				},
-			}))
+			testutils.MatchRequest(req, "default", "viewname", object.Deleted, schema.GroupVersionKind{
+				Group:   "test." + viewv1a1.GroupSuffix,
+				Version: viewv1a1.Version,
+				Kind:    "view",
+			})
 		})
 
 		It("should be able to create a watch and emit events for native objects", func() {
@@ -281,18 +270,13 @@ var _ = Describe("Reconciler", func() {
 			go func() { mgr.Start(ctx) }()
 
 			// Try to obtain the view from the watcher
-			req, ok := tryWatchReq(watcher, interval)
+			req, ok := testutils.TryWatchReq(watcher, interval)
 			Expect(ok).To(BeTrue())
-			Expect(req).To(Equal(Request{
-				Namespace: "default",
-				Name:      "podname",
-				EventType: object.Added,
-				GVK: schema.GroupVersionKind{
-					Group:   "",
-					Version: "v1",
-					Kind:    "Pod",
-				},
-			}))
+			testutils.MatchRequest(req, "default", "podname", object.Added, schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			})
 		})
 
 		It("should be able to watch and filter views by a predicate", func() {
@@ -330,7 +314,7 @@ var _ = Describe("Reconciler", func() {
 			err = vcache.Add(oldObj)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, ok := tryWatchReq(watcher, 5*interval)
+			_, ok := testutils.TryWatchReq(watcher, 5*interval)
 			Expect(ok).To(BeFalse())
 
 			// Get the object and check
@@ -344,18 +328,13 @@ var _ = Describe("Reconciler", func() {
 			err = vcache.Update(oldObj, newObj)
 			Expect(err).NotTo(HaveOccurred())
 
-			req, ok := tryWatchReq(watcher, interval)
+			req, ok := testutils.TryWatchReq(watcher, interval)
 			Expect(ok).To(BeTrue())
-			Expect(req).To(Equal(Request{
-				Namespace: "default",
-				Name:      "viewname",
-				EventType: object.Updated,
-				GVK: schema.GroupVersionKind{
-					Group:   "test." + viewv1a1.GroupSuffix,
-					Version: viewv1a1.Version,
-					Kind:    "view",
-				},
-			}))
+			testutils.MatchRequest(req, "default", "viewname", object.Updated, schema.GroupVersionKind{
+				Group:   "test." + viewv1a1.GroupSuffix,
+				Version: viewv1a1.Version,
+				Kind:    "view",
+			})
 
 			// Get the object and check
 			res = object.NewViewObject("test", "view")
@@ -369,7 +348,7 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Try to obtain the view from the watcher
-			_, ok = tryWatchReq(watcher, interval)
+			_, ok = testutils.TryWatchReq(watcher, interval)
 			Expect(ok).To(BeFalse())
 
 			// Get the object and check
@@ -385,18 +364,13 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Try to obtain the view from the watcher
-			req, ok = tryWatchReq(watcher, interval)
+			req, ok = testutils.TryWatchReq(watcher, interval)
 			Expect(ok).To(BeTrue())
-			Expect(req).To(Equal(Request{
-				Namespace: "default",
-				Name:      "viewname",
-				EventType: object.Updated,
-				GVK: schema.GroupVersionKind{
-					Group:   "test." + viewv1a1.GroupSuffix,
-					Version: viewv1a1.Version,
-					Kind:    "view",
-				},
-			}))
+			testutils.MatchRequest(req, "default", "viewname", object.Updated, schema.GroupVersionKind{
+				Group:   "test." + viewv1a1.GroupSuffix,
+				Version: viewv1a1.Version,
+				Kind:    "view",
+			})
 
 			// Get the object and check
 			res = object.NewViewObject("test", "view")
@@ -408,18 +382,13 @@ var _ = Describe("Reconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Try to obtain the view from the watcher
-			req, ok = tryWatchReq(watcher, 50*interval)
+			req, ok = testutils.TryWatchReq(watcher, 50*interval)
 			Expect(ok).To(BeTrue())
-			Expect(req).To(Equal(Request{
-				Namespace: "default",
-				Name:      "viewname",
-				EventType: object.Deleted,
-				GVK: schema.GroupVersionKind{
-					Group:   "test." + viewv1a1.GroupSuffix,
-					Version: viewv1a1.Version,
-					Kind:    "view",
-				},
-			}))
+			testutils.MatchRequest(req, "default", "viewname", object.Deleted, schema.GroupVersionKind{
+				Group:   "test." + viewv1a1.GroupSuffix,
+				Version: viewv1a1.Version,
+				Kind:    "view",
+			})
 		})
 
 		It("should get a watch event on a controller using a labeled watch for a labeled native object", func() {
@@ -466,18 +435,13 @@ var _ = Describe("Reconciler", func() {
 			go func() { mgr.Start(ctx) }()
 
 			// Try to obtain the view from the watcher
-			req, ok := tryWatchReq(watcher, interval)
+			req, ok := testutils.TryWatchReq(watcher, interval)
 			Expect(ok).To(BeTrue())
-			Expect(req).To(Equal(Request{
-				Namespace: "default",
-				Name:      "podname",
-				EventType: object.Added,
-				GVK: schema.GroupVersionKind{
-					Group:   "",
-					Version: "v1",
-					Kind:    "Pod",
-				},
-			}))
+			testutils.MatchRequest(req, "default", "podname", object.Added, schema.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			})
 		})
 
 		It("should suppress watch events on a controller using a labeled watch for an un labeled native object", func() {
@@ -522,7 +486,7 @@ var _ = Describe("Reconciler", func() {
 			go func() { mgr.Start(ctx) }()
 
 			// Try to obtain the view from the watcher
-			_, ok := tryWatchReq(watcher, 10*interval)
+			_, ok := testutils.TryWatchReq(watcher, 10*interval)
 			Expect(ok).To(BeFalse())
 		})
 	})
@@ -551,7 +515,7 @@ var _ = Describe("Reconciler", func() {
 			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
-			event, ok := tryWatchWatcher(watcher, interval)
+			event, ok := testutils.TryWatchEvent(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Added))
 			Expect(object.DeepEqual(view, event.Object.(object.Object))).To(BeTrue())
@@ -563,7 +527,7 @@ var _ = Describe("Reconciler", func() {
 			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: view2})
 			Expect(err).NotTo(HaveOccurred())
 
-			event, ok = tryWatchWatcher(watcher, interval)
+			event, ok = testutils.TryWatchEvent(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Modified))
 			res := view.DeepCopy()
@@ -576,7 +540,7 @@ var _ = Describe("Reconciler", func() {
 			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: view2})
 			Expect(err).NotTo(HaveOccurred())
 
-			event, ok = tryWatchWatcher(watcher, interval)
+			event, ok = testutils.TryWatchEvent(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Deleted))
 			Expect(object.DeepEqual(res, event.Object.(object.Object))).To(BeTrue())
@@ -722,7 +686,7 @@ var _ = Describe("Reconciler", func() {
 			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
-			event, ok := tryWatchWatcher(watcher, interval)
+			event, ok := testutils.TryWatchEvent(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Added))
 			Expect(object.DeepEqual(view, event.Object.(object.Object))).To(BeTrue())
@@ -734,7 +698,7 @@ var _ = Describe("Reconciler", func() {
 			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: view2})
 			Expect(err).NotTo(HaveOccurred())
 
-			event, ok = tryWatchWatcher(watcher, interval)
+			event, ok = testutils.TryWatchEvent(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Modified))
 			res := view.DeepCopy()
@@ -750,7 +714,7 @@ var _ = Describe("Reconciler", func() {
 			// err = target.Write(ctx, object.Delta{Type: object.Updated, Object: view3})
 			// Expect(err).NotTo(HaveOccurred())
 
-			// event, ok = tryWatchWatcher(watcher, interval)
+			// event, ok = testutils.TryWatchEvent(watcher, interval)
 			// Expect(ok).To(BeTrue())
 			// Expect(event.Type).To(Equal(watch.Modified))
 
@@ -769,7 +733,7 @@ var _ = Describe("Reconciler", func() {
 			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: view4})
 			Expect(err).NotTo(HaveOccurred())
 
-			event, ok = tryWatchWatcher(watcher, interval)
+			event, ok = testutils.TryWatchEvent(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Modified))
 			res = view.DeepCopy()
@@ -807,7 +771,7 @@ var _ = Describe("Reconciler", func() {
 			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
-			event, ok := tryWatchWatcher(watcher, interval)
+			event, ok := testutils.TryWatchEvent(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Added))
 			// Expect(object.DeepEqual(view, event.Object.(object.Object))).To(BeTrue())
@@ -820,7 +784,7 @@ var _ = Describe("Reconciler", func() {
 			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: view2})
 			Expect(err).NotTo(HaveOccurred())
 
-			event, ok = tryWatchWatcher(watcher, interval)
+			event, ok = testutils.TryWatchEvent(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Modified))
 
@@ -838,7 +802,7 @@ var _ = Describe("Reconciler", func() {
 			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: view3})
 			Expect(err).NotTo(HaveOccurred())
 
-			event, ok = tryWatchWatcher(watcher, interval)
+			event, ok = testutils.TryWatchEvent(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Modified))
 			retrieved = view.DeepCopy()
@@ -987,21 +951,3 @@ var _ = Describe("Reconciler", func() {
 		})
 	})
 })
-
-func tryWatchReq(watcher chan Request, d time.Duration) (Request, bool) {
-	select {
-	case req := <-watcher:
-		return req, true
-	case <-time.After(d):
-		return Request{}, false
-	}
-}
-
-func tryWatchWatcher(watcher watch.Interface, d time.Duration) (watch.Event, bool) {
-	select {
-	case event := <-watcher.ResultChan():
-		return event, true
-	case <-time.After(d):
-		return watch.Event{}, false
-	}
-}

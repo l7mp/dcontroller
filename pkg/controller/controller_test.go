@@ -1006,7 +1006,7 @@ target:
 			}, timeout*5, interval).Should(BeTrue(), "periodic reconciliation should recreate deleted object")
 		})
 
-		FIt("should filter source events by label selector", func() {
+		It("should filter source events by label selector", func() {
 			// Controller with label selector: only watch pods with app=app1
 			jsonData := `
 - '@project':

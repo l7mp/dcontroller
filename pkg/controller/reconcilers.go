@@ -36,47 +36,18 @@ func NewIncrementalReconciler(mgr runtimeManager.Manager, c *DeclarativeControll
 func (r *IncrementalReconciler) Reconcile(ctx context.Context, req reconciler.Request) (reconcile.Result, error) {
 	r.log.V(2).Info("processing request", "request", util.Stringify(req))
 
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(req.GVK)
-	obj.SetNamespace(req.Namespace)
-	obj.SetName(req.Name)
+	obj := req.Object
+	if obj == nil {
+		// Fallback: if Object is nil (shouldn't happen), create a minimal object for the key.
+		obj = &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(req.GVK)
+		obj.SetNamespace(req.Namespace)
+		obj.SetName(req.Name)
+	}
 
 	switch req.EventType {
-	case object.Added, object.Updated, object.Replaced:
-		if err := r.controller.mgr.GetClient().Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
-			err = fmt.Errorf("object %s/%s disappeared from client for Add/Update event: %w",
-				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
-			r.log.Error(r.controller.Push(err), "error", "request", req)
-			return reconcile.Result{}, err
-		}
-
-	case object.Deleted:
-		// Try to get the deleted object from the pipeline's source cache.
-		// This is needed to generate the proper negative delta/zset.
-		sourceCache := r.controller.pipeline.GetSourceCache(req.GVK)
-		if sourceCache == nil {
-			// Very weird: we got a delete event for a GVK we don't have a cache for.
-			r.log.Info("ignoring Delete event for unknown source GVK", "gvk", req.GVK,
-				"object", client.ObjectKeyFromObject(obj).String())
-			return reconcile.Result{}, nil
-		}
-
-		d, ok, err := sourceCache.Get(obj)
-		if err != nil {
-			err = fmt.Errorf("failed to get object %s/%s from pipeline cache in Delete event: %w",
-				req.GVK, client.ObjectKeyFromObject(obj).String(), err)
-			r.log.Error(r.controller.Push(err), "error", "request", req)
-			return reconcile.Result{}, err
-		}
-		if !ok {
-			// Weird but happens: we got a delete for an object we never saw added.
-			r.log.Info("ignoring Delete event for unknown object", "gvk", req.GVK,
-				"object", client.ObjectKeyFromObject(obj).String())
-			return reconcile.Result{}, nil
-		}
-
-		obj = d
-
+	case object.Added, object.Updated, object.Replaced, object.Deleted:
+		// Do nothing: Object snapshot already captured in req.Object at event generation time
 	default:
 		r.log.Info("ignoring event", "event-type", req.EventType)
 		return reconcile.Result{}, nil
