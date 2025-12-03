@@ -227,8 +227,8 @@ func (p *Pipeline) Evaluate(delta object.Delta) ([]object.Delta, error) {
 		return nil, NewPipelineError(fmt.Errorf("failed to update target cache from delta: %w", err))
 	}
 
-	p.log.V(1).Info("eval ready", "event-type", delta.Type, "object", ObjectKey(delta.Object),
-		"result", util.Stringify(rawDeltas))
+	p.log.V(1).Info("eval ready", "event-type", delta.Type, "object", object.Dump(delta.Object),
+		"result", util.Stringify(deltas))
 
 	return deltas, nil
 }
