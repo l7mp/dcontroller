@@ -23,6 +23,7 @@ import (
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/yaml"
 
+	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/composite"
@@ -225,7 +226,7 @@ var _ = Describe("Controller", func() {
 			res.SetAnnotations(anns)
 
 			Eventually(func() bool {
-				event, ok := tryWatchWatcher(watcher, interval)
+				event, ok := testutils.TryWatchEvent(watcher, interval)
 				if !ok || event.Type != watch.Modified {
 					return false
 				}
@@ -517,7 +518,7 @@ target:
 			// Should obtain one object in the rs view: pod1-dep1
 			var rs1 object.Object
 			Eventually(func() bool {
-				event, ok := tryWatchWatcher(watcher, interval)
+				event, ok := testutils.TryWatchEvent(watcher, interval)
 				if !ok {
 					return false
 				}
@@ -563,7 +564,7 @@ target:
 
 			// Should should first remove rs pod1-dep1
 			Eventually(func() bool {
-				event, ok := tryWatchWatcher(watcher, interval)
+				event, ok := testutils.TryWatchEvent(watcher, interval)
 				if !ok {
 					return false
 				}
@@ -597,7 +598,7 @@ target:
 			// Should obtain one object in the rs view: pod2-dep1
 			var rs3 object.Object
 			Eventually(func() bool {
-				event, ok := tryWatchWatcher(watcher, interval)
+				event, ok := testutils.TryWatchEvent(watcher, interval)
 				if !ok {
 					return false
 				}
@@ -713,7 +714,7 @@ target:
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() bool {
-				event, ok := tryWatchWatcher(watcher, interval)
+				event, ok := testutils.TryWatchEvent(watcher, interval)
 				if !ok {
 					return false
 				}
@@ -787,7 +788,7 @@ target:
 			event := watch.Event{}
 			Eventually(func() bool {
 				var ok bool
-				event, ok = tryWatchWatcher(watcher, interval)
+				event, ok = testutils.TryWatchEvent(watcher, interval)
 				return ok && event.Type == watch.Added
 			}, timeout, retryInterval).Should(BeTrue())
 
@@ -842,7 +843,7 @@ target:
 			event := watch.Event{}
 			for i := 0; i < 3; i++ {
 				var ok bool
-				event, ok = tryWatchWatcher(watcher, interval)
+				event, ok = testutils.TryWatchEvent(watcher, interval)
 				if ok && (event.Type == watch.Modified || event.Type == watch.Added) {
 					counter++
 					// remove the generated object so that the periodic trigger
@@ -907,7 +908,7 @@ target:
 			Expect(err).NotTo(HaveOccurred())
 
 			// Wait for the initial object to be created
-			event, ok := tryWatchWatcher(watcher, timeout)
+			event, ok := testutils.TryWatchEvent(watcher, timeout)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Added))
 
@@ -922,7 +923,7 @@ target:
 
 			// Wait for periodic reconciliation to remove the stale object
 			Eventually(func() bool {
-				event, ok := tryWatchWatcher(watcher, interval)
+				event, ok := testutils.TryWatchEvent(watcher, interval)
 				if ok && event.Type == watch.Deleted {
 					obj, ok := event.Object.(object.Object)
 					if ok && obj.GetName() == "stale-object" {
@@ -977,7 +978,7 @@ target:
 			Expect(err).NotTo(HaveOccurred())
 
 			// Wait for initial object
-			event, ok := tryWatchWatcher(watcher, timeout)
+			event, ok := testutils.TryWatchEvent(watcher, timeout)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Added))
 
@@ -991,13 +992,13 @@ target:
 			Expect(err).NotTo(HaveOccurred())
 
 			// Wait for deletion event
-			event, ok = tryWatchWatcher(watcher, timeout)
+			event, ok = testutils.TryWatchEvent(watcher, timeout)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Deleted))
 
 			// Periodic reconciliation should recreate the object
 			Eventually(func() bool {
-				event, ok := tryWatchWatcher(watcher, interval)
+				event, ok := testutils.TryWatchEvent(watcher, interval)
 				if ok && event.Type == watch.Added {
 					obj, ok := event.Object.(object.Object)
 					return ok && obj.GetName() == "refreshed-object"
@@ -1055,7 +1056,7 @@ target:
 			err = vcache.Add(pod1)
 			Expect(err).NotTo(HaveOccurred())
 
-			event, ok := tryWatchWatcher(watcher, timeout)
+			event, ok := testutils.TryWatchEvent(watcher, timeout)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Added))
 			Expect(event.Object.(object.Object).GetName()).To(Equal("pod1"))
@@ -1065,29 +1066,119 @@ target:
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should not get any event
-			_, ok = tryWatchWatcher(watcher, 50*time.Millisecond)
+			_, ok = testutils.TryWatchEvent(watcher, 50*time.Millisecond)
 			Expect(ok).To(BeFalse(), "pod2 with app=app2 should be filtered out by label selector")
 
 			// Add pod3 (app=app1) - should be processed
 			err = vcache.Add(pod3)
 			Expect(err).NotTo(HaveOccurred())
 
-			event, ok = tryWatchWatcher(watcher, timeout)
+			event, ok = testutils.TryWatchEvent(watcher, timeout)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Added))
 			Expect(event.Object.(object.Object).GetName()).To(Equal("pod3"))
 		})
+
+		It("should filter delete events by label selector", func() {
+			// Controller with label selector: only watch pods with app=app1
+			jsonData := `
+- '@project':
+    metadata:
+      name: $.metadata.name
+      namespace: $.metadata.namespace
+    spec:
+      image: $.spec.image`
+			var p opv1a1.Pipeline
+			err := yaml.Unmarshal([]byte(jsonData), &p)
+			Expect(err).NotTo(HaveOccurred())
+
+			config := opv1a1.Controller{
+				Name: "test-label-selector-delete",
+				Sources: []opv1a1.Source{{
+					Resource: opv1a1.Resource{
+						Kind: "pod",
+					},
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"app": "app1"},
+					},
+				}},
+				Pipeline: p,
+				Target: opv1a1.Target{
+					Resource: opv1a1.Resource{
+						Kind: "result",
+					},
+					Type: "Updater",
+				},
+			}
+
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = NewDeclarative(mgr, "test", config, Options{})
+			Expect(err).NotTo(HaveOccurred())
+
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			go func() { mgr.Start(ctx) }()
+
+			// Watch target to see which objects get created/deleted
+			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "result"))
+			Expect(err).NotTo(HaveOccurred())
+			defer watcher.Stop()
+
+			// Add pod1 (app=app1) - should be processed
+			err = vcache.Add(pod1)
+			Expect(err).NotTo(HaveOccurred())
+
+			event, ok := testutils.TryWatchEvent(watcher, timeout)
+			Expect(ok).To(BeTrue())
+			Expect(event.Type).To(Equal(watch.Added))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod1"))
+
+			// Add pod2 (app=app2) - should NOT be processed
+			err = vcache.Add(pod2)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should not get any event
+			_, ok = testutils.TryWatchEvent(watcher, 50*time.Millisecond)
+			Expect(ok).To(BeFalse(), "pod2 with app=app2 should be filtered out by label selector")
+
+			// Add pod3 (app=app1) - should be processed
+			err = vcache.Add(pod3)
+			Expect(err).NotTo(HaveOccurred())
+
+			event, ok = testutils.TryWatchEvent(watcher, timeout)
+			Expect(ok).To(BeTrue())
+			Expect(event.Type).To(Equal(watch.Added))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod3"))
+
+			// Delete pod1 (app=app1) - should trigger deletion in target
+			err = vcache.Delete(pod1)
+			Expect(err).NotTo(HaveOccurred())
+
+			event, ok = testutils.TryWatchEvent(watcher, timeout)
+			Expect(ok).To(BeTrue(), "pod1 delete event should be processed")
+			Expect(event.Type).To(Equal(watch.Deleted), "should receive delete event for pod1")
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod1"))
+
+			// Delete pod2 (app=app2) - should NOT trigger deletion in target
+			err = vcache.Delete(pod2)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should not get any delete event for pod2
+			_, ok = testutils.TryWatchEvent(watcher, 50*time.Millisecond)
+			Expect(ok).To(BeFalse(), "pod2 delete with app=app2 should be filtered out by label selector")
+
+			// Delete pod3 (app=app1) - should trigger deletion in target
+			err = vcache.Delete(pod3)
+			Expect(err).NotTo(HaveOccurred())
+
+			event, ok = testutils.TryWatchEvent(watcher, timeout)
+			Expect(ok).To(BeTrue(), "pod3 delete event should be processed")
+			Expect(event.Type).To(Equal(watch.Deleted), "should receive delete event for pod3")
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod3"))
+		})
 	})
 })
-
-func tryWatchWatcher(watcher watch.Interface, d time.Duration) (watch.Event, bool) {
-	select {
-	case event := <-watcher.ResultChan():
-		return event, true
-	case <-time.After(d):
-		return watch.Event{}, false
-	}
-}
 
 func getRuntimeObjFromCache(ctx context.Context, c cache.Cache, kind string, obj runtime.Object) (object.Object, error) {
 	m, err := meta.Accessor(obj)
