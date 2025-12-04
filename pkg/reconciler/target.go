@@ -9,8 +9,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -145,23 +143,26 @@ func (t *target) update(ctx context.Context, delta object.Delta) error {
 			return nil
 		})
 
-		if err != nil {
+		// NotFound errors are ignored: the object has disappeared while we were working in it
+		if err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("create/update resource %s failed with operation code %s: %w",
 				client.ObjectKeyFromObject(delta.Object).String(), res, err)
 		}
 
-		return nil
-
 	case object.Deleted:
 		t.log.V(2).Info("delete", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
 
-		return c.Delete(ctx, delta.Object)
+		// NotFound errors are ignored: the object has disappeared while we were working in it
+		if err := c.Delete(ctx, delta.Object); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("delete resource %s failed: %w",
+				client.ObjectKeyFromObject(delta.Object).String(), err)
+		}
 
 	default:
 		t.log.V(3).Info("target: ignoring delta", "type", delta.Type)
-
-		return nil
 	}
+
+	return nil
 }
 
 func (t *target) patch(ctx context.Context, delta object.Delta, originalObject object.Object) error {
@@ -211,29 +212,54 @@ func (t *target) patch(ctx context.Context, delta object.Delta, originalObject o
 		obj.SetName(delta.Object.GetName())
 		obj.SetNamespace(delta.Object.GetNamespace())
 
-		// Use Update instead of Patch (Kubernetes will reject if resourceVersion is stale)
-		if err := c.Update(ctx, obj); err != nil {
-			return err
+		// Use our custom Update function which handles both spec and status correctly.
+		// This uses optimistic concurrency control via resourceVersion (Kubernetes will reject
+		// if the object has changed). NotFound errors are ignored: the object has disappeared
+		// while we were working on it.
+		if err := Update(ctx, c, obj); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("update resource %s failed: %w",
+				client.ObjectKeyFromObject(delta.Object).String(), err)
 		}
-
-		// Update status separately if present
-		newStatus, hasStatus, err := unstructured.NestedMap(delta.Object.UnstructuredContent(), "status")
-		if err == nil && hasStatus {
-			if err := unstructured.SetNestedMap(obj.Object, newStatus, "status"); err != nil {
-				return err
-			}
-			if err := c.Status().Update(ctx, obj); err != nil {
-				return err
-			}
-		}
-
-		return nil
 
 	case object.Deleted:
-		// apply the patch locally so that we fully control the behavior
+		t.log.V(4).Info("delete-patch", "event-type", delta.Type,
+			"key", client.ObjectKeyFromObject(delta.Object).String())
+
+		// Check if we can use the original object snapshot (same GVK, namespace, name)
+		useOriginal := originalObject != nil &&
+			originalObject.GroupVersionKind() == delta.Object.GroupVersionKind() &&
+			originalObject.GetNamespace() == delta.Object.GetNamespace() &&
+			originalObject.GetName() == delta.Object.GetName()
+
+		var obj object.Object
+		if useOriginal {
+			// Use the original object snapshot (has correct resourceVersion)
+			obj = object.DeepCopy(originalObject)
+			t.log.V(4).Info("using original object snapshot for delete-patch",
+				"resourceVersion", obj.GetResourceVersion())
+		} else {
+			// Fetch current target object
+			obj = object.New()
+			obj.SetGroupVersionKind(delta.Object.GroupVersionKind())
+			obj.SetName(delta.Object.GetName())
+			obj.SetNamespace(delta.Object.GetNamespace())
+			if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+				// NotFound errors are ignored: the object has disappeared
+				if apierrors.IsNotFound(err) {
+					return nil
+				}
+				return err
+			}
+			t.log.V(4).Info("fetched target object for delete-patch",
+				"resourceVersion", obj.GetResourceVersion())
+		}
+
+		// Apply the delete patch locally so that we fully control the behavior.
+		// The removeNestedMap function converts all leaf values to nil, which is
+		// the merge-patch semantics for deletion (RFC 7386).
 		patch := removeNestedMap(delta.Object.UnstructuredContent())
 
-		// make sure we do not remove crucial metadata: the GVK and the namespace/name
+		// Make sure we do not remove crucial metadata: the GVK and the namespace/name
 		gvk := delta.Object.GroupVersionKind()
 		gr := schema.GroupVersion{Group: gvk.Group, Version: gvk.Version}
 		unstructured.SetNestedField(patch, gr.String(), "apiVersion")                            //nolint:errcheck
@@ -241,28 +267,32 @@ func (t *target) patch(ctx context.Context, delta object.Delta, originalObject o
 		unstructured.SetNestedField(patch, delta.Object.GetNamespace(), "metadata", "namespace") //nolint:errcheck
 		unstructured.SetNestedField(patch, delta.Object.GetName(), "metadata", "name")           //nolint:errcheck
 
-		b, err := json.Marshal(patch)
-		if err != nil {
+		t.log.V(5).Info("delete-patch content", "patch", util.Stringify(patch))
+
+		// Apply delete patch to the fetched/cached object in-place
+		if err := object.Patch(obj, patch); err != nil {
 			return err
 		}
 
-		t.log.V(4).Info("delete-patch", "event-type", delta.Type,
-			"object", client.ObjectKeyFromObject(delta.Object),
-			"patch", util.Stringify(patch), "raw-patch", string(b))
+		// Restore critical metadata that must not be overwritten
+		obj.SetGroupVersionKind(delta.Object.GroupVersionKind())
+		obj.SetName(delta.Object.GetName())
+		obj.SetNamespace(delta.Object.GetNamespace())
 
-		if err := c.Patch(context.Background(), delta.Object, client.RawPatch(types.MergePatchType, b)); err != nil {
-			if !apierrors.IsNotFound(err) {
-				return err
-			}
+		// Use our custom Update function which handles both spec and status correctly.
+		// This uses optimistic concurrency control via resourceVersion (Kubernetes will reject
+		// if the object has changed). NotFound errors are ignored: the object has disappeared
+		// while we were working on it.
+		if err := Update(ctx, c, obj); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("update resource %s after delete-patch failed: %w",
+				client.ObjectKeyFromObject(delta.Object).String(), err)
 		}
-
-		return nil
 
 	default:
 		t.log.V(2).Info("target: ignoring delta", "type", delta.Type)
-
-		return nil
 	}
+
+	return nil
 }
 
 func removeNestedMap(m map[string]any) map[string]any {

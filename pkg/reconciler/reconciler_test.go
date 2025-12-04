@@ -10,6 +10,7 @@ import (
 
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -566,7 +567,9 @@ var _ = Describe("Reconciler", func() {
 			})
 
 			// Push a view object to the target
-			err = target.Write(ctx, object.Delta{Type: object.Added, Object: pod2}, nil)
+			pod := pod2.DeepCopy()
+			unstructured.SetNestedField(pod.UnstructuredContent(), "Burstable", "status", "qosClass")
+			err = target.Write(ctx, object.Delta{Type: object.Added, Object: pod}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Get from the object tracker: a normal get would go through the cache
@@ -599,11 +602,13 @@ var _ = Describe("Reconciler", func() {
 			Expect(p.Spec.Containers[0].Name).To(Equal("nginx"))
 			Expect(p.Spec.Containers[0].Image).To(Equal("nginx"))
 			Expect(p.Spec.RestartPolicy).To(Equal(corev1.RestartPolicy("OnFailure")))
+			Expect(p.Status.QOSClass).To(Equal(corev1.PodQOSBurstable))
 
 			// Push update to the target
 			newPod := object.DeepCopy(pod2)
 			unstructured.RemoveNestedField(newPod.UnstructuredContent(), "spec", "containers")
 			unstructured.SetNestedField(newPod.UnstructuredContent(), "Always", "spec", "restartPolicy")
+			unstructured.SetNestedField(newPod.UnstructuredContent(), "BestEffort", "status", "qosClass")
 
 			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: newPod}, nil)
 			Expect(err).NotTo(HaveOccurred())
@@ -629,36 +634,17 @@ var _ = Describe("Reconciler", func() {
 			Expect(p.GetNamespace()).To(Equal("testns"))
 			Expect(p.Spec.Containers).To(BeEmpty())
 			Expect(p.Spec.RestartPolicy).To(Equal(corev1.RestartPolicy("Always")))
+			Expect(p.Status.QOSClass).To(Equal(corev1.PodQOSBestEffort))
 
-			// Set the status
-			unstructured.SetNestedField(newPod.UnstructuredContent(), map[string]any{
-				"message": "testmessage",
-				"reason":  "testreason",
-			}, "status")
-
-			err = target.Write(ctx, object.Delta{Type: object.Updated, Object: newPod}, nil)
+			// delete
+			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: newPod}, nil)
 			Expect(err).NotTo(HaveOccurred())
 
-			getFromTracker, err = tracker.Get(gvr, "testns", "testpod")
-			Expect(err).NotTo(HaveOccurred())
-			getFromClient, err = object.ConvertRuntimeObjectToClientObject(getFromTracker)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(getFromClient.GetObjectKind().GroupVersionKind()).To(Equal(schema.GroupVersionKind{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Pod",
-			}))
-			p = getFromClient.(*corev1.Pod)
-			Expect(p.GetName()).To(Equal("testpod"))
-			Expect(p.GetNamespace()).To(Equal("testns"))
-			Expect(p.Spec.Containers).To(BeEmpty())
-			Expect(p.Spec.RestartPolicy).To(Equal(corev1.RestartPolicy("Always")))
-			Expect(p.Status).To(Equal(corev1.PodStatus{
-				Message: "testmessage",
-				Reason:  "testreason",
-			}))
+			_, err = tracker.Get(gvr, "testns", "testpod")
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 
-			// Delete from the target
+			// another delete should not fail
 			err = target.Write(ctx, object.Delta{Type: object.Deleted, Object: newPod}, nil)
 			Expect(err).NotTo(HaveOccurred())
 		})
