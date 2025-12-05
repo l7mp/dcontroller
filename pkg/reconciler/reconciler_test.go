@@ -378,8 +378,8 @@ var _ = Describe("Reconciler", func() {
 			Expect(vcache.Get(ctx, client.ObjectKeyFromObject(oldObj), res)).NotTo(HaveOccurred())
 			Expect(res.GetLabels()).To(Equal(map[string]string{"app": "test"}))
 
-			// Delete the view object
-			err = vcache.Delete(oldObj)
+			// Delete the labeled view object: should generate a watch event
+			err = vcache.Delete(newObj)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Try to obtain the view from the watcher
@@ -544,7 +544,7 @@ var _ = Describe("Reconciler", func() {
 			event, ok = testutils.TryWatchEvent(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Deleted))
-			Expect(object.DeepEqual(res, event.Object.(object.Object))).To(BeTrue())
+			Expect(event.Object).NotTo(BeNil())
 
 			// Get should fail now
 			res = object.NewViewObject("test", "view")

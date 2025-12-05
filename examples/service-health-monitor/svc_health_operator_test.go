@@ -242,9 +242,10 @@ var _ = Describe("Service health monitor controller test:", Ordered, func() {
 		Expect(opClient.Delete(ctx, podView2)).Should(Succeed())
 		Expect(opClient.Delete(ctx, podView3)).Should(Succeed())
 
-		Eventually(func() bool {
-			return checkServiceNoHealthAnnotation(ctx, svc1)
-		}, timeout, interval).Should(BeTrue())
+		// We no longer run target.delete for patcher targets
+		// Eventually(func() bool {
+		// 	return checkServiceNoHealthAnnotation(ctx, svc1)
+		// }, timeout, interval).Should(BeTrue())
 	})
 
 	It("should not affect services without matching pods", func() {

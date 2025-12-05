@@ -1177,6 +1177,229 @@ target:
 			Expect(event.Type).To(Equal(watch.Deleted), "should receive delete event for pod3")
 			Expect(event.Object.(object.Object).GetName()).To(Equal("pod3"))
 		})
+
+		It("should filter delete events by label selector in chained controllers", func() {
+			// Scenario: input_view -> ctrl_1 -> temporary_view -> {label_selector} -> ctrl_2 -> output
+			// IMPORTANT: ctrl-2 writes to a DIFFERENT object name so we can verify ctrl-2 is triggered on delete
+			// Controller 1: Takes input pods and creates temporary view objects
+			jsonData1 := `
+- '@project':
+    metadata:
+      name: $.metadata.name
+      namespace: $.metadata.namespace
+      labels:
+        app: $.metadata.labels.app
+        processed: "true"
+    spec:
+      image: $.spec.image`
+			var p1 opv1a1.Pipeline
+			err := yaml.Unmarshal([]byte(jsonData1), &p1)
+			Expect(err).NotTo(HaveOccurred())
+
+			config1 := opv1a1.Controller{
+				Name: "ctrl-1",
+				Sources: []opv1a1.Source{{
+					Resource: opv1a1.Resource{
+						Kind: "input",
+					},
+				}},
+				Pipeline: p1,
+				Target: opv1a1.Target{
+					Resource: opv1a1.Resource{
+						Kind: "temp",
+					},
+					Type: "Updater",
+				},
+			}
+
+			// Controller 2: Watches temp view with label selector and writes to output with DIFFERENT name
+			// This ensures we can detect if ctrl-2 is triggered at all on delete
+			jsonData2 := `
+- '@project':
+    metadata:
+      name:
+        '@concat':
+          - $.metadata.name
+          - "-processed"
+      namespace: $.metadata.namespace
+      annotations:
+        processed-by-ctrl2: "true"
+        source-name: $.metadata.name
+    spec:
+      image: $.spec.image`
+			var p2 opv1a1.Pipeline
+			err = yaml.Unmarshal([]byte(jsonData2), &p2)
+			Expect(err).NotTo(HaveOccurred())
+
+			config2 := opv1a1.Controller{
+				Name: "ctrl-2",
+				Sources: []opv1a1.Source{{
+					Resource: opv1a1.Resource{
+						Kind: "temp",
+					},
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"app": "app1"},
+					},
+				}},
+				Pipeline: p2,
+				Target: opv1a1.Target{
+					Resource: opv1a1.Resource{
+						Kind: "output",
+					},
+					Type: "Updater",
+				},
+			}
+
+			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create both controllers
+			_, err = NewDeclarative(mgr, "test", config1, Options{})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = NewDeclarative(mgr, "test", config2, Options{})
+			Expect(err).NotTo(HaveOccurred())
+
+			vcache := mgr.GetCompositeCache().GetViewCache()
+			go func() { mgr.Start(ctx) }()
+
+			// Watch the temp view to see what ctrl-1 produces
+			tempWatcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "temp"))
+			Expect(err).NotTo(HaveOccurred())
+			defer tempWatcher.Stop()
+
+			// Watch the output view to see what ctrl-2 produces
+			outputWatcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "output"))
+			Expect(err).NotTo(HaveOccurred())
+			defer outputWatcher.Stop()
+
+			// Create input view objects from the pods
+			input1 := object.NewViewObject("test", "input")
+			object.SetContent(input1, map[string]any{
+				"spec": map[string]any{
+					"image":  "image1",
+					"parent": "dep1",
+				},
+			})
+			object.SetName(input1, "default", "pod1")
+			input1.SetLabels(map[string]string{"app": "app1"})
+
+			input2 := object.NewViewObject("test", "input")
+			object.SetContent(input2, map[string]any{
+				"spec": map[string]any{
+					"image":  "image2",
+					"parent": "dep1",
+				},
+			})
+			object.SetName(input2, "other", "pod2")
+			input2.SetLabels(map[string]string{"app": "app2"})
+
+			input3 := object.NewViewObject("test", "input")
+			object.SetContent(input3, map[string]any{
+				"spec": map[string]any{
+					"image":  "image1",
+					"parent": "dep2",
+				},
+			})
+			object.SetName(input3, "default", "pod3")
+			input3.SetLabels(map[string]string{"app": "app1"})
+
+			// Add input1 (app=app1) to input - should flow through both controllers
+			err = vcache.Add(input1)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify it appears in temp view
+			event, ok := testutils.TryWatchEvent(tempWatcher, timeout)
+			Expect(ok).To(BeTrue())
+			Expect(event.Type).To(Equal(watch.Added))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod1"))
+
+			// Verify it appears in output view with DIFFERENT name (ctrl-2 processed it)
+			event, ok = testutils.TryWatchEvent(outputWatcher, timeout)
+			Expect(ok).To(BeTrue())
+			Expect(event.Type).To(Equal(watch.Added))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod1-processed"))
+
+			// Add input2 (app=app2) - should appear in temp but NOT in output
+			err = vcache.Add(input2)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify it appears in temp view (ctrl-1 processes everything)
+			event, ok = testutils.TryWatchEvent(tempWatcher, timeout)
+			Expect(ok).To(BeTrue())
+			Expect(event.Type).To(Equal(watch.Added))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod2"))
+
+			// Should NOT appear in output view (filtered by label selector)
+			_, ok = testutils.TryWatchEvent(outputWatcher, 50*time.Millisecond)
+			Expect(ok).To(BeFalse(), "input2 with app=app2 should be filtered out by ctrl-2's label selector")
+
+			// Add input3 (app=app1) - should flow through both controllers
+			err = vcache.Add(input3)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify in temp
+			event, ok = testutils.TryWatchEvent(tempWatcher, timeout)
+			Expect(ok).To(BeTrue())
+			Expect(event.Type).To(Equal(watch.Added))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod3"))
+
+			// Verify in output with DIFFERENT name
+			event, ok = testutils.TryWatchEvent(outputWatcher, timeout)
+			Expect(ok).To(BeTrue())
+			Expect(event.Type).To(Equal(watch.Added))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod3-processed"))
+
+			// Now test DELETE events
+			// Delete input1 (app=app1) - should propagate through both controllers
+			err = vcache.Delete(input1)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify delete in temp view
+			event, ok = testutils.TryWatchEvent(tempWatcher, timeout)
+			Expect(ok).To(BeTrue(), "input1 delete should appear in temp view")
+			Expect(event.Type).To(Equal(watch.Deleted))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod1"))
+
+			// CRITICAL TEST: Verify delete in output view with DIFFERENT name
+			// This proves ctrl-2 was actually triggered on the delete event
+			event, ok = testutils.TryWatchEvent(outputWatcher, timeout)
+			Expect(ok).To(BeTrue(), "input1 delete should be processed by ctrl-2 with label selector")
+			Expect(event.Type).To(Equal(watch.Deleted))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod1-processed"))
+
+			// Delete input2 (app=app2) - should appear in temp delete but NOT in output
+			err = vcache.Delete(input2)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify delete in temp view
+			event, ok = testutils.TryWatchEvent(tempWatcher, timeout)
+			Expect(ok).To(BeTrue(), "input2 delete should appear in temp view")
+			Expect(event.Type).To(Equal(watch.Deleted))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod2"))
+
+			// CRITICAL TEST: Should NOT get delete in output (filtered by label selector)
+			// This proves ctrl-2 is NOT triggered for objects that don't match the label selector
+			_, ok = testutils.TryWatchEvent(outputWatcher, 50*time.Millisecond)
+			Expect(ok).To(BeFalse(), "input2 delete with app=app2 should be filtered out by label selector in ctrl-2")
+
+			// Delete input3 (app=app1) - should propagate through both controllers
+			err = vcache.Delete(input3)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify delete in temp view
+			event, ok = testutils.TryWatchEvent(tempWatcher, timeout)
+			Expect(ok).To(BeTrue(), "input3 delete should appear in temp view")
+			Expect(event.Type).To(Equal(watch.Deleted))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod3"))
+
+			// CRITICAL TEST: Verify delete in output view with DIFFERENT name
+			// This proves ctrl-2 was actually triggered on the delete event
+			event, ok = testutils.TryWatchEvent(outputWatcher, timeout)
+			Expect(ok).To(BeTrue(), "input3 delete should be processed by ctrl-2 with label selector")
+			Expect(event.Type).To(Equal(watch.Deleted))
+			Expect(event.Object.(object.Object).GetName()).To(Equal("pod3-processed"))
+		})
 	})
 })
 
