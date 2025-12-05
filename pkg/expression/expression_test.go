@@ -830,6 +830,50 @@ var _ = Describe("Expressions", func() {
 	})
 
 	Describe("Evaluating conditional commands", func() {
+		// @noop
+		It("should evaluate a @noop expression", func() {
+			jsonData := `{"@noop": null}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(res).To(BeNil())
+		})
+
+		It("should use @noop in a @cond else branch", func() {
+			jsonData := `{"@cond": [true, "$.spec.a", {"@noop": null}]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsInt(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(int64(1)))
+		})
+
+		It("should use @noop in a @cond then branch", func() {
+			jsonData := `{"@cond": [false, {"@noop": null}, "$.spec.b.c"]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			v, err := AsInt(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(v).To(Equal(int64(2)))
+		})
+
 		// @cond
 		It("should evaluate a basic true @cond expression", func() {
 			jsonData := `{"@cond":[true, 1, 2]}`

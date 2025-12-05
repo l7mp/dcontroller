@@ -9,6 +9,7 @@
 // Expression operations include:
 //   - Field access: "$.metadata.name", "$.spec.containers[0].image".
 //   - Boolean logic: @and, @or, @not, @eq, @ne, @lt, @gt.
+//   - Conditionals: @cond, @switch, @noop.
 //   - String operations: @concat, @split, @replace, @regex.
 //   - Arithmetic: @add, @sub, @mul, @div, @mod.
 //   - Collections: @len, @contains, @in, @keys, @values.
@@ -236,6 +237,12 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 	// ops that must eval the arg themselves
 	if string(e.Op[0]) == "@" {
 		switch e.Op {
+		case "@noop":
+			// No-op operator: does nothing and returns nil.
+			// Useful as a placeholder in conditional branches.
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", nil)
+			return nil, nil
+
 		case "@cond":
 			args, err := AsExpOrExpList(e.Arg)
 			if err != nil {

@@ -82,6 +82,13 @@ An `if-then-else` conditional.
         - "DEBUG"
     ```
 
+#### `@noop`
+A no-operation placeholder that does nothing and returns `null`. Useful as a placeholder in conditional branches where no action is needed.
+
+*   **Signature**: `{"@noop": null}`
+*   **Arguments**: None (argument is ignored).
+*   **Returns**: Always returns `null`.
+
 #### `@switch`
 A multi-way conditional that evaluates case/action pairs in order and returns the result of the first matching case.
 
