@@ -144,18 +144,26 @@ func (t *target) update(ctx context.Context, delta object.Delta) error {
 		})
 
 		// NotFound errors are ignored: the object has disappeared while we were working in it
-		if err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("create/update resource %s failed with operation code %s: %w",
-				client.ObjectKeyFromObject(delta.Object).String(), res, err)
+		if err != nil {
+			if !apierrors.IsNotFound(err) {
+				return fmt.Errorf("create/update resource %s failed with operation code %s: %w",
+					client.ObjectKeyFromObject(delta.Object).String(), res, err)
+			}
+			t.log.V(2).Info("add/upsert: object has disappeared (probably harmless)",
+				"event-type", delta.Type)
 		}
 
 	case object.Deleted:
 		t.log.V(2).Info("delete", "event-type", delta.Type, "object", client.ObjectKeyFromObject(delta.Object))
 
 		// NotFound errors are ignored: the object has disappeared while we were working in it
-		if err := c.Delete(ctx, delta.Object); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("delete resource %s failed: %w",
-				client.ObjectKeyFromObject(delta.Object).String(), err)
+		if err := c.Delete(ctx, delta.Object); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return fmt.Errorf("delete resource %s failed: %w",
+					client.ObjectKeyFromObject(delta.Object).String(), err)
+			}
+			t.log.V(2).Info("delete: object has disappeared (probably harmless)",
+				"event-type", delta.Type)
 		}
 
 	default:
@@ -216,9 +224,13 @@ func (t *target) patch(ctx context.Context, delta object.Delta, originalObject o
 		// This uses optimistic concurrency control via resourceVersion (Kubernetes will reject
 		// if the object has changed). NotFound errors are ignored: the object has disappeared
 		// while we were working on it.
-		if err := Update(ctx, c, obj); err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("update resource %s failed: %w",
-				client.ObjectKeyFromObject(delta.Object).String(), err)
+		if err := Update(ctx, c, obj); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return fmt.Errorf("update resource %s failed: %w",
+					client.ObjectKeyFromObject(delta.Object).String(), err)
+			}
+			t.log.V(2).Info("update-patch: object has disappeared (probably harmless)",
+				"event-type", delta.Type)
 		}
 
 	case object.Deleted:
@@ -246,6 +258,8 @@ func (t *target) patch(ctx context.Context, delta object.Delta, originalObject o
 			if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
 				// NotFound errors are ignored: the object has disappeared
 				if apierrors.IsNotFound(err) {
+					t.log.V(2).Info("delete-patch: object has disappeared (probably harmless)",
+						"event-type", delta.Type)
 					return nil
 				}
 				return err
