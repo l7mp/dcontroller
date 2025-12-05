@@ -1401,6 +1401,98 @@ target:
 			Expect(event.Object.(object.Object).GetName()).To(Equal("pod3-processed"))
 		})
 	})
+
+	It("should pass through deltas with an empty pipeline", func() {
+		// Test that an empty pipeline correctly passes through source deltas to the target
+		// without any transformation. This verifies:
+		// 1. Empty pipeline is syntactically valid
+		// 2. Add/Update events pass through with original content preserved
+		// 3. Delete events pass through correctly
+		mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(mgr).NotTo(BeNil())
+
+		go func() { mgr.Start(ctx) }()
+
+		yamlData := `
+name: passthrough-test
+sources:
+  - kind: test-source
+target:
+  kind: test-target`
+
+		var config opv1a1.Controller
+		err = yaml.Unmarshal([]byte(yamlData), &config)
+		Expect(err).NotTo(HaveOccurred())
+
+		c, err := NewDeclarative(mgr, "test", config, Options{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.GetName()).To(Equal("passthrough-test"))
+
+		// Create a viewcache to watch target
+		vcache := mgr.GetCompositeCache().GetViewCache()
+		Expect(vcache).NotTo(BeNil())
+		watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "test-target"))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create source object
+		source := object.NewViewObject("test", "test-source")
+		object.SetName(source, "default", "test-obj")
+		unstructured.SetNestedField(source.UnstructuredContent(), "value1", "field1")
+		unstructured.SetNestedField(source.UnstructuredContent(), int64(42), "field2")
+
+		// Push an Add event via the source cache
+		sourceCache := mgr.GetCompositeCache().GetViewCache()
+		err = sourceCache.Add(source)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Should see Add event on target with same content
+		var addEvent watch.Event
+		Eventually(func() bool {
+			var ok bool
+			addEvent, ok = testutils.TryWatchEvent(watcher, interval)
+			if !ok {
+				return false
+			}
+			log.Info("got event", "type", addEvent.Type, "obj", object.Dump(addEvent.Object.(object.Object)))
+			return addEvent.Type == watch.Added
+		}, timeout, retryInterval).Should(BeTrue())
+
+		targetObj := addEvent.Object.(object.Object)
+		Expect(targetObj.GetName()).To(Equal("test-obj"))
+		Expect(targetObj.GetNamespace()).To(Equal("default"))
+
+		// Check that content was passed through
+		field1, ok, err := unstructured.NestedFieldNoCopy(targetObj.UnstructuredContent(), "field1")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ok).To(BeTrue())
+		Expect(field1).To(Equal("value1"))
+
+		field2, ok, err := unstructured.NestedFieldNoCopy(targetObj.UnstructuredContent(), "field2")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ok).To(BeTrue())
+		Expect(field2).To(Equal(int64(42)))
+
+		// Now push a Delete event
+		err = sourceCache.Delete(source)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Should see Delete event on target
+		var deleteEvent watch.Event
+		Eventually(func() bool {
+			var ok bool
+			deleteEvent, ok = testutils.TryWatchEvent(watcher, interval)
+			if !ok {
+				return false
+			}
+			log.Info("got delete event", "type", deleteEvent.Type, "obj", object.Dump(deleteEvent.Object.(object.Object)))
+			return deleteEvent.Type == watch.Deleted
+		}, timeout, retryInterval).Should(BeTrue())
+
+		deletedObj := deleteEvent.Object.(object.Object)
+		Expect(deletedObj.GetName()).To(Equal("test-obj"))
+		Expect(deletedObj.GetNamespace()).To(Equal("default"))
+	})
 })
 
 func getRuntimeObjFromCache(ctx context.Context, c cache.Cache, kind string, obj runtime.Object) (object.Object, error) {
