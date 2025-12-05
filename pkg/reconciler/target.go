@@ -33,6 +33,9 @@ type target struct {
 
 // NewTarget creates a new target resource.
 func NewTarget(mgr runtimeManager.Manager, operator string, t opv1a1.Target) Target {
+	if t.Type == opv1a1.TargetType("") {
+		t.Type = opv1a1.Updater
+	}
 	target := &target{
 		Resource: NewResource(mgr, operator, t.Resource),
 		mgr:      mgr,
