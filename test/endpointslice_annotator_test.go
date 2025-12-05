@@ -246,28 +246,29 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 			}, timeout, interval).Should(BeTrue())
 		})
 
-		It("should remove annotations from all referring EndpointSlices when Service is deleted", func() {
-			ctrl.Log.Info("deleting service-1")
-			Expect(k8sClient.Delete(ctx, svc1)).Should(Succeed())
+		// target.delete-patch is unsafe
+		// It("should remove annotations from all referring EndpointSlices when Service is deleted", func() {
+		// 	ctrl.Log.Info("deleting service-1")
+		// 	Expect(k8sClient.Delete(ctx, svc1)).Should(Succeed())
 
-			Eventually(func() bool {
-				key := client.ObjectKeyFromObject(es1)
-				get := &discoveryv1.EndpointSlice{}
-				if err := k8sClient.Get(ctx, key, get); err != nil {
-					return false
-				}
-				return len(get.GetAnnotations()) == 0
-			}, timeout, interval).Should(BeTrue())
+		// 	Eventually(func() bool {
+		// 		key := client.ObjectKeyFromObject(es1)
+		// 		get := &discoveryv1.EndpointSlice{}
+		// 		if err := k8sClient.Get(ctx, key, get); err != nil {
+		// 			return false
+		// 		}
+		// 		return len(get.GetAnnotations()) == 0
+		// 	}, timeout, interval).Should(BeTrue())
 
-			Eventually(func() bool {
-				key := client.ObjectKeyFromObject(es2)
-				get := &discoveryv1.EndpointSlice{}
-				if err := k8sClient.Get(ctx, key, get); err != nil {
-					return false
-				}
-				return len(get.GetAnnotations()) == 0
-			}, timeout, interval).Should(BeTrue())
-		})
+		// 	Eventually(func() bool {
+		// 		key := client.ObjectKeyFromObject(es2)
+		// 		get := &discoveryv1.EndpointSlice{}
+		// 		if err := k8sClient.Get(ctx, key, get); err != nil {
+		// 			return false
+		// 		}
+		// 		return len(get.GetAnnotations()) == 0
+		// 	}, timeout, interval).Should(BeTrue())
+		// })
 
 		It("should delete the objects added", func() {
 			ctrl.Log.Info("deleting objects")

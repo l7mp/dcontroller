@@ -257,7 +257,8 @@ var _ = Describe("ViewCache", func() {
 			event, ok := tryWatch(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Added))
-			Expect(object.DeepEqual(obj, event.Object.(object.Object))).To(BeTrue())
+			// Expect(object.DeepEqual(obj, event.Object.(object.Object))).To(BeTrue())
+			Expect(obj).To(Equal(event.Object.(object.Object)))
 		})
 
 		It("should notify of updated objects", func() {
