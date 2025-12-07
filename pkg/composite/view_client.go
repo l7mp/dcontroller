@@ -16,37 +16,37 @@ import (
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
-var _ client.WithWatch = &viewClient{}
+var _ client.WithWatch = &ViewCacheClient{}
 
-// viewClient implements client.WithWatch by delegating to ViewCache.
-type viewClient struct {
+// ViewCacheClient implements client.WithWatch by delegating to ViewCache.
+type ViewCacheClient struct {
 	cache *ViewCache
 }
 
 // GetClient returns a controller-runtime client backed by this ViewCache.
 func (vc *ViewCache) GetClient() client.WithWatch {
-	return &viewClient{cache: vc}
+	return &ViewCacheClient{cache: vc}
 }
 
 // Client interface implementation.
 
 // Get retrieves an obj for the given object key from the ViewCache.
-func (c *viewClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (c *ViewCacheClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	return c.cache.Get(ctx, key, obj, opts...)
 }
 
 // List retrieves list of objects from the ViewCache.
-func (c *viewClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+func (c *ViewCacheClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	return c.cache.List(ctx, list, opts...)
 }
 
 // Apply applies the given apply configuration.
-func (c *viewClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+func (c *ViewCacheClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
 	return errors.New("Apply: not implemented")
 }
 
 // Create saves the object obj in the ViewCache.
-func (c *viewClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+func (c *ViewCacheClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	viewObj, ok := obj.(object.Object)
 	if !ok {
 		return fmt.Errorf("object must implement object.Object interface")
@@ -55,7 +55,7 @@ func (c *viewClient) Create(ctx context.Context, obj client.Object, opts ...clie
 }
 
 // Delete deletes the given obj from the ViewCache.
-func (c *viewClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+func (c *ViewCacheClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	viewObj, ok := obj.(object.Object)
 	if !ok {
 		return fmt.Errorf("object must implement object.Object interface")
@@ -64,7 +64,7 @@ func (c *viewClient) Delete(ctx context.Context, obj client.Object, opts ...clie
 }
 
 // Update updates the given obj in the ViewCache.
-func (c *viewClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+func (c *ViewCacheClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	newObj, ok := obj.(object.Object)
 	if !ok {
 		return fmt.Errorf("object must implement object.Object interface")
@@ -83,7 +83,7 @@ func (c *viewClient) Update(ctx context.Context, obj client.Object, opts ...clie
 }
 
 // Patch patches the given obj in the ViewCache. Note that obj is NOT updated to the new content.
-func (c *viewClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (c *ViewCacheClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	o, ok := obj.(object.Object)
 	if !ok {
 		return errors.New("object must be an object.Object")
@@ -115,7 +115,7 @@ func (c *viewClient) Patch(ctx context.Context, obj client.Object, patch client.
 }
 
 // DeleteAllOf deletes all objects of the given type matching the given options.
-func (c *viewClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+func (c *ViewCacheClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
 	// Convert delete options to list options
 	var listOpts []client.ListOption
 	for _, opt := range opts {
@@ -155,7 +155,7 @@ func (c *viewClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ..
 }
 
 // Status returns a client which can update status subresource.
-func (c *viewClient) Status() client.StatusWriter {
+func (c *ViewCacheClient) Status() client.StatusWriter {
 	return &viewSubResourceClient{
 		client: c,
 		subres: "status",
@@ -163,17 +163,17 @@ func (c *viewClient) Status() client.StatusWriter {
 }
 
 // Scheme returns the scheme this client is using (ViewCache doesn't have a scheme).
-func (c *viewClient) Scheme() *runtime.Scheme {
+func (c *ViewCacheClient) Scheme() *runtime.Scheme {
 	return nil
 }
 
 // RESTMapper returns the rest mapper (ViewCache doesn't have a REST mapper).
-func (c *viewClient) RESTMapper() meta.RESTMapper {
+func (c *ViewCacheClient) RESTMapper() meta.RESTMapper {
 	return nil
 }
 
 // GroupVersionKindFor returns the GroupVersionKind for the given object.
-func (c *viewClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+func (c *ViewCacheClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
 	if gvkObj, ok := obj.(schema.ObjectKind); ok {
 		if gvk := gvkObj.GroupVersionKind(); !gvk.Empty() {
 			return gvk, nil
@@ -183,13 +183,13 @@ func (c *viewClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersio
 }
 
 // IsObjectNamespaced returns true if the object is namespaced.
-func (c *viewClient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+func (c *ViewCacheClient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
 	// All view objects are namespaced
 	return true, nil
 }
 
 // SubResource returns a client for the specified subresource.
-func (c *viewClient) SubResource(subResource string) client.SubResourceClient {
+func (c *ViewCacheClient) SubResource(subResource string) client.SubResourceClient {
 	return &viewSubResourceClient{
 		client: c,
 		subres: subResource,
@@ -199,13 +199,13 @@ func (c *viewClient) SubResource(subResource string) client.SubResourceClient {
 // Watch interface implementation.
 
 // Watch watches objects of type obj and sends events on the returned channel.
-func (c *viewClient) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
+func (c *ViewCacheClient) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
 	return c.cache.Watch(ctx, list, opts...)
 }
 
 // viewSubResourceClient implements client.SubResourceClient for ViewCache.
 type viewSubResourceClient struct {
-	client *viewClient
+	client *ViewCacheClient
 	subres string
 }
 

@@ -4,7 +4,7 @@ metadata:
   name: svc-health-operator
 spec:
   controllers:
-    # Controller 1: Pod → HealthView (one object per pod)
+    # Controller 1: Pod -> HealthView (one object per pod)
     - name: pod-health-monitor
       sources:
         - apiGroup: ""
@@ -13,25 +13,25 @@ spec:
             matchLabels:
               "dcontroller.io/health-monitor": "enabled"
       pipeline:
-        "@project":
-              metadata:
-                name: "$.metadata.labels['app']"
-                namespace: "$.metadata.namespace"
-              pods:
-                podName: "$.metadata.name"
-                ready: "$.status.conditions[?(@.type=='Ready')].status"
-          - "@gather":
-              # Key: group by service (name + namespace)
-              - "@concat":
-                  - "$.metadata.name"
-                  - "--"
-                  - "$.metadata.namespace"
-              # Value: collapse the pods fields into a list (contains ready status)
-              - "$.pods"
+        - "@project":
+            metadata:
+              name: "$.metadata.labels['app']"
+              namespace: "$.metadata.namespace"
+            pods:
+              podName: "$.metadata.name"
+              ready: "$.status.conditions[?(@.type=='Ready')].status"
+        - "@gather":
+            # Key: group by service (name + namespace)
+            - "@concat":
+                - "$.metadata.name"
+                - "--"
+                - "$.metadata.namespace"
+            # Value: collapse the pods fields into a list (contains ready status)
+            - "$.pods"
       target:
         kind: HealthView
 
-    # Controller 2: HealthView → Service (aggregated health annotations)
+    # Controller 2: HealthView -> Service (aggregated health annotations)
     - name: svc-health-monitor
       sources:
         - kind: HealthView
@@ -39,13 +39,13 @@ spec:
           kind: Service
       pipeline:
         - "@join":
-          "@and":
-            - "@eq":
-                - "$.HealthView.metadata.name"
-                - "$.Service.metadata.name"
-            - "@eq":
-                - "$.HealthView.metadata.namespace" 
-                - "$.Service.metadata.namespace"
+            "@and":
+              - "@eq":
+                  - "$.HealthView.metadata.name"
+                  - "$.Service.metadata.name"
+              - "@eq":
+                  - "$.HealthView.metadata.namespace" 
+                  - "$.Service.metadata.namespace"
         - "@project":
               metadata:
                 name: "$.Service.metadata.name"

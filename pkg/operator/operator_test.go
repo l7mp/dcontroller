@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/watch"
-	metrics "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -18,7 +17,6 @@ import (
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
@@ -64,15 +62,6 @@ var _ = Describe("Headless Operator", func() {
 	})
 
 	It("should create an empty Operator", func() {
-		mgr, err := manager.NewHeadless(manager.Options{
-			Metrics: metrics.Options{
-				BindAddress: ":54322",
-			},
-			HealthProbeBindAddress: "",
-			Logger:                 logger,
-		})
-		Expect(err).NotTo(HaveOccurred())
-
 		// closed by the operator
 		errorChan := make(chan error, 16)
 		opts := Options{
@@ -80,8 +69,12 @@ var _ = Describe("Headless Operator", func() {
 			Logger:       logger,
 		}
 
-		op := New("test", mgr, opts)
+		op, err := New("test", nil, opts)
 		Expect(op).NotTo(BeNil())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(op.GetManager()).NotTo(BeNil())
+		Expect(op.GetManager().GetClient()).NotTo(BeNil())
+		Expect(op.GetManager().GetCache()).NotTo(BeNil())
 
 		go func() {
 			defer GinkgoRecover()
@@ -97,10 +90,11 @@ var _ = Describe("Headless Operator", func() {
 
 		go func() {
 			defer GinkgoRecover()
-			err := mgr.Start(ctx)
+			err := op.Start(ctx)
 			Expect(err).NotTo(HaveOccurred())
 		}()
 
+		mgr := op.GetManager()
 		c := mgr.GetClient()
 		Expect(c).NotTo(BeNil())
 		err = c.Create(ctx, obj)
@@ -123,15 +117,6 @@ var _ = Describe("Headless Operator", func() {
 	})
 
 	It("should load an Operator", func() {
-		mgr, err := manager.NewHeadless(manager.Options{
-			Metrics: metrics.Options{
-				BindAddress: ":54321",
-			},
-			HealthProbeBindAddress: "",
-			Logger:                 logger,
-		})
-		Expect(err).NotTo(HaveOccurred())
-
 		errorChan := make(chan error, 16)
 		opts := Options{
 			ErrorChannel: errorChan,
@@ -144,7 +129,7 @@ var _ = Describe("Headless Operator", func() {
     x: z
     a: b`
 		var p opv1a1.Pipeline
-		err = yaml.Unmarshal([]byte(jsonData), &p)
+		err := yaml.Unmarshal([]byte(jsonData), &p)
 		Expect(err).NotTo(HaveOccurred())
 		operatorSpec := &opv1a1.OperatorSpec{
 			Controllers: []opv1a1.Controller{{
@@ -159,8 +144,9 @@ var _ = Describe("Headless Operator", func() {
 			}},
 		}
 
-		op := New("test", mgr, opts)
+		op, err := New("test", nil, opts)
 		Expect(op).NotTo(BeNil())
+		Expect(err).NotTo(HaveOccurred())
 		op.AddSpec(operatorSpec)
 
 		go func() {
@@ -177,10 +163,11 @@ var _ = Describe("Headless Operator", func() {
 
 		go func() {
 			defer GinkgoRecover()
-			err := mgr.Start(ctx)
+			err := op.Start(ctx)
 			Expect(err).NotTo(HaveOccurred())
 		}()
 
+		mgr := op.GetManager()
 		Expect(op.ListControllers()).To(HaveLen(1))
 		ctrl := op.GetController("test-controller")
 		Expect(ctrl).NotTo(BeNil())

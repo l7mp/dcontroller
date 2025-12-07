@@ -19,6 +19,7 @@ import (
 
 	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
@@ -31,6 +32,7 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 		var (
 			ctx                            context.Context
 			cancel                         context.CancelFunc
+			api                            *composite.API
 			svc1, svc2, es1, es2, es3, es4 object.Object
 		)
 
@@ -73,7 +75,13 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 		It("should create and start the operator controller", func() {
 			off := true
 			setupLog.Info("setting up operator controller")
-			c, err := controllers.NewOpController(cfg, ctrl.Options{
+			var err error
+			api, err = composite.NewAPI(cfg, composite.Options{
+				CacheOptions: composite.CacheOptions{Logger: logger},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			c, err := controllers.NewOpController(cfg, api.Cache, ctrl.Options{
 				Scheme:                 scheme,
 				LeaderElection:         false, // disable leader-election
 				HealthProbeBindAddress: "0",   // disable health-check
@@ -86,6 +94,13 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 				Logger: logger,
 			})
 			Expect(err).NotTo(HaveOccurred())
+
+			setupLog.Info("starting shared view storage")
+			go func() {
+				defer GinkgoRecover()
+				err := api.Cache.Start(ctx)
+				Expect(err).NotTo(HaveOccurred(), "failed to shared cache")
+			}()
 
 			setupLog.Info("starting operator controller")
 			go func() {
@@ -269,6 +284,15 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 		// 		return len(get.GetAnnotations()) == 0
 		// 	}, timeout, interval).Should(BeTrue())
 		// })
+
+		It("should delete the operator", func() {
+			ctrl.Log.Info("deleting operator")
+			yamlData, err := os.ReadFile("endpointslice_annotator.yaml")
+			Expect(err).NotTo(HaveOccurred())
+			var op opv1a1.Operator
+			Expect(yaml.Unmarshal(yamlData, &op)).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(ctx, &op)).Should(Succeed())
+		})
 
 		It("should delete the objects added", func() {
 			ctrl.Log.Info("deleting objects")

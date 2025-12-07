@@ -21,7 +21,7 @@ var _ client.Client = &CompositeClient{}
 type CompositeClient struct {
 	client.Client
 	compositeCache cache.Cache
-	viewClient     *viewClient
+	viewClient     *ViewCacheClient
 	log            logr.Logger
 }
 
@@ -42,6 +42,23 @@ func NewCompositeClient(config *rest.Config, options ClientOptions) (*CompositeC
 	}, nil
 }
 
+func NewClientForCache(config *rest.Config, cache cache.Cache, options ClientOptions) (*CompositeClient, error) {
+	var nativeClient client.Client
+	if config != nil {
+		c, err := client.New(config, options)
+		if err != nil {
+			return nil, err
+		}
+		nativeClient = c
+	}
+	c := &CompositeClient{
+		Client: nativeClient,
+		log:    logr.New(nil),
+	}
+	c.SetCache(cache)
+	return c, nil
+}
+
 // SetClient sets the native client in the composite client.
 func (c *CompositeClient) SetClient(client client.Client) {
 	c.Client = client
@@ -51,8 +68,13 @@ func (c *CompositeClient) SetClient(client client.Client) {
 func (c *CompositeClient) SetCache(cache cache.Cache) {
 	c.compositeCache = cache
 	if viewCache, ok := cache.(*CompositeCache); ok {
-		c.viewClient = viewCache.GetViewCache().GetClient().(*viewClient)
+		c.viewClient = viewCache.GetViewCache().GetClient().(*ViewCacheClient)
 	}
+}
+
+// SetClient sets the cache in the composite client.
+func (c *CompositeClient) GetCache() cache.Cache {
+	return c.compositeCache
 }
 
 // split client:

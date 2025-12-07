@@ -28,6 +28,7 @@ import (
 
 	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/testsuite"
@@ -50,6 +51,7 @@ var (
 	scheme              = runtime.NewScheme()
 	k8sClient, opClient client.Client
 	logger, setupLog    logr.Logger
+	api                 *composite.API
 )
 
 var _ = BeforeSuite(func() {
@@ -136,7 +138,12 @@ var _ = Describe("Service health monitor controller test:", Ordered, func() {
 
 	It("should create and start the operator controller", func() {
 		setupLog.Info("setting up operator controller")
-		c, err := controllers.NewOpController(cfg, ctrl.Options{
+		var err error
+		api, err = composite.NewAPI(suite.Cfg, composite.Options{
+			CacheOptions: composite.CacheOptions{Logger: suite.Log},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		c, err := controllers.NewOpController(cfg, api.Cache, ctrl.Options{
 			Scheme:                 scheme,
 			LeaderElection:         false, // disable leader-election
 			HealthProbeBindAddress: "0",   // disable health-check
@@ -151,6 +158,13 @@ var _ = Describe("Service health monitor controller test:", Ordered, func() {
 		opClient = c.GetClient()
 		Expect(opClient).NotTo(BeNil())
 
+		suite.Log.Info("starting shared view storage")
+		go func() {
+			defer GinkgoRecover()
+			err := api.Cache.Start(ctx)
+			Expect(err).NotTo(HaveOccurred(), "failed to start API server cache")
+		}()
+
 		setupLog.Info("starting operator controller")
 		go func() {
 			defer GinkgoRecover()
@@ -159,7 +173,7 @@ var _ = Describe("Service health monitor controller test:", Ordered, func() {
 		}()
 	})
 
-	It("should let an operator to be attached to the manager", func() {
+	It("should let an operator to be loaded", func() {
 		setupLog.Info("reading YAML file")
 		yamlData, err := os.ReadFile(OperatorSpecFile)
 		Expect(err).NotTo(HaveOccurred())

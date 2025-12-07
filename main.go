@@ -47,6 +47,7 @@ import (
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/apiserver"
 	"github.com/l7mp/dcontroller/pkg/auth"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/visualize"
 
@@ -230,7 +231,16 @@ func runStartServer(_ *cobra.Command, cfg apiServerConfig) error {
 	setupLog.Info(fmt.Sprintf("starting Δ-controller operator %s", buildInfo.String()))
 
 	// Create an operator controller to watch and reconcile Operator CRDs
-	c, err := controllers.NewOpController(ctrl.GetConfigOrDie(), ctrl.Options{
+	config := ctrl.GetConfigOrDie()
+	api, err := composite.NewAPI(config, composite.Options{
+		CacheOptions: composite.CacheOptions{Logger: logger},
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to create a shared cache")
+		os.Exit(1)
+	}
+
+	c, err := controllers.NewOpController(config, api.Cache, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: cfg.metricsAddr,
@@ -248,8 +258,8 @@ func runStartServer(_ *cobra.Command, cfg apiServerConfig) error {
 	ctx := ctrl.SetupSignalHandler()
 
 	if !cfg.disableAPIServer {
-		clientMpx := c.GetClient()
-		apiServerCfg, err := apiserver.NewDefaultConfig("0.0.0.0", APIServerPort, clientMpx, cfg.httpMode, cfg.insecure, logger)
+		apiServerCfg, err := apiserver.NewDefaultConfig("0.0.0.0", APIServerPort, api.Client,
+			cfg.httpMode, cfg.insecure, logger)
 		if err != nil {
 			setupLog.Error(err, "failed to create the config for the embedded API server")
 			os.Exit(1)
@@ -291,6 +301,13 @@ func runStartServer(_ *cobra.Command, cfg apiServerConfig) error {
 			}
 		}()
 	}
+
+	setupLog.Info("starting shared view storage")
+	go func() {
+		if err := api.Cache.Start(ctx); err != nil {
+			setupLog.Error(err, "failed to start API server cache")
+		}
+	}()
 
 	setupLog.Info("starting the operator controller")
 	if err := c.Start(ctx); err != nil {

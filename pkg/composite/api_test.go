@@ -60,7 +60,7 @@ var _ = Describe("NewCompositeAPIClient", func() {
 				Logger:        logger,
 			}
 
-			apiClient, err := NewCompositeAPIClient(nil, "test", opts)
+			apiClient, err := NewAPI(nil, opts)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(apiClient).NotTo(BeNil())
 
@@ -99,7 +99,7 @@ var _ = Describe("NewCompositeAPIClient", func() {
 				Logger:        logger,
 			}
 
-			apiClient, err := NewCompositeAPIClient(config, "test", opts)
+			apiClient, err := NewAPI(config, opts)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(apiClient).NotTo(BeNil())
 			Expect(apiClient.Client).NotTo(BeNil())
@@ -119,7 +119,7 @@ var _ = Describe("NewCompositeAPIClient", func() {
 				Logger:        logger,
 			}
 
-			apiClient, err := NewCompositeAPIClient(nil, "test", opts)
+			apiClient, err := NewAPI(nil, opts)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Test that discovery client is used by REST mapper
@@ -145,7 +145,7 @@ var _ = Describe("NewCompositeAPIClient", func() {
 	})
 
 	Describe("Getter methods", func() {
-		var apiClient *APIClient
+		var apiClient *API
 
 		BeforeEach(func() {
 			opts := Options{
@@ -157,7 +157,7 @@ var _ = Describe("NewCompositeAPIClient", func() {
 			}
 
 			var err error
-			apiClient, err = NewCompositeAPIClient(nil, "test", opts)
+			apiClient, err = NewAPI(nil, opts)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -192,7 +192,7 @@ var _ = Describe("NewCompositeAPIClient", func() {
 
 		It("should handle type assertion failures gracefully", func() {
 			// Create an APIClient with non-composite components to test the getter edge cases
-			nonCompositeClient := &APIClient{
+			nonCompositeClient := &API{
 				Discovery: &fakeDiscovery{},
 				Cache:     &FakeRuntimeCache{},
 				Client:    fake.NewClientBuilder().Build(),

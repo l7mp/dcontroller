@@ -12,19 +12,18 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
+	runtimeCache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	runtimeConfig "sigs.k8s.io/controller-runtime/pkg/config"
 	runtimeCtrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	runtimeMgr "sigs.k8s.io/controller-runtime/pkg/manager"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/apiserver"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/controller"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/operator"
@@ -38,18 +37,20 @@ const StatusChannelBufferSize = 64
 type opEntry struct {
 	op        *operator.Operator
 	errorChan chan error
+	ctx       context.Context    // Operator-specific context
+	cancel    context.CancelFunc // For stopping the operator
 }
 
 type OpController struct {
 	// Base context, only valid after started==true
 	ctx context.Context
 	// Manager for watching Operator CRDs from Kubernetes
-	crdMgr runtimeMgr.Manager
+	crdMgr manager.Manager
 	// Client for accessing Kubernetes API (Operator CRDs)
 	k8sClient client.Client
 
-	// Manager for running operators and storing views
-	operatorMgr runtimeMgr.Manager
+	// Shared cache for all operators (each operator has its own manager using this cache)
+	sharedCache runtimeCache.Cache
 	// Map of operator name to operator and error channel
 	operators map[string]*opEntry
 	// Mutex for thread-safe operator map access
@@ -58,7 +59,7 @@ type OpController struct {
 	apiServer *apiserver.APIServer
 	// Error channel for operator errors
 	errorChan chan error
-	// REST config for creating operator manager
+	// REST config for creating operator managers
 	config *rest.Config
 	// Whether the controller has been started
 	started bool
@@ -67,12 +68,13 @@ type OpController struct {
 }
 
 // NewOpController creates a new Kubernetes controller that handles the Operator CRDs. OpController
-// creates and manages two separate managers:
+// creates and manages:
 //  1. CRD manager: watches Operator CRDs from Kubernetes
-//  2. Operator manager: runs operators and stores views (exposed via API server)
+//  2. Shared composite cache: used by all operators to enable cross-operator watches
+//  3. Per-operator managers: each operator gets its own manager with the shared cache injected
 //
-// The controller has to be started using Start(ctx) that will automatically start both managers.
-func NewOpController(config *rest.Config, opts runtimeMgr.Options) (*OpController, error) {
+// The controller has to be started using Start(ctx) that will start the CRD manager and shared cache.
+func NewOpController(config *rest.Config, sharedCache runtimeCache.Cache, opts manager.Options) (*OpController, error) {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -80,7 +82,7 @@ func NewOpController(config *rest.Config, opts runtimeMgr.Options) (*OpControlle
 	}
 
 	// Create the CRD manager for watching Operator CRDs from Kubernetes
-	crdMgr, err := runtimeMgr.New(config, opts)
+	crdMgr, err := manager.New(config, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -95,29 +97,10 @@ func NewOpController(config *rest.Config, opts runtimeMgr.Options) (*OpControlle
 		}
 	}
 
-	// Create the operator manager for running operators and storing views
-	// This manager uses a composite cache that can store views from all operators
-	off := true
-	operatorMgr, err := manager.New(config, runtimeMgr.Options{
-		LeaderElection:         false,
-		HealthProbeBindAddress: "0",
-		// Disable global controller name uniqueness test
-		Controller: runtimeConfig.Controller{
-			SkipNameValidation: &off,
-		},
-		Metrics: metricsserver.Options{
-			BindAddress: "0",
-		},
-		Logger: logger,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create operator manager: %w", err)
-	}
-
 	ctrl := &OpController{
 		crdMgr:      crdMgr,
 		k8sClient:   crdMgr.GetClient(),
-		operatorMgr: operatorMgr,
+		sharedCache: sharedCache,
 		operators:   make(map[string]*opEntry),
 		errorChan:   make(chan error),
 		config:      config,
@@ -149,19 +132,24 @@ func NewOpController(config *rest.Config, opts runtimeMgr.Options) (*OpControlle
 	return ctrl, nil
 }
 
+// GetSharedCache returns the shared cache used by all operators.
+func (c *OpController) GetCache() runtimeCache.Cache {
+	return c.sharedCache
+}
+
 // GetK8sClient returns the native Kubernetes client for the CRD manager.
 func (c *OpController) GetK8sClient() client.Client {
 	return c.k8sClient
 }
 
-// GetManager returns the operator manager that runs operators and stores views.
-func (c *OpController) GetManager() runtimeMgr.Manager {
-	return c.operatorMgr
-}
-
-// GetClient returns the operator manager's client that can access views from all operators.
+// GetClient returns a client that can access views from all operators via the shared cache.
 func (c *OpController) GetClient() client.Client {
-	return c.operatorMgr.GetClient()
+	// Return the view cache client
+	if cc, ok := c.sharedCache.(*composite.CompositeCache); ok {
+		return cc.GetViewCache().GetClient()
+	}
+	// Fallback (should not happen in normal operation)
+	return nil
 }
 
 // SetAPIServer sets the embedded API server shared by all operators.
@@ -213,11 +201,15 @@ func (c *OpController) AddOperatorFromSpec(name string, spec *opv1a1.OperatorSpe
 
 	// Use the shared operator manager for this operator
 	errorChan := make(chan error, StatusChannelBufferSize)
-	op := operator.New(name, c.operatorMgr, operator.Options{
+	op, err := operator.New(name, c.config, operator.Options{
+		Cache:        c.sharedCache,
 		APIServer:    c.apiServer,
 		ErrorChannel: errorChan,
 		Logger:       c.logger,
 	})
+	if err != nil {
+		return nil, err
+	}
 	op.AddSpec(spec)
 	c.AddOperator(op)
 
@@ -238,20 +230,36 @@ func (c *OpController) UpsertOperator(name string, spec *opv1a1.OperatorSpec) (*
 
 // DeleteOperator removes an operator from the controller.
 func (c *OpController) DeleteOperator(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	e, ok := c.operators[name]
+	if !ok {
+		return
+	}
+
 	c.log.V(4).Info("deleting operator", "name", name)
 
-	c.mu.Lock()
+	e.cancel()
 	delete(c.operators, name)
-	c.mu.Unlock()
 }
 
 // startOp starts error channel aggregation for an operator.
 func (c *OpController) startOp(e *opEntry) {
-	if !c.started {
-		c.log.Error(errors.New("attempt to call startOp before operator started"),
-			"operator", e.op.GetName())
-		return
-	}
+	// Create a context for the operator and start it
+	ctx, cancel := context.WithCancel(c.ctx)
+	c.mu.Lock()
+	e.ctx = ctx
+	e.cancel = cancel
+	c.mu.Unlock()
+
+	go func() {
+		if err := e.op.Start(ctx); err != nil {
+			c.errorChan <- err
+			return
+		}
+	}()
+
 	// Pass the errors on to our caller
 	go func() {
 		for {
@@ -260,10 +268,10 @@ func (c *OpController) startOp(e *opEntry) {
 				// Use non-blocking send to avoid writing to closed channel
 				select {
 				case c.errorChan <- err:
-				case <-c.ctx.Done():
+				case <-ctx.Done():
 					return
 				}
-			case <-c.ctx.Done():
+			case <-ctx.Done():
 				return
 			}
 		}
@@ -315,19 +323,19 @@ func (c *OpController) Start(ctx context.Context) error {
 	c.ctx = ctx
 	c.mu.Unlock()
 
+	// Start the operator manager in the background
+	go func() {
+		c.log.V(2).Info("starting operator manager")
+
+		if err := c.crdMgr.Start(ctx); err != nil {
+			c.log.Error(err, "operator manager error")
+		}
+	}()
+
 	// Start all operators
 	for _, e := range es {
 		c.startOp(e)
 	}
-
-	// Start the operator manager (in a goroutine)
-	go func() {
-		c.log.V(2).Info("starting operator manager")
-
-		if err := c.operatorMgr.Start(ctx); err != nil {
-			c.log.Error(err, "operator manager error")
-		}
-	}()
 
 	// Surface errors from operators and generate CRD statuses.
 	go func() {

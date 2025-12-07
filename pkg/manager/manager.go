@@ -38,6 +38,35 @@ type (
 	Manager = runtimeMgr.Manager
 )
 
+// CacheInjector can be used to inject an existing cache into a manager configuration.
+func CacheInjector(sharedCache ctrlCache.Cache) ctrlCache.NewCacheFunc {
+	return func(config *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
+		compositeCache, ok := sharedCache.(*composite.CompositeCache)
+		if !ok {
+			return nil, errors.New("expecting CompositeCache")
+		}
+
+		// Get the shared view cache (must be *ViewCache)
+		sharedViewCache, ok := compositeCache.GetViewCache().(*composite.ViewCache)
+		if !ok {
+			return nil, errors.New("shared cache view cache must be *ViewCache")
+		}
+
+		delegatingViewCache := composite.NewDelegatingViewCache(sharedViewCache,
+			composite.CacheOptions{Options: opts})
+
+		compositeCache, err := composite.NewCompositeCache(config, composite.CacheOptions{
+			ViewCache: delegatingViewCache,
+			Options:   opts,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return compositeCache, nil
+	}
+}
+
 // New creates a new delta-controller manager with composite cache and client.  A composite manager
 // uses a split cache: native Kubernetes objects are managed by the API server, while view objects
 // are served from an in-memory view cache. The client automatically routes operations to the
@@ -54,24 +83,24 @@ func New(config *rest.Config, opts Options) (Manager, error) {
 
 	logger := opts.Logger
 	if opts.NewCache == nil {
+		// cache is not injected, setup our own infrastructure
 		opts.NewCache = func(config *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
 			return composite.NewCompositeCache(config, composite.CacheOptions{
 				Options: opts,
 				Logger:  logger,
 			})
 		}
-	}
 
-	// Override the client created by the base manager with the custom split client.
-	if opts.NewClient == nil {
 		// Make sure unstructured objects are served through the cache (the default is to
 		// obtain them directly from the API server).
-		opts.Client = client.Options{
-			Cache: &client.CacheOptions{
-				Unstructured: true,
-			},
-		}
+		opts.Client = client.Options{Cache: &client.CacheOptions{Unstructured: true}}
 		// This, apparently, only affects the Writer of the split client!
+		opts.NewClient = func(config *rest.Config, options client.Options) (client.Client, error) {
+			return composite.NewCompositeClient(config, options)
+		}
+	} else {
+		// cache is being injected: override the client getter to generate clients for the
+		// injected cache
 		opts.NewClient = func(config *rest.Config, options client.Options) (client.Client, error) {
 			return composite.NewCompositeClient(config, options)
 		}
@@ -104,14 +133,12 @@ func NewHeadless(opts Options) (Manager, error) {
 
 	// We can create a static cache since we do not need to wait until NewCache/NewClient is
 	// called by the controller runtime to reveal the cache options and client options.
-	c := composite.NewViewCache(composite.CacheOptions{Logger: logger})
 	if opts.NewCache == nil {
+		c := composite.NewViewCache(composite.CacheOptions{Logger: logger})
 		opts.NewCache = func(_ *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
 			return c, nil
 		}
-	}
 
-	if opts.NewClient == nil {
 		opts.NewClient = func(config *rest.Config, options client.Options) (client.Client, error) {
 			return c.GetClient(), nil
 		}

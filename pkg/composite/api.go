@@ -36,9 +36,9 @@ type Options struct {
 	Logger logr.Logger
 }
 
-// APIClient bundles multiple API machinery components into a single client, including a regular
+// API bundles multiple API machinery components into a single client, including a regular
 // client, a discovery client, a cache and a REST mapper.
-type APIClient struct {
+type API struct {
 	Client     client.Client
 	Cache      cache.Cache
 	Discovery  discovery.DiscoveryInterface
@@ -46,8 +46,8 @@ type APIClient struct {
 	Log        logr.Logger
 }
 
-// NewCompositeAPIClient creates a composite API client with all components.
-func NewCompositeAPIClient(config *rest.Config, operator string, opts Options) (*APIClient, error) {
+// NewAPI creates a composite API client with all components.
+func NewAPI(config *rest.Config, opts Options) (*API, error) {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -85,12 +85,13 @@ func NewCompositeAPIClient(config *rest.Config, operator string, opts Options) (
 	if err != nil {
 		return nil, err
 	}
+	compositeClient.SetCache(compositeCache)
 
 	if config == nil {
 		log.Info("native Kubernetes resources unavailable: no REST config provided")
 	}
 
-	return &APIClient{
+	return &API{
 		Client:     compositeClient,
 		Cache:      compositeCache,
 		Discovery:  compositeDiscovery,
@@ -100,7 +101,7 @@ func NewCompositeAPIClient(config *rest.Config, operator string, opts Options) (
 }
 
 // GetDiscovery returns the composite discovery client with view-specific extensions.
-func (c *APIClient) GetDiscovery() *CompositeDiscoveryClient {
+func (c *API) GetDiscovery() *CompositeDiscoveryClient {
 	if cd, ok := c.Discovery.(*CompositeDiscoveryClient); ok {
 		return cd
 	}
@@ -108,7 +109,7 @@ func (c *APIClient) GetDiscovery() *CompositeDiscoveryClient {
 }
 
 // GetCache returns the cache for the bundle.
-func (c *APIClient) GetCache() *CompositeCache {
+func (c *API) GetCache() *CompositeCache {
 	if cc, ok := c.Cache.(*CompositeCache); ok {
 		return cc
 	}
@@ -116,7 +117,7 @@ func (c *APIClient) GetCache() *CompositeCache {
 }
 
 // GetCache returns the client for the bundle.
-func (c *APIClient) GetClient() *CompositeClient {
+func (c *API) GetClient() *CompositeClient {
 	if cc, ok := c.Client.(*CompositeClient); ok {
 		return cc
 	}

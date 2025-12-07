@@ -8,20 +8,38 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/object"
 )
 
 var _ cache.Cache = &CompositeCache{}
+
+// ViewCacheInterface extends cache.Cache with view-specific operations.
+// Both ViewCache and DelegatingViewCache implement this interface.
+type ViewCacheInterface interface {
+	cache.Cache
+	// GetClient returns a client for this view cache.
+	GetClient() client.WithWatch
+	// Add adds an object to the cache.
+	Add(obj object.Object) error
+	// Update updates an object in the cache.
+	Update(oldObj, newObj object.Object) error
+	// Delete removes an object from the cache.
+	Delete(obj object.Object) error
+	// Watch watches for changes to objects.
+	Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error)
+}
 
 // CompositeCache is a cache for storing view objects. It delegates native objects to a default
 // cache.
 type CompositeCache struct {
 	defaultCache cache.Cache
-	viewCache    *ViewCache
+	viewCache    ViewCacheInterface
 	logger, log  logr.Logger
 }
 
@@ -30,12 +48,14 @@ type CacheOptions struct {
 	cache.Options
 	// DefaultCache is the controller-runtime cache used for anything that is not a view.
 	DefaultCache cache.Cache
+	// ViewCache is the view cache used for anything that is a view.
+	ViewCache cache.Cache
 	// Logger is for logging. Currently only the viewcache generates log messages.
 	Logger logr.Logger
 }
 
 // NewCompositeCache creates a new composite cache. If the config is not nil it also creates a
-// controller-runtime for storing native resources.
+// controller-runtime cache for storing native resources.
 func NewCompositeCache(config *rest.Config, opts CacheOptions) (*CompositeCache, error) {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
@@ -51,9 +71,23 @@ func NewCompositeCache(config *rest.Config, opts CacheOptions) (*CompositeCache,
 		defaultCache = dc
 	}
 
+	var viewCache ViewCacheInterface
+	if opts.ViewCache != nil {
+		// Use the provided view cache (can be ViewCache or DelegatingViewCache)
+		if vc, ok := opts.ViewCache.(ViewCacheInterface); ok {
+			viewCache = vc
+		} else {
+			// Fallback: create a new ViewCache if provided cache doesn't implement the interface
+			viewCache = NewViewCache(opts)
+		}
+	} else {
+		// Create a new ViewCache if none provided
+		viewCache = NewViewCache(opts)
+	}
+
 	return &CompositeCache{
 		defaultCache: defaultCache,
-		viewCache:    NewViewCache(opts),
+		viewCache:    viewCache,
 		logger:       logger,
 		log:          logger.WithName("cache"),
 	}, nil
@@ -70,7 +104,7 @@ func (cc *CompositeCache) GetDefaultCache() cache.Cache {
 }
 
 // GetViewCache returns the cache used for storing view objects.
-func (cc *CompositeCache) GetViewCache() *ViewCache {
+func (cc *CompositeCache) GetViewCache() ViewCacheInterface {
 	return cc.viewCache
 }
 

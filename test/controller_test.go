@@ -143,7 +143,6 @@ target:
 			get.SetGroupVersionKind(gvk)
 			key := client.ObjectKeyFromObject(svc)
 			Eventually(func() bool {
-				// if err := mgr.GetClient().Get(ctx, key, get); err != nil && apierrors.IsNotFound(err) {
 				if err := k8sClient.Get(ctx, key, get); err != nil && apierrors.IsNotFound(err) {
 					setupLog.Info("could not query starting manager")
 					return false

@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"runtime/debug"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -9,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
@@ -27,6 +30,7 @@ var _ = Describe("Operator status report test:", Ordered, func() {
 			off        = true
 			ctrlCtx    context.Context
 			ctrlCancel context.CancelFunc
+			api        *composite.API
 		)
 
 		BeforeAll(func() {
@@ -39,7 +43,13 @@ var _ = Describe("Operator status report test:", Ordered, func() {
 
 		It("should create and start the operator controller", func() {
 			setupLog.Info("setting up operator controller")
-			c, err := controllers.NewOpController(cfg, ctrl.Options{
+			var err error
+			api, err = composite.NewAPI(cfg, composite.Options{
+				CacheOptions: composite.CacheOptions{Logger: logger},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			c, err := controllers.NewOpController(cfg, api.Cache, ctrl.Options{
 				Scheme:                 scheme,
 				LeaderElection:         false, // disable leader-election
 				HealthProbeBindAddress: "0",   // disable health-check
@@ -53,10 +63,20 @@ var _ = Describe("Operator status report test:", Ordered, func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
+			setupLog.Info("starting shared view storage")
+			go func() {
+				defer GinkgoRecover()
+				err := api.Cache.Start(ctx)
+				Expect(err).NotTo(HaveOccurred(), "failed to shared cache")
+			}()
+
 			setupLog.Info("starting operator controller")
 			go func() {
 				defer GinkgoRecover()
 				err := c.Start(ctx)
+				if err != nil {
+					debug.PrintStack()
+				}
 				Expect(err).ToNot(HaveOccurred(), "failed to run controller")
 			}()
 		})
@@ -121,6 +141,7 @@ spec:
 		var (
 			ctrlCtx    context.Context
 			ctrlCancel context.CancelFunc
+			api        *composite.API
 			pod        object.Object
 			op         opv1a1.Operator
 		)
@@ -137,7 +158,13 @@ spec:
 		It("should create and start the operator controller", func() {
 			setupLog.Info("setting up operator controller")
 			off := true
-			c, err := controllers.NewOpController(cfg, ctrl.Options{
+			var err error
+			api, err = composite.NewAPI(cfg, composite.Options{
+				CacheOptions: composite.CacheOptions{Logger: logger},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			c, err := controllers.NewOpController(cfg, api.Cache, ctrl.Options{
 				Scheme:                 scheme,
 				LeaderElection:         false, // disable leader-election
 				HealthProbeBindAddress: "0",   // disable health-check
@@ -150,6 +177,13 @@ spec:
 				Logger: logger,
 			})
 			Expect(err).NotTo(HaveOccurred())
+
+			setupLog.Info("starting shared view storage")
+			go func() {
+				defer GinkgoRecover()
+				err := api.Cache.Start(ctx)
+				Expect(err).NotTo(HaveOccurred(), "failed to shared cache")
+			}()
 
 			setupLog.Info("starting operator controller")
 			go func() {
@@ -308,7 +342,10 @@ spec:
 
 		It("should survive deleting the operator", func() {
 			ctrl.Log.Info("deleting op")
-			Expect(k8sClient.Delete(ctrlCtx, &op)).Should(Succeed())
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				return k8sClient.Delete(ctrlCtx, &op)
+			})
+			Expect(err).Should(Succeed())
 		})
 	})
 })

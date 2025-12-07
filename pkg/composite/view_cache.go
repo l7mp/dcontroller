@@ -31,11 +31,15 @@ const DefaultWatchChannelBuffer = 256
 // per each GVK that can be stored in the cache. ViewCache is now operator-agnostic and can store
 // views from any operator.
 type ViewCache struct {
-	mu          sync.RWMutex
-	caches      map[schema.GroupVersionKind]toolscache.Indexer
-	informers   map[schema.GroupVersionKind]*ViewCacheInformer
-	discovery   ViewDiscoveryInterface
-	logger, log logr.Logger
+	mu        sync.RWMutex
+	caches    map[schema.GroupVersionKind]toolscache.Indexer
+	informers map[schema.GroupVersionKind]*ViewCacheInformer
+	// delegatingInformers maintains a registry of informers from DelegatingViewCache instances.
+	// When shared storage triggers events via Add/Update/Delete, it propagates them to all
+	// registered delegating informers, enabling cross-operator watch functionality.
+	delegatingInformers map[schema.GroupVersionKind][]*ViewCacheInformer
+	discovery           ViewDiscoveryInterface
+	logger, log         logr.Logger
 }
 
 // NewViewCache creates a new view cache that can store views from any operator.
@@ -46,11 +50,12 @@ func NewViewCache(opts CacheOptions) *ViewCache {
 	}
 
 	c := &ViewCache{
-		caches:    make(map[schema.GroupVersionKind]toolscache.Indexer),
-		informers: make(map[schema.GroupVersionKind]*ViewCacheInformer),
-		discovery: NewViewDiscovery(),
-		logger:    logger,
-		log:       logger.WithName("cache"),
+		caches:              make(map[schema.GroupVersionKind]toolscache.Indexer),
+		informers:           make(map[schema.GroupVersionKind]*ViewCacheInformer),
+		delegatingInformers: make(map[schema.GroupVersionKind][]*ViewCacheInformer),
+		discovery:           NewViewDiscovery(),
+		logger:              logger,
+		log:                 logger.WithName("cache"),
 	}
 	return c
 }
@@ -130,6 +135,47 @@ func (c *ViewCache) RegisterInformerForKind(gvk schema.GroupVersionKind) error {
 
 	informer := NewViewCacheInformer(gvk, cache, c.log)
 	c.informers[gvk] = informer
+
+	return nil
+}
+
+// RegisterDelegatingInformer registers an informer from a DelegatingViewCache for a GVK.
+// This allows the shared storage to propagate events to all delegating caches.
+func (c *ViewCache) RegisterDelegatingInformer(gvk schema.GroupVersionKind, informer *ViewCacheInformer) error {
+	if !viewv1a1.IsViewKind(gvk) {
+		return fmt.Errorf("not a view GVK: %s", gvk)
+	}
+
+	c.log.V(4).Info("registering delegating informer for GVK", "gvk", gvk)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.delegatingInformers[gvk] = append(c.delegatingInformers[gvk], informer)
+
+	return nil
+}
+
+// UnregisterDelegatingInformer removes a delegating informer from the registry.
+func (c *ViewCache) UnregisterDelegatingInformer(gvk schema.GroupVersionKind, informer *ViewCacheInformer) error {
+	if !viewv1a1.IsViewKind(gvk) {
+		return fmt.Errorf("not a view GVK: %s", gvk)
+	}
+
+	c.log.V(4).Info("unregistering delegating informer for GVK", "gvk", gvk)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	informers := c.delegatingInformers[gvk]
+	for i, inf := range informers {
+		if inf == informer {
+			// Remove by replacing with last element and truncating
+			c.delegatingInformers[gvk][i] = c.delegatingInformers[gvk][len(c.delegatingInformers[gvk])-1]
+			c.delegatingInformers[gvk] = c.delegatingInformers[gvk][:len(c.delegatingInformers[gvk])-1]
+			break
+		}
+	}
 
 	return nil
 }
@@ -218,7 +264,17 @@ func (c *ViewCache) Add(obj object.Object) error {
 		return err
 	}
 
+	// Trigger event on shared informer
 	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Added, nil, obj, false)
+
+	// Also trigger event on all delegating informers
+	c.mu.RLock()
+	delegatingInfs := c.delegatingInformers[gvk]
+	c.mu.RUnlock()
+
+	for _, dinf := range delegatingInfs {
+		dinf.TriggerEvent(toolscache.Added, nil, obj, false)
+	}
 
 	return nil
 }
@@ -258,7 +314,18 @@ func (c *ViewCache) Update(oldObj, newObj object.Object) error {
 	if err != nil {
 		return err
 	}
+
+	// Trigger event on shared informer
 	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Updated, oldObj, newObj, false)
+
+	// Also trigger event on all delegating informers
+	c.mu.RLock()
+	delegatingInfs := c.delegatingInformers[gvk]
+	c.mu.RUnlock()
+
+	for _, dinf := range delegatingInfs {
+		dinf.TriggerEvent(toolscache.Updated, oldObj, newObj, false)
+	}
 
 	return nil
 }
@@ -313,9 +380,20 @@ func (c *ViewCache) Delete(obj object.Object) error {
 	if err != nil {
 		return err
 	}
+
+	// Trigger event on shared informer
 	// Trigger the informer event with the incoming obj. This may break some watchers, but
 	// critically needed for controller chains to work.
 	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Deleted, nil, obj, false)
+
+	// Also trigger event on all delegating informers
+	c.mu.RLock()
+	delegatingInfs := c.delegatingInformers[gvk]
+	c.mu.RUnlock()
+
+	for _, dinf := range delegatingInfs {
+		dinf.TriggerEvent(toolscache.Deleted, nil, obj, false)
+	}
 
 	return nil
 }
@@ -555,7 +633,7 @@ func (c *ViewCache) Watch(ctx context.Context, list client.ObjectList, opts ...c
 
 // Start runs all the informers known to this cache until the context is closed.  It blocks.
 func (c *ViewCache) Start(ctx context.Context) error {
-	// Initialize any resources if needed
+	c.log.V(4).Info("starting cache")
 
 	// Start the informers
 	c.mu.RLock()

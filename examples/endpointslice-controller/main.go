@@ -20,9 +20,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/yaml"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	dobject "github.com/l7mp/dcontroller/pkg/object"
 	doperator "github.com/l7mp/dcontroller/pkg/operator"
@@ -70,10 +70,10 @@ func main() {
 		specFile = OperatorSpec
 	}
 
-	// Create a manager
-	mgr, err := manager.New(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		Logger: logger,
+	// Create an api
+	config := ctrl.GetConfigOrDie()
+	api, err := composite.NewAPI(config, composite.Options{
+		CacheOptions: composite.CacheOptions{Logger: logger},
 	})
 	if err != nil {
 		log.Error(err, "unable to set up manager")
@@ -83,27 +83,20 @@ func main() {
 	// Load the operator from file
 	errorChan := make(chan error, 16)
 	opts := doperator.Options{
+		Cache:        api.GetCache(),
 		ErrorChannel: errorChan,
 		Logger:       logger,
 	}
 
 	// Load the operator from file. Do not call NewFromFile as that would commit the operator.
-	op := doperator.New(OperatorName, mgr, opts)
-	b, err := os.ReadFile(specFile)
+	op, err := doperator.NewFromFile(OperatorName, config, specFile, opts)
 	if err != nil {
-		log.Error(err, "failed to load spec")
+		log.Error(err, "unable to set up operator")
 		os.Exit(1)
 	}
-	var spec opv1a1.OperatorSpec
-	if err := yaml.Unmarshal(b, &spec); err != nil {
-		log.Error(err, "failed to parse spec")
-		os.Exit(1)
-	}
-
-	op.AddSpec(&spec)
 
 	// Create the endpointslice controller
-	r, err := NewEndpointSliceController(mgr, logger)
+	r, err := NewEndpointSliceController(op.GetManager(), logger)
 	if err != nil {
 		log.Error(err, "failed to create endpointslice controller")
 		os.Exit(1)
@@ -129,7 +122,7 @@ func main() {
 		}
 	}()
 
-	if err := mgr.Start(ctx); err != nil {
+	if err := op.Start(ctx); err != nil {
 		log.Error(err, "problem running operator")
 		os.Exit(1)
 	}

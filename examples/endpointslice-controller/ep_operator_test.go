@@ -37,7 +37,7 @@ import (
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/apiserver"
-	"github.com/l7mp/dcontroller/pkg/manager"
+	"github.com/l7mp/dcontroller/pkg/composite"
 	"github.com/l7mp/dcontroller/pkg/object"
 	doperator "github.com/l7mp/dcontroller/pkg/operator"
 	dreconciler "github.com/l7mp/dcontroller/pkg/reconciler"
@@ -48,7 +48,7 @@ var (
 	suite *testsuite.Suite
 	// loglevel = 1
 	// loglevel = -10
-	loglevel      int8 = -5
+	loglevel      int8 = -10
 	port          int
 	epCtrl        *testEpCtrl
 	errorCh       chan error
@@ -86,7 +86,7 @@ func (r *testEpCtrl) Reconcile(ctx context.Context, req dreconciler.Request) (re
 
 var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 	Context("When creating an endpointslice controller w/o gather", Ordered, Label("operator"), func() {
-		var mgr manager.Manager
+		var api *composite.API
 		var svc1, es1 object.Object
 		var specs []map[string]any
 		var epNames []string
@@ -124,17 +124,18 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 		AfterAll(func() { cancel() })
 
 		It("should create and start the API server", func() {
-			suite.Log.Info("creating a manager")
+			suite.Log.Info("creating an API server")
 			var err error
-			mgr, err = manager.New(suite.Cfg, ctrl.Options{
-				Scheme: scheme,
-				Logger: suite.Log,
+			api, err = composite.NewAPI(suite.Cfg, composite.Options{
+				CacheOptions: composite.CacheOptions{Logger: suite.Log},
 			})
 			Expect(err).NotTo(HaveOccurred())
+			Expect(api.Client).NotTo(BeNil())
+			Expect(api.Client.(*composite.CompositeClient).GetCache()).NotTo(BeNil())
 
 			suite.Log.Info("creating the API server")
 			port = rand.IntN(5000) + (32768) //nolint:gosec
-			config, err := apiserver.NewDefaultConfig("", port, mgr.GetClient(), true, false, suite.Log)
+			config, err := apiserver.NewDefaultConfig("", port, api.Client, true, false, suite.Log)
 			Expect(err).NotTo(HaveOccurred())
 			server, err = apiserver.NewAPIServer(config)
 			Expect(err).NotTo(HaveOccurred())
@@ -154,6 +155,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			eventCh = make(chan testutils.ReconcileRequest, 16)
 			errorCh = make(chan error, 16)
 			opts := doperator.Options{
+				Cache:        api.GetCache(),
 				ErrorChannel: errorCh,
 				APIServer:    server,
 				Logger:       suite.Log,
@@ -162,10 +164,11 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			if _, err := os.Stat(specFile); errors.Is(err, os.ErrNotExist) {
 				specFile = filepath.Base(specFile)
 			}
-			_, err := doperator.NewFromFile(OperatorName, mgr, specFile, opts)
+			op, err := doperator.NewFromFile(OperatorName, suite.Cfg, specFile, opts)
 			Expect(err).NotTo(HaveOccurred())
 
 			suite.Log.Info("creating the endpointslice controller")
+			mgr := op.GetManager()
 			epCtrl = &testEpCtrl{Client: mgr.GetClient(), log: suite.Log.WithName("test-ep-ctrl")}
 			on := true
 			c, err := controller.NewTyped("test-ep-ctrl", mgr, controller.TypedOptions[dreconciler.Request]{
@@ -204,7 +207,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			suite.Log.Info("starting operator controller")
 			go func() {
 				defer GinkgoRecover()
-				err := mgr.Start(ctx)
+				err := op.Start(ctx)
 				Expect(err).ToNot(HaveOccurred(), "failed to run controller")
 			}()
 		})
@@ -311,14 +314,13 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 				Group:    viewv1a1.Group(OperatorName),
 				Version:  viewv1a1.Version,
 				Resource: "endpointview",
-			}).Namespace("default").List(context.TODO(), metav1.ListOptions{})
+			}).Namespace("default").List(ctx, metav1.ListOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.Items).To(BeEmpty())
 		})
 
 		It("should allow a watcher to be created", func() {
 			suite.Log.Info("creating a watch")
-
 			var err error
 			watcher, err = dynamicClient.Resource(schema.GroupVersionResource{
 				Group:    viewv1a1.Group(OperatorName),
@@ -337,7 +339,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			}
 			specs = []map[string]any{}
 
-			for i := 0; i < 4; i++ {
+			for i := range 4 {
 				obj, err := dynamicClient.Resource(gvr).Namespace("testnamespace").
 					Get(ctx, epNames[i], metav1.GetOptions{})
 				Expect(err).NotTo(HaveOccurred())
@@ -489,6 +491,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 	})
 
 	Context("When creating an endpointslice controller w/ gather", Ordered, Label("operator"), func() {
+		var api *composite.API
 		var svc1, es1 object.Object
 		var specs []map[string]any
 		var ctx context.Context // context for the endpointslice controller
@@ -524,9 +527,9 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 		AfterAll(func() { cancel() })
 
 		It("should create and start the controller", func() {
-			// Create a manager
-			mgr, err := manager.New(suite.Cfg, ctrl.Options{
-				Scheme: scheme,
+			var err error
+			api, err = composite.NewAPI(suite.Cfg, composite.Options{
+				CacheOptions: composite.CacheOptions{Logger: suite.Log},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -534,18 +537,37 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			eventCh = make(chan testutils.ReconcileRequest, 16)
 			errorCh = make(chan error, 16)
 			opts := doperator.Options{
+				Cache:        api.GetCache(),
 				ErrorChannel: errorCh,
 				Logger:       suite.Log,
 			}
+
+			suite.Log.Info("creating the API server")
+			port = rand.IntN(5000) + (32768) //nolint:gosec
+			config, err := apiserver.NewDefaultConfig("", port, api.Client, true, false, suite.Log)
+			Expect(err).NotTo(HaveOccurred())
+			server, err = apiserver.NewAPIServer(config)
+			Expect(err).NotTo(HaveOccurred())
+
+			go func() {
+				defer GinkgoRecover()
+				err := server.Start(ctx)
+				Expect(err).NotTo(HaveOccurred())
+			}()
+
+			// Give server a moment to start
+			time.Sleep(20 * time.Millisecond)
+
 			specFile := OperatorGatherSpec
 			if _, err := os.Stat(specFile); errors.Is(err, os.ErrNotExist) {
 				specFile = filepath.Base(specFile)
 			}
-			_, err = doperator.NewFromFile(OperatorName, mgr, specFile, opts)
+			op, err := doperator.NewFromFile(OperatorName, suite.Cfg, specFile, opts)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create the endpointslice controller
-			epCtrl = &testEpCtrl{Client: mgr.GetClient(), log: suite.Log.WithName("test-endpointslice-ctrl")}
+			mgr := op.GetManager()
+			epCtrl = &testEpCtrl{Client: api.GetClient(), log: suite.Log.WithName("test-endpointslice-ctrl")}
 			on := true
 			c, err := controller.NewTyped("test-ep-controller", mgr, controller.TypedOptions[dreconciler.Request]{
 				SkipNameValidation: &on,
@@ -575,10 +597,17 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 				}
 			}()
 
+			suite.Log.Info("starting API server cache (shared view storage)")
+			go func() {
+				defer GinkgoRecover()
+				err := api.Cache.Start(ctx)
+				Expect(err).NotTo(HaveOccurred(), "failed to start API server cache")
+			}()
+
 			suite.Log.Info("starting operator controller")
 			go func() {
 				defer GinkgoRecover()
-				err := mgr.Start(ctx)
+				err := op.Start(ctx)
 				Expect(err).ToNot(HaveOccurred(), "failed to run controller")
 			}()
 		})

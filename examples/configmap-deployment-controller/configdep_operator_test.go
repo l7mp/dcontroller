@@ -134,7 +134,7 @@ var _ = Describe("Configmap-deployment controller test:", Ordered, func() {
 
 	It("should create and start the operator controller", func() {
 		setupLog.Info("setting up operator controller")
-		c, err := controllers.NewOpController(cfg, ctrl.Options{
+		c, err := controllers.NewOpController(cfg, nil, ctrl.Options{
 			Scheme:                 scheme,
 			LeaderElection:         false, // disable leader-election
 			HealthProbeBindAddress: "0",   // disable health-check
