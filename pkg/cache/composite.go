@@ -128,9 +128,11 @@ func (cc *CompositeCache) Start(ctx context.Context) error {
 
 	// we must run this in a goroutine, otherwise the default cache cannot start up
 	// ignore the returned error: viewcache.Start() never errs
-	go cc.viewCache.Start(ctx) //nolint:errcheck
+	if cc.defaultCache != nil {
+		go cc.defaultCache.Start(ctx) //nolint:errcheck
+	}
 
-	return cc.defaultCache.Start(ctx)
+	return cc.viewCache.Start(ctx)
 }
 
 // WaitForCacheSync waits for all the caches to sync. Returns false if it could not sync a cache.c

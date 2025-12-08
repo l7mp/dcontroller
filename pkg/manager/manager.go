@@ -129,10 +129,6 @@ func New(config *rest.Config, opts Options) (Manager, error) {
 // A headless manager handles only view resources stored in an in-memory ViewCache.  This is useful
 // for standalone operation, testing, or when only view resources are needed.
 func NewHeadless(opts Options) (Manager, error) {
-	if opts.Logger.GetSink() == nil {
-		opts.Logger = logr.Discard()
-	}
-
 	logger := opts.Logger
 
 	// We can create a static cache since we do not need to wait until NewCache/NewClient is
@@ -146,7 +142,25 @@ func NewHeadless(opts Options) (Manager, error) {
 		opts.NewClient = func(config *rest.Config, options client.Options) (client.Client, error) {
 			return c.GetClient(), nil
 		}
+	} else {
+		// cache is being injected: override the client getter to generate clients for the
+		// injected cache
+		opts.NewClient = func(config *rest.Config, options client.Options) (client.Client, error) {
+			return cache.NewCompositeClient(config, options)
+		}
 	}
 
-	return runtimeMgr.New(&rest.Config{}, opts)
+	mgr, err := runtimeMgr.New(&rest.Config{}, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Pass the composite cache in to the client.
+	c, ok := mgr.GetClient().(*cache.CompositeClient)
+	if !ok {
+		return nil, errors.New("client must be a composite client")
+	}
+	c.SetCache(mgr.GetCache())
+
+	return mgr, nil
 }
