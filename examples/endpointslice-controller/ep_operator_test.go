@@ -37,7 +37,7 @@ import (
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/apiserver"
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/object"
 	doperator "github.com/l7mp/dcontroller/pkg/operator"
 	dreconciler "github.com/l7mp/dcontroller/pkg/reconciler"
@@ -86,7 +86,7 @@ func (r *testEpCtrl) Reconcile(ctx context.Context, req dreconciler.Request) (re
 
 var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 	Context("When creating an endpointslice controller w/o gather", Ordered, Label("operator"), func() {
-		var api *composite.API
+		var api *cache.API
 		var svc1, es1 object.Object
 		var specs []map[string]any
 		var epNames []string
@@ -126,12 +126,12 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 		It("should create and start the API server", func() {
 			suite.Log.Info("creating an API server")
 			var err error
-			api, err = composite.NewAPI(suite.Cfg, composite.Options{
-				CacheOptions: composite.CacheOptions{Logger: suite.Log},
+			api, err = cache.NewAPI(suite.Cfg, cache.APIOptions{
+				CacheOptions: cache.CacheOptions{Logger: suite.Log},
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(api.Client).NotTo(BeNil())
-			Expect(api.Client.(*composite.CompositeClient).GetCache()).NotTo(BeNil())
+			Expect(api.Client.(*cache.CompositeClient).GetCache()).NotTo(BeNil())
 
 			suite.Log.Info("creating the API server")
 			port = rand.IntN(5000) + (32768) //nolint:gosec
@@ -491,7 +491,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 	})
 
 	Context("When creating an endpointslice controller w/ gather", Ordered, Label("operator"), func() {
-		var api *composite.API
+		var api *cache.API
 		var svc1, es1 object.Object
 		var specs []map[string]any
 		var ctx context.Context // context for the endpointslice controller
@@ -528,8 +528,8 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 
 		It("should create and start the controller", func() {
 			var err error
-			api, err = composite.NewAPI(suite.Cfg, composite.Options{
-				CacheOptions: composite.CacheOptions{Logger: suite.Log},
+			api, err = cache.NewAPI(suite.Cfg, cache.APIOptions{
+				CacheOptions: cache.CacheOptions{Logger: suite.Log},
 			})
 			Expect(err).NotTo(HaveOccurred())
 

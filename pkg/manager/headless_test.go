@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
@@ -50,10 +50,10 @@ var _ = Describe("Headless Mode", func() {
 
 		go mgr.Start(ctx)
 
-		cache := mgr.GetCache()
-		Expect(cache).Should(BeAssignableToTypeOf(&composite.ViewCache{}))
-		cc := cache.(*composite.ViewCache)
-		Expect(cc).NotTo(BeNil())
+		cc := mgr.GetCache()
+		Expect(cc).Should(BeAssignableToTypeOf(&cache.ViewCache{}))
+		vcc := cc.(*cache.ViewCache)
+		Expect(vcc).NotTo(BeNil())
 
 		c := mgr.GetClient()
 		Expect(c).NotTo(BeNil())

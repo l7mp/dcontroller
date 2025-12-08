@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeMgr "sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 )
 
 // Re-export controller-runtime types for convenience.
@@ -38,24 +38,28 @@ type (
 	Manager = runtimeMgr.Manager
 )
 
-// CacheInjector can be used to inject an existing cache into a manager configuration.
+// CacheInjector can be used to inject an existing cache into a manager configuration. The new
+// cache will be a composite cache comprised by a new controller-runtime cache for native
+// Kubernetes resources and a new delegating view cache created on top of the shared view
+// cache. This allows the per-manager caches (and hence the operators created on top of the
+// managers) to have independent lifetimes.
 func CacheInjector(sharedCache ctrlCache.Cache) ctrlCache.NewCacheFunc {
 	return func(config *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
-		compositeCache, ok := sharedCache.(*composite.CompositeCache)
+		compositeCache, ok := sharedCache.(*cache.CompositeCache)
 		if !ok {
 			return nil, errors.New("expecting CompositeCache")
 		}
 
 		// Get the shared view cache (must be *ViewCache)
-		sharedViewCache, ok := compositeCache.GetViewCache().(*composite.ViewCache)
+		sharedViewCache, ok := compositeCache.GetViewCache().(*cache.ViewCache)
 		if !ok {
 			return nil, errors.New("shared cache view cache must be *ViewCache")
 		}
 
-		delegatingViewCache := composite.NewDelegatingViewCache(sharedViewCache,
-			composite.CacheOptions{Options: opts})
+		delegatingViewCache := cache.NewDelegatingViewCache(sharedViewCache,
+			cache.CacheOptions{Options: opts})
 
-		compositeCache, err := composite.NewCompositeCache(config, composite.CacheOptions{
+		compositeCache, err := cache.NewCompositeCache(config, cache.CacheOptions{
 			ViewCache: delegatingViewCache,
 			Options:   opts,
 		})
@@ -85,7 +89,7 @@ func New(config *rest.Config, opts Options) (Manager, error) {
 	if opts.NewCache == nil {
 		// cache is not injected, setup our own infrastructure
 		opts.NewCache = func(config *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
-			return composite.NewCompositeCache(config, composite.CacheOptions{
+			return cache.NewCompositeCache(config, cache.CacheOptions{
 				Options: opts,
 				Logger:  logger,
 			})
@@ -96,13 +100,13 @@ func New(config *rest.Config, opts Options) (Manager, error) {
 		opts.Client = client.Options{Cache: &client.CacheOptions{Unstructured: true}}
 		// This, apparently, only affects the Writer of the split client!
 		opts.NewClient = func(config *rest.Config, options client.Options) (client.Client, error) {
-			return composite.NewCompositeClient(config, options)
+			return cache.NewCompositeClient(config, options)
 		}
 	} else {
 		// cache is being injected: override the client getter to generate clients for the
 		// injected cache
 		opts.NewClient = func(config *rest.Config, options client.Options) (client.Client, error) {
-			return composite.NewCompositeClient(config, options)
+			return cache.NewCompositeClient(config, options)
 		}
 	}
 
@@ -112,7 +116,7 @@ func New(config *rest.Config, opts Options) (Manager, error) {
 	}
 
 	// Pass the composite cache in to the client.
-	c, ok := mgr.GetClient().(*composite.CompositeClient)
+	c, ok := mgr.GetClient().(*cache.CompositeClient)
 	if !ok {
 		return nil, errors.New("client must be a composite client")
 	}
@@ -134,7 +138,7 @@ func NewHeadless(opts Options) (Manager, error) {
 	// We can create a static cache since we do not need to wait until NewCache/NewClient is
 	// called by the controller runtime to reveal the cache options and client options.
 	if opts.NewCache == nil {
-		c := composite.NewViewCache(composite.CacheOptions{Logger: logger})
+		c := cache.NewViewCache(cache.CacheOptions{Logger: logger})
 		opts.NewCache = func(_ *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
 			return c, nil
 		}

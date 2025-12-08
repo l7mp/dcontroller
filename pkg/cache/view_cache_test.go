@@ -1,4 +1,4 @@
-package composite
+package cache
 
 import (
 	"context"
@@ -319,7 +319,7 @@ var _ = Describe("ViewCache", func() {
 			Expect(object.DeepEqual(obj, event.Object.(object.Object))).To(BeTrue())
 		})
 
-		// Add these tests after the existing "Watch operation" tests in pkg/composite/view_cache_test.go
+		// Add these tests after the existing "Watch operation" tests in pkg/cache/view_cache_test.go
 
 		It("should filter watch events by namespace", func() {
 			// Create objects in different namespaces

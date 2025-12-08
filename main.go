@@ -47,7 +47,7 @@ import (
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/apiserver"
 	"github.com/l7mp/dcontroller/pkg/auth"
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/visualize"
 
@@ -232,8 +232,8 @@ func runStartServer(_ *cobra.Command, cfg apiServerConfig) error {
 
 	// Create an operator controller to watch and reconcile Operator CRDs
 	config := ctrl.GetConfigOrDie()
-	api, err := composite.NewAPI(config, composite.Options{
-		CacheOptions: composite.CacheOptions{Logger: logger},
+	api, err := cache.NewAPI(config, cache.APIOptions{
+		CacheOptions: cache.CacheOptions{Logger: logger},
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create a shared cache")

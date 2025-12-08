@@ -1,8 +1,9 @@
-package composite
+package cache
 
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"

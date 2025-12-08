@@ -14,7 +14,7 @@ import (
 	"k8s.io/component-base/compatibility"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 )
 
 // DefaultAPIServerPort defines the default port used for the API server.
@@ -40,7 +40,7 @@ type Config struct {
 
 	// DiscoveryClient allows to inject a REST discovery client into the API server. Used
 	// mostly for testing.
-	DiscoveryClient composite.ViewDiscoveryInterface
+	DiscoveryClient cache.ViewDiscoveryInterface
 
 	// Authenticator and authorizer
 	Authenticator authenticator.Request

@@ -1,4 +1,4 @@
-package composite
+package cache
 
 // Utility functions that use the discovery client.
 

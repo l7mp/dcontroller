@@ -1,9 +1,10 @@
-package composite
+package cache
 
 import (
-	"github.com/l7mp/dcontroller/pkg/object"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/l7mp/dcontroller/pkg/object"
 )
 
 var _ = Describe("Object", func() {

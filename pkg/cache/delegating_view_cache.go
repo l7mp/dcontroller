@@ -1,4 +1,4 @@
-package composite
+package cache
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
-var _ cache.Cache = &DelegatingViewCache{}
+var _ Cache = &DelegatingViewCache{}
 
 // DelegatingViewCache is a view cache that delegates storage operations to a shared ViewCache
 // while maintaining its own local informers. This allows multiple operators to share view storage

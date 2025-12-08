@@ -1,4 +1,4 @@
-package composite
+package cache
 
 import (
 	toolscache "k8s.io/client-go/tools/cache"

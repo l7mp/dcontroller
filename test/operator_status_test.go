@@ -19,7 +19,7 @@ import (
 
 	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
@@ -30,7 +30,6 @@ var _ = Describe("Operator status report test:", Ordered, func() {
 			off        = true
 			ctrlCtx    context.Context
 			ctrlCancel context.CancelFunc
-			api        *composite.API
 		)
 
 		BeforeAll(func() {
@@ -44,12 +43,7 @@ var _ = Describe("Operator status report test:", Ordered, func() {
 		It("should create and start the operator controller", func() {
 			setupLog.Info("setting up operator controller")
 			var err error
-			api, err = composite.NewAPI(cfg, composite.Options{
-				CacheOptions: composite.CacheOptions{Logger: logger},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			c, err := controllers.NewOpController(cfg, api.Cache, ctrl.Options{
+			c, err := controllers.NewOpController(cfg, nil, ctrl.Options{
 				Scheme:                 scheme,
 				LeaderElection:         false, // disable leader-election
 				HealthProbeBindAddress: "0",   // disable health-check
@@ -62,13 +56,6 @@ var _ = Describe("Operator status report test:", Ordered, func() {
 				Logger: logger,
 			})
 			Expect(err).NotTo(HaveOccurred())
-
-			setupLog.Info("starting shared view storage")
-			go func() {
-				defer GinkgoRecover()
-				err := api.Cache.Start(ctx)
-				Expect(err).NotTo(HaveOccurred(), "failed to shared cache")
-			}()
 
 			setupLog.Info("starting operator controller")
 			go func() {
@@ -141,7 +128,7 @@ spec:
 		var (
 			ctrlCtx    context.Context
 			ctrlCancel context.CancelFunc
-			api        *composite.API
+			api        *cache.API
 			pod        object.Object
 			op         opv1a1.Operator
 		)
@@ -159,8 +146,8 @@ spec:
 			setupLog.Info("setting up operator controller")
 			off := true
 			var err error
-			api, err = composite.NewAPI(cfg, composite.Options{
-				CacheOptions: composite.CacheOptions{Logger: logger},
+			api, err = cache.NewAPI(cfg, cache.APIOptions{
+				CacheOptions: cache.CacheOptions{Logger: logger},
 			})
 			Expect(err).NotTo(HaveOccurred())
 

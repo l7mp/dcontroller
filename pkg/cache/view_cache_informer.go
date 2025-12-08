@@ -1,4 +1,4 @@
-package composite
+package cache
 
 import (
 	"context"

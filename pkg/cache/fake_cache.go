@@ -1,4 +1,4 @@
-package composite
+package cache
 
 // composite cache is a cache that serves views from the view cache and the rest from the default
 // Kubernetes cache
@@ -19,7 +19,7 @@ import (
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
-var _ cache.Cache = &FakeRuntimeCache{}
+var _ Cache = &FakeRuntimeCache{}
 
 // FakeRuntimeCache is a fake implementation of Informers. Client can store only a single object.
 // Source: sigs.k8s.io/controller-runtime/pkg/cache/informertest/fake_cache.go.

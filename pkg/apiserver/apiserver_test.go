@@ -33,7 +33,7 @@ import (
 
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/auth"
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
@@ -269,7 +269,7 @@ var _ = Describe("APIServer Integration", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Add a view object and a native resource to the manager cache
-		fakeCache, ok := mgr.GetCache().(*composite.CompositeCache)
+		fakeCache, ok := mgr.GetCache().(*cache.CompositeCache)
 		Expect(ok).To(BeTrue())
 		Expect(fakeCache).NotTo(BeNil())
 		err = fakeCache.GetViewCache().Add(obj)
@@ -1284,7 +1284,7 @@ var _ = Describe("Authorization Tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Add test objects to the cache
-		fakeCache, ok := mgr.GetCache().(*composite.CompositeCache)
+		fakeCache, ok := mgr.GetCache().(*cache.CompositeCache)
 		Expect(ok).To(BeTrue())
 
 		// Object in default namespace
@@ -1692,7 +1692,7 @@ var _ = Describe("Authorization Tests", func() {
 					},
 				},
 			}
-			err = mgr.GetCache().(*composite.CompositeCache).GetViewCache().Add(newObj)
+			err = mgr.GetCache().(*cache.CompositeCache).GetViewCache().Add(newObj)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = client.Resource(testGVR).Namespace("kube-system").Get(context.TODO(), "system-obj", metav1.GetOptions{})

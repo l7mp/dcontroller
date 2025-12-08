@@ -19,7 +19,7 @@ import (
 
 	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
@@ -32,7 +32,7 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 		var (
 			ctx                            context.Context
 			cancel                         context.CancelFunc
-			api                            *composite.API
+			api                            *cache.API
 			svc1, svc2, es1, es2, es3, es4 object.Object
 		)
 
@@ -76,8 +76,8 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 			off := true
 			setupLog.Info("setting up operator controller")
 			var err error
-			api, err = composite.NewAPI(cfg, composite.Options{
-				CacheOptions: composite.CacheOptions{Logger: logger},
+			api, err = cache.NewAPI(cfg, cache.APIOptions{
+				CacheOptions: cache.CacheOptions{Logger: logger},
 			})
 			Expect(err).NotTo(HaveOccurred())
 

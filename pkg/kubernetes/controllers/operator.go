@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
-	runtimeCache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeCtrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -23,7 +22,7 @@ import (
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/apiserver"
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/controller"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/operator"
@@ -50,7 +49,7 @@ type OpController struct {
 	k8sClient client.Client
 
 	// Shared cache for all operators (each operator has its own manager using this cache)
-	sharedCache runtimeCache.Cache
+	sharedCache cache.Cache
 	// Map of operator name to operator and error channel
 	operators map[string]*opEntry
 	// Mutex for thread-safe operator map access
@@ -74,7 +73,7 @@ type OpController struct {
 //  3. Per-operator managers: each operator gets its own manager with the shared cache injected
 //
 // The controller has to be started using Start(ctx) that will start the CRD manager and shared cache.
-func NewOpController(config *rest.Config, sharedCache runtimeCache.Cache, opts manager.Options) (*OpController, error) {
+func NewOpController(config *rest.Config, sharedCache cache.Cache, opts manager.Options) (*OpController, error) {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -133,7 +132,7 @@ func NewOpController(config *rest.Config, sharedCache runtimeCache.Cache, opts m
 }
 
 // GetSharedCache returns the shared cache used by all operators.
-func (c *OpController) GetCache() runtimeCache.Cache {
+func (c *OpController) GetCache() cache.Cache {
 	return c.sharedCache
 }
 
@@ -145,7 +144,7 @@ func (c *OpController) GetK8sClient() client.Client {
 // GetClient returns a client that can access views from all operators via the shared cache.
 func (c *OpController) GetClient() client.Client {
 	// Return the view cache client
-	if cc, ok := c.sharedCache.(*composite.CompositeCache); ok {
+	if cc, ok := c.sharedCache.(*cache.CompositeCache); ok {
 		return cc.GetViewCache().GetClient()
 	}
 	// Fallback (should not happen in normal operation)

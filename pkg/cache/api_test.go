@@ -1,4 +1,4 @@
-package composite
+package cache
 
 import (
 	"net/http"
@@ -52,7 +52,7 @@ func TestCompositeAPIClient(t *testing.T) {
 var _ = Describe("NewCompositeAPIClient", func() {
 	Describe("Basic creation", func() {
 		It("should create a composite API client with nil config", func() {
-			opts := Options{
+			opts := APIOptions{
 				CacheOptions: CacheOptions{
 					Logger: logger,
 				},
@@ -91,7 +91,7 @@ var _ = Describe("NewCompositeAPIClient", func() {
 			// Create a minimal rest config (this would normally connect to a cluster)
 			config := createLocalTestServerConfig()
 
-			opts := Options{
+			opts := APIOptions{
 				CacheOptions: CacheOptions{
 					Logger: logger,
 				},
@@ -111,7 +111,7 @@ var _ = Describe("NewCompositeAPIClient", func() {
 
 	Describe("Component integration", func() {
 		It("should wire components together correctly", func() {
-			opts := Options{
+			opts := APIOptions{
 				CacheOptions: CacheOptions{
 					Logger: logger,
 				},
@@ -148,7 +148,7 @@ var _ = Describe("NewCompositeAPIClient", func() {
 		var apiClient *API
 
 		BeforeEach(func() {
-			opts := Options{
+			opts := APIOptions{
 				CacheOptions: CacheOptions{
 					Logger: logger,
 				},

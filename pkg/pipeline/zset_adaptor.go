@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/dbsp"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
@@ -17,7 +17,7 @@ func (p *Pipeline) ConvertDeltaToZSet(delta object.Delta) (*dbsp.DocumentZSet, e
 	deltaObj := object.DeepCopy(delta.Object)
 	gvk := deltaObj.GetObjectKind().GroupVersionKind()
 	if _, ok := p.sourceCache[gvk]; !ok {
-		p.sourceCache[gvk] = composite.NewStore()
+		p.sourceCache[gvk] = cache.NewStore()
 	}
 
 	var old object.Object

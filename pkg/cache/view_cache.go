@@ -1,4 +1,4 @@
-package composite
+package cache
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
-var _ cache.Cache = &ViewCache{}
+var _ Cache = &ViewCache{}
 
 // DefaultWatchChannelBuffer defines the default buffer size for watches.
 const DefaultWatchChannelBuffer = 256

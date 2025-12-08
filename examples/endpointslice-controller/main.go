@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	dobject "github.com/l7mp/dcontroller/pkg/object"
 	doperator "github.com/l7mp/dcontroller/pkg/operator"
@@ -72,8 +72,8 @@ func main() {
 
 	// Create an api
 	config := ctrl.GetConfigOrDie()
-	api, err := composite.NewAPI(config, composite.Options{
-		CacheOptions: composite.CacheOptions{Logger: logger},
+	api, err := cache.NewAPI(config, cache.APIOptions{
+		CacheOptions: cache.CacheOptions{Logger: logger},
 	})
 	if err != nil {
 		log.Error(err, "unable to set up manager")

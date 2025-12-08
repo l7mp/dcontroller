@@ -28,7 +28,7 @@ import (
 
 	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/testsuite"
@@ -51,7 +51,7 @@ var (
 	scheme              = runtime.NewScheme()
 	k8sClient, opClient client.Client
 	logger, setupLog    logr.Logger
-	api                 *composite.API
+	api                 *cache.API
 )
 
 var _ = BeforeSuite(func() {
@@ -139,8 +139,8 @@ var _ = Describe("Service health monitor controller test:", Ordered, func() {
 	It("should create and start the operator controller", func() {
 		setupLog.Info("setting up operator controller")
 		var err error
-		api, err = composite.NewAPI(suite.Cfg, composite.Options{
-			CacheOptions: composite.CacheOptions{Logger: suite.Log},
+		api, err = cache.NewAPI(suite.Cfg, cache.APIOptions{
+			CacheOptions: cache.CacheOptions{Logger: suite.Log},
 		})
 		Expect(err).NotTo(HaveOccurred())
 		c, err := controllers.NewOpController(cfg, api.Cache, ctrl.Options{

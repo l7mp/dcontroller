@@ -1,39 +1,18 @@
-package composite
-
-// Composite cache is a cache that serves views from the view cache and the rest from the default
-// Kubernetes cache.
+package cache
 
 import (
 	"context"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/object"
 )
 
 var _ cache.Cache = &CompositeCache{}
-
-// ViewCacheInterface extends cache.Cache with view-specific operations.
-// Both ViewCache and DelegatingViewCache implement this interface.
-type ViewCacheInterface interface {
-	cache.Cache
-	// GetClient returns a client for this view cache.
-	GetClient() client.WithWatch
-	// Add adds an object to the cache.
-	Add(obj object.Object) error
-	// Update updates an object in the cache.
-	Update(oldObj, newObj object.Object) error
-	// Delete removes an object from the cache.
-	Delete(obj object.Object) error
-	// Watch watches for changes to objects.
-	Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error)
-}
 
 // CompositeCache is a cache for storing view objects. It delegates native objects to a default
 // cache.
@@ -99,7 +78,7 @@ func (cc *CompositeCache) GetLogger() logr.Logger {
 }
 
 // GetDefaultCache returns the cache used for storing native objects.
-func (cc *CompositeCache) GetDefaultCache() cache.Cache {
+func (cc *CompositeCache) GetDefaultCache() Cache {
 	return cc.defaultCache
 }
 

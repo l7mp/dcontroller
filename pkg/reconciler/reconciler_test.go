@@ -26,7 +26,7 @@ import (
 	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
@@ -513,7 +513,7 @@ var _ = Describe("Reconciler", func() {
 			vcache := mgr.GetCompositeCache().GetViewCache()
 			Expect(vcache).NotTo(BeNil())
 
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "view"))
+			watcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok := testutils.TryWatchEvent(watcher, interval)
@@ -669,7 +669,7 @@ var _ = Describe("Reconciler", func() {
 			err = vcache.Add(view)
 			Expect(err).NotTo(HaveOccurred())
 
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "view"))
+			watcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok := testutils.TryWatchEvent(watcher, interval)
@@ -754,7 +754,7 @@ var _ = Describe("Reconciler", func() {
 			err = vcache.Add(view)
 			Expect(err).NotTo(HaveOccurred())
 
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "view"))
+			watcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
 			event, ok := testutils.TryWatchEvent(watcher, interval)

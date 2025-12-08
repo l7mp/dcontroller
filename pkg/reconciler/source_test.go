@@ -17,7 +17,7 @@ import (
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
@@ -336,7 +336,7 @@ kind: TestOneShotTrigger
 		Expect(queue.Len()).To(Equal(0))
 
 		// Verify that the object can be listed from the cache
-		list := composite.NewViewObjectList("test", "TestOneShotTrigger")
+		list := cache.NewViewObjectList("test", "TestOneShotTrigger")
 		Eventually(func() bool {
 			err := mgr.GetClient().List(ctx, list)
 			return err == nil && len(list.Items) == 1

@@ -14,7 +14,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/config"
@@ -22,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
 
@@ -34,11 +33,11 @@ type FakeManager struct {
 	Manager
 	// runtime
 	fakeRuntimeManager *FakeRuntimeManager
-	fakeRuntimeCache   *composite.FakeRuntimeCache
+	fakeRuntimeCache   *cache.FakeRuntimeCache
 	fakeRuntimeClient  client.WithWatch
 	tracker            testing.ObjectTracker
 	// composite
-	compositeCache *composite.CompositeCache
+	compositeCache *cache.CompositeCache
 	// allow to push a fake config
 	Cfg *rest.Config
 }
@@ -50,7 +49,7 @@ func NewFakeManager(opts Options, objs ...client.Object) (*FakeManager, error) {
 		logger = logr.Discard()
 	}
 
-	fakeRuntimeCache := composite.NewFakeRuntimeCache(nil)
+	fakeRuntimeCache := cache.NewFakeRuntimeCache(nil)
 	// add initial onjects here too (also to fake runtime client later)
 	for _, o := range objs {
 		if err := fakeRuntimeCache.Add(o.(object.Object)); err != nil {
@@ -58,7 +57,7 @@ func NewFakeManager(opts Options, objs ...client.Object) (*FakeManager, error) {
 		}
 	}
 
-	compositeCache, err := composite.NewCompositeCache(nil, composite.CacheOptions{
+	compositeCache, err := cache.NewCompositeCache(nil, cache.CacheOptions{
 		DefaultCache: fakeRuntimeCache,
 		Logger:       logger,
 	})
@@ -72,7 +71,7 @@ func NewFakeManager(opts Options, objs ...client.Object) (*FakeManager, error) {
 		WithObjectTracker(tracker).
 		WithObjects(objs...).
 		Build()
-	fakeCompositeClient, err := composite.NewCompositeClient(nil, composite.ClientOptions{})
+	fakeCompositeClient, err := cache.NewCompositeClient(nil, cache.ClientOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -90,12 +89,12 @@ func NewFakeManager(opts Options, objs ...client.Object) (*FakeManager, error) {
 	}, nil
 }
 
-func (m *FakeManager) GetManager() Manager                          { return m.Manager }
-func (m *FakeManager) GetRuntimeManager() *FakeRuntimeManager       { return m.fakeRuntimeManager }
-func (m *FakeManager) GetRuntimeCache() *composite.FakeRuntimeCache { return m.fakeRuntimeCache }
-func (m *FakeManager) GetRuntimeClient() client.WithWatch           { return m.fakeRuntimeClient }
-func (m *FakeManager) GetCompositeCache() *composite.CompositeCache { return m.compositeCache }
-func (m *FakeManager) GetObjectTracker() testing.ObjectTracker      { return m.tracker }
+func (m *FakeManager) GetManager() Manager                      { return m.Manager }
+func (m *FakeManager) GetRuntimeManager() *FakeRuntimeManager   { return m.fakeRuntimeManager }
+func (m *FakeManager) GetRuntimeCache() *cache.FakeRuntimeCache { return m.fakeRuntimeCache }
+func (m *FakeManager) GetRuntimeClient() client.WithWatch       { return m.fakeRuntimeClient }
+func (m *FakeManager) GetCompositeCache() *cache.CompositeCache { return m.compositeCache }
+func (m *FakeManager) GetObjectTracker() testing.ObjectTracker  { return m.tracker }
 
 // Runnable is something that can be run.
 type Runnable interface {

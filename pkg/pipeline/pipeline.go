@@ -33,7 +33,7 @@ import (
 	toolscache "k8s.io/client-go/tools/cache"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/dbsp"
 	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/util"
@@ -49,9 +49,9 @@ type Evaluator interface {
 	Sync() ([]object.Delta, error)
 	fmt.Stringer
 	// GetTargetCache returns the pipeline's internal target cache (primarily for testing).
-	GetTargetCache() *composite.Store
+	GetTargetCache() *cache.Store
 	// GetSourceCache returns the pipeline's internal source cache for a given GVK (primarily for testing).
-	GetSourceCache(schema.GroupVersionKind) *composite.Store
+	GetSourceCache(schema.GroupVersionKind) *cache.Store
 }
 
 // Pipeline is query that knows how to evaluate itself.
@@ -63,9 +63,9 @@ type Pipeline struct {
 	graph            *dbsp.ChainGraph
 	rewriter         *dbsp.LinearChainRewriteEngine
 	sources          []schema.GroupVersionKind
-	sourceCache      map[schema.GroupVersionKind]*composite.Store
+	sourceCache      map[schema.GroupVersionKind]*cache.Store
 	target           schema.GroupVersionKind
-	targetCache      *composite.Store
+	targetCache      *cache.Store
 	snapshotGraph    *dbsp.ChainGraph
 	snapshotExecutor *dbsp.SnapshotExecutor
 	mu               sync.Mutex // Protects against concurrent Evaluate/Sync calls
@@ -88,9 +88,9 @@ func New(operator string, target schema.GroupVersionKind, sources []schema.Group
 		graph:       dbsp.NewChainGraph(),
 		rewriter:    dbsp.NewLinearChainRewriteEngine(),
 		sources:     sources,
-		sourceCache: make(map[schema.GroupVersionKind]*composite.Store),
+		sourceCache: make(map[schema.GroupVersionKind]*cache.Store),
 		target:      target,
-		targetCache: composite.NewStore(),
+		targetCache: cache.NewStore(),
 		log:         log,
 	}
 
@@ -176,14 +176,14 @@ func (p *Pipeline) String() string {
 
 // GetTargetCache returns the pipeline's internal target cache.
 // This is primarily useful for testing to synchronize external state with the pipeline's view.
-func (p *Pipeline) GetTargetCache() *composite.Store {
+func (p *Pipeline) GetTargetCache() *cache.Store {
 	return p.targetCache
 }
 
 // GetSourceCache returns the pipeline's internal source cache for a given GVK.
 // This is primarily useful for testing to synchronize external state with the pipeline's view.
 // Returns nil if no cache exists for the given GVK.
-func (p *Pipeline) GetSourceCache(gvk schema.GroupVersionKind) *composite.Store {
+func (p *Pipeline) GetSourceCache(gvk schema.GroupVersionKind) *cache.Store {
 	return p.sourceCache[gvk]
 }
 

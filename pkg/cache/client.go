@@ -1,4 +1,4 @@
-package composite
+package cache
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
@@ -20,7 +19,7 @@ var _ client.Client = &CompositeClient{}
 // and delegates native resources to a default client.
 type CompositeClient struct {
 	client.Client
-	compositeCache cache.Cache
+	compositeCache Cache
 	viewClient     *ViewCacheClient
 	log            logr.Logger
 }
@@ -42,7 +41,7 @@ func NewCompositeClient(config *rest.Config, options ClientOptions) (*CompositeC
 	}, nil
 }
 
-func NewClientForCache(config *rest.Config, cache cache.Cache, options ClientOptions) (*CompositeClient, error) {
+func NewClientForCache(config *rest.Config, cache Cache, options ClientOptions) (*CompositeClient, error) {
 	var nativeClient client.Client
 	if config != nil {
 		c, err := client.New(config, options)
@@ -65,7 +64,7 @@ func (c *CompositeClient) SetClient(client client.Client) {
 }
 
 // SetClient sets the cache in the composite client.
-func (c *CompositeClient) SetCache(cache cache.Cache) {
+func (c *CompositeClient) SetCache(cache Cache) {
 	c.compositeCache = cache
 	if viewCache, ok := cache.(*CompositeCache); ok {
 		c.viewClient = viewCache.GetViewCache().GetClient().(*ViewCacheClient)
@@ -73,7 +72,7 @@ func (c *CompositeClient) SetCache(cache cache.Cache) {
 }
 
 // SetClient sets the cache in the composite client.
-func (c *CompositeClient) GetCache() cache.Cache {
+func (c *CompositeClient) GetCache() Cache {
 	return c.compositeCache
 }
 

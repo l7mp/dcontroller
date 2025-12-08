@@ -21,7 +21,6 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
-	ctrlCache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeConfig "sigs.k8s.io/controller-runtime/pkg/config"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -30,6 +29,7 @@ import (
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/apiserver"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	dcontroller "github.com/l7mp/dcontroller/pkg/controller"
 	"github.com/l7mp/dcontroller/pkg/manager"
 )
@@ -39,7 +39,7 @@ type Options struct {
 	// Cache can be used to redirect the storage used by the operator into an external
 	// cache. This allows multiple operators to share cache state while maintaining independent
 	// lifecycles.
-	Cache ctrlCache.Cache
+	Cache cache.Cache
 
 	// ErrorChannel is a channel to receive errors from the operator. Note that the error
 	// channel is rate limited to at most 3 errors per every 2 seconds. Use ReportErrors on the
@@ -72,7 +72,7 @@ func New(name string, config *rest.Config, opts Options) (*Operator, error) {
 		logger = logr.Discard()
 	}
 
-	var cacheInjector ctrlCache.NewCacheFunc
+	var cacheInjector cache.NewCacheFunc
 	if opts.Cache != nil {
 		cacheInjector = manager.CacheInjector(opts.Cache)
 	}

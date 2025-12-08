@@ -16,21 +16,20 @@
 // resource based on its GroupVersionKind and routes operations accordingly.  This enables
 // transparent operation where controllers don't need to distinguish between view and native
 // resources.
-package composite
+package cache
 
 import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ClientOptions = client.Options
 
-// Options for creating composite API clients.
-type Options struct {
+// APIOptions for creating composite API clients.
+type APIOptions struct {
 	CacheOptions
 	ClientOptions
 	Logger logr.Logger
@@ -40,14 +39,14 @@ type Options struct {
 // client, a discovery client, a cache and a REST mapper.
 type API struct {
 	Client     client.Client
-	Cache      cache.Cache
+	Cache      Cache
 	Discovery  discovery.DiscoveryInterface
 	RESTMapper meta.RESTMapper
 	Log        logr.Logger
 }
 
 // NewAPI creates a composite API client with all components.
-func NewAPI(config *rest.Config, opts Options) (*API, error) {
+func NewAPI(config *rest.Config, opts APIOptions) (*API, error) {
 	logger := opts.Logger
 	if logger.GetSink() == nil {
 		logger = logr.Discard()

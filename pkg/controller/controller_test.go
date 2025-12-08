@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
@@ -26,7 +25,7 @@ import (
 	"github.com/l7mp/dcontroller/internal/testutils"
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
-	"github.com/l7mp/dcontroller/pkg/composite"
+	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
 )
@@ -214,7 +213,7 @@ var _ = Describe("Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a viewcache watcher
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "view"))
+			watcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "view"))
 			Expect(err).NotTo(HaveOccurred())
 
 			res = view.DeepCopy()
@@ -512,7 +511,7 @@ target:
 			}
 
 			log.V(1).Info("Create a viewcache watcher")
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "rs"))
+			watcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "rs"))
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should obtain one object in the rs view: pod1-dep1
@@ -529,7 +528,7 @@ target:
 
 			// should be a single object only
 			Eventually(func() bool {
-				list := composite.NewViewObjectList("test", "rs")
+				list := cache.NewViewObjectList("test", "rs")
 				err := vcache.List(ctx, list)
 				if err != nil {
 					return false
@@ -582,7 +581,7 @@ target:
 
 			// should be zero objects
 			Eventually(func() bool {
-				list := composite.NewViewObjectList("test", "rs")
+				list := cache.NewViewObjectList("test", "rs")
 				err := vcache.List(ctx, list)
 				if err != nil {
 					return false
@@ -710,7 +709,7 @@ target:
 			}
 
 			// Create a viewcache watcher for the kind rs
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "pod"))
+			watcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "pod"))
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() bool {
@@ -741,7 +740,7 @@ target:
 
 			// should be a single object only
 			Eventually(func() bool {
-				list := composite.NewViewObjectList("test", "rs")
+				list := cache.NewViewObjectList("test", "rs")
 				err := vcache.List(ctx, list)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -782,7 +781,7 @@ target:
 
 			vcache := mgr.GetCompositeCache().GetViewCache()
 			Expect(vcache).NotTo(BeNil())
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "test-target"))
+			watcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "test-target"))
 			Expect(err).NotTo(HaveOccurred())
 
 			event := watch.Event{}
@@ -835,7 +834,7 @@ target:
 			// Create a viewcache watcher
 			vcache := mgr.GetCompositeCache().GetViewCache()
 			Expect(vcache).NotTo(BeNil())
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "test-target"))
+			watcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "test-target"))
 			Expect(err).NotTo(HaveOccurred())
 
 			// wait for multiple events - initial from oneshot, then periodic SoW reconciliations
@@ -904,7 +903,7 @@ target:
 			// Create a viewcache watcher
 			vcache := mgr.GetCompositeCache().GetViewCache()
 			Expect(vcache).NotTo(BeNil())
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "test-target"))
+			watcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "test-target"))
 			Expect(err).NotTo(HaveOccurred())
 
 			// Wait for the initial object to be created
@@ -974,7 +973,7 @@ target:
 			// Create a viewcache watcher
 			vcache := mgr.GetCompositeCache().GetViewCache()
 			Expect(vcache).NotTo(BeNil())
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "test-target"))
+			watcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "test-target"))
 			Expect(err).NotTo(HaveOccurred())
 
 			// Wait for initial object
@@ -1048,7 +1047,7 @@ target:
 			go func() { mgr.Start(ctx) }()
 
 			// Watch target to see which objects get created
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "result"))
+			watcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "result"))
 			Expect(err).NotTo(HaveOccurred())
 			defer watcher.Stop()
 
@@ -1121,7 +1120,7 @@ target:
 			go func() { mgr.Start(ctx) }()
 
 			// Watch target to see which objects get created/deleted
-			watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "result"))
+			watcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "result"))
 			Expect(err).NotTo(HaveOccurred())
 			defer watcher.Stop()
 
@@ -1264,12 +1263,12 @@ target:
 			go func() { mgr.Start(ctx) }()
 
 			// Watch the temp view to see what ctrl-1 produces
-			tempWatcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "temp"))
+			tempWatcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "temp"))
 			Expect(err).NotTo(HaveOccurred())
 			defer tempWatcher.Stop()
 
 			// Watch the output view to see what ctrl-2 produces
-			outputWatcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "output"))
+			outputWatcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "output"))
 			Expect(err).NotTo(HaveOccurred())
 			defer outputWatcher.Stop()
 
@@ -1432,7 +1431,7 @@ target:
 		// Create a viewcache to watch target
 		vcache := mgr.GetCompositeCache().GetViewCache()
 		Expect(vcache).NotTo(BeNil())
-		watcher, err := vcache.Watch(ctx, composite.NewViewObjectList("test", "test-target"))
+		watcher, err := vcache.Watch(ctx, cache.NewViewObjectList("test", "test-target"))
 		Expect(err).NotTo(HaveOccurred())
 
 		// Create source object
