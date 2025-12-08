@@ -10,11 +10,11 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	runtimePredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	runtimeSource "sigs.k8s.io/controller-runtime/pkg/source"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/predicate"
 )
@@ -42,7 +42,7 @@ type Source interface {
 
 // NewSource creates a new source resource. It dispatches to the appropriate implementation based
 // on the source's Type field.
-func NewSource(mgr runtimeManager.Manager, operator string, s opv1a1.Source) Source {
+func NewSource(mgr manager.Manager, operator string, s opv1a1.Source) Source {
 	sourceType := s.Type
 	if sourceType == "" {
 		sourceType = opv1a1.Watcher // default
@@ -64,13 +64,13 @@ func NewSource(mgr runtimeManager.Manager, operator string, s opv1a1.Source) Sou
 // watchSource is a source that watches Kubernetes API resources
 type watchSource struct {
 	Resource
-	mgr    runtimeManager.Manager
+	mgr    manager.Manager
 	source opv1a1.Source
 	log    logr.Logger
 }
 
 // NewWatchSource creates a new Kubernetes resource watch source.
-func NewWatchSource(mgr runtimeManager.Manager, operator string, s opv1a1.Source) Source {
+func NewWatchSource(mgr manager.Manager, operator string, s opv1a1.Source) Source {
 	src := &watchSource{
 		mgr:      mgr,
 		source:   s,
@@ -133,7 +133,7 @@ func (s *watchSource) GetSource() (runtimeSource.TypedSource[Request], error) {
 // oneShotSource triggers the controller exactly once when it starts with an empty object.
 type oneShotSource struct {
 	Resource
-	mgr      runtimeManager.Manager
+	mgr      manager.Manager
 	client   client.Client
 	operator string
 	source   opv1a1.Source
@@ -141,7 +141,7 @@ type oneShotSource struct {
 }
 
 // NewOneShotSource creates a new one-shot source.
-func NewOneShotSource(mgr runtimeManager.Manager, operator string, s opv1a1.Source) Source {
+func NewOneShotSource(mgr manager.Manager, operator string, s opv1a1.Source) Source {
 	src := &oneShotSource{
 		mgr:      mgr,
 		client:   mgr.GetClient(),
@@ -191,7 +191,7 @@ func (s *oneShotSource) GetSource() (runtimeSource.TypedSource[Request], error) 
 // events.  The actual state-of-the-world reconciliation logic is handled by the controller.
 type periodicSource struct {
 	Resource
-	mgr      runtimeManager.Manager
+	mgr      manager.Manager
 	source   opv1a1.Source
 	operator string
 	period   time.Duration
@@ -199,7 +199,7 @@ type periodicSource struct {
 }
 
 // NewPeriodicSource creates a new periodic source.
-func NewPeriodicSource(mgr runtimeManager.Manager, operator string, s opv1a1.Source) Source {
+func NewPeriodicSource(mgr manager.Manager, operator string, s opv1a1.Source) Source {
 	src := &periodicSource{
 		mgr:      mgr,
 		source:   s,

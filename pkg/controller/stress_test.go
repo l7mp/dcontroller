@@ -11,7 +11,6 @@ import (
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/yaml"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
@@ -32,7 +31,7 @@ var _ = Describe("Controller stress tests", Ordered, func() {
 
 	BeforeAll(func() {
 		ctx, cancel = context.WithCancel(logr.NewContext(context.Background(), logger))
-		m, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		m, err := manager.NewFakeManager(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(m).NotTo(BeNil())
 		mgr = m

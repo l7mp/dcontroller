@@ -29,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/auth"
@@ -72,7 +71,7 @@ func TestAPIServer(t *testing.T) {
 
 var _ = Describe("APIServerUnitTest", func() {
 	var (
-		mgr                       runtimeManager.Manager
+		mgr                       manager.Manager
 		server                    *APIServer
 		testGroup, test2Group     string
 		testViewGVK, test2ViewGVK schema.GroupVersionKind
@@ -86,7 +85,7 @@ var _ = Describe("APIServerUnitTest", func() {
 		test2ViewGVK = viewv1a1.GroupVersionKind("test2", "TestView")
 
 		var err error
-		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
 		port = rand.IntN(5000) + (32768) //nolint:gosec
@@ -265,7 +264,7 @@ var _ = Describe("APIServer Integration", func() {
 
 		// Create mock manager
 		var err error
-		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Add a view object and a native resource to the manager cache
@@ -1280,7 +1279,7 @@ var _ = Describe("Authorization Tests", func() {
 		tokenGen = auth.NewTokenGenerator(privateKey)
 
 		// Create mock manager
-		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Add test objects to the cache

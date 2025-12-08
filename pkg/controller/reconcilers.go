@@ -5,25 +5,26 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/reconciler"
 	"github.com/l7mp/dcontroller/pkg/util"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // IncrementalReconciler is a reconciler for incremental updates from watcher and oneshot sources.
 // It processes requests directly through the pipeline.
 type IncrementalReconciler struct {
-	manager    runtimeManager.Manager
+	manager    manager.Manager
 	controller *DeclarativeController
 	log        logr.Logger
 }
 
 // NewIncrementalReconciler creates a new incremental reconciler.
-func NewIncrementalReconciler(mgr runtimeManager.Manager, c *DeclarativeController) *IncrementalReconciler {
+func NewIncrementalReconciler(mgr manager.Manager, c *DeclarativeController) *IncrementalReconciler {
 	return &IncrementalReconciler{
 		manager:    mgr,
 		controller: c,
@@ -86,13 +87,13 @@ func (r *IncrementalReconciler) Reconcile(ctx context.Context, req reconciler.Re
 
 // StateOfTheWorldReconciler is a reconciler for periodic sources that triggers full reconciliation.
 type StateOfTheWorldReconciler struct {
-	manager    runtimeManager.Manager
+	manager    manager.Manager
 	controller *DeclarativeController
 	log        logr.Logger
 }
 
 // NewStateOfTheWorldReconciler creates a new state-of-the-world reconciler.
-func NewStateOfTheWorldReconciler(mgr runtimeManager.Manager, c *DeclarativeController) *StateOfTheWorldReconciler {
+func NewStateOfTheWorldReconciler(mgr manager.Manager, c *DeclarativeController) *StateOfTheWorldReconciler {
 	return &StateOfTheWorldReconciler{
 		manager:    mgr,
 		controller: c,

@@ -10,9 +10,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
 	"github.com/l7mp/dcontroller/pkg/util"
 )
@@ -26,13 +26,13 @@ type Target interface {
 
 type target struct {
 	Resource
-	mgr    runtimeManager.Manager
+	mgr    manager.Manager
 	target opv1a1.Target
 	log    logr.Logger
 }
 
 // NewTarget creates a new target resource.
-func NewTarget(mgr runtimeManager.Manager, operator string, t opv1a1.Target) Target {
+func NewTarget(mgr manager.Manager, operator string, t opv1a1.Target) Target {
 	if t.Type == opv1a1.TargetType("") {
 		t.Type = opv1a1.Updater
 	}

@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/util"
 )
 
@@ -19,13 +19,13 @@ type Resource interface {
 }
 
 type resource struct {
-	mgr      runtimeManager.Manager
+	mgr      manager.Manager
 	operator string
 	resource opv1a1.Resource
 }
 
 // NewResource creates a new resource.
-func NewResource(mgr runtimeManager.Manager, operator string, r opv1a1.Resource) Resource {
+func NewResource(mgr manager.Manager, operator string, r opv1a1.Resource) Resource {
 	return &resource{
 		mgr:      mgr,
 		operator: operator,

@@ -19,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/yaml"
 
 	"github.com/l7mp/dcontroller/internal/testutils"
@@ -170,7 +169,7 @@ var _ = Describe("Controller", func() {
 				},
 			}
 
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -235,7 +234,7 @@ var _ = Describe("Controller", func() {
 		})
 
 		It("should implement a basic controller on native objects", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -383,7 +382,7 @@ target:
 		})
 
 		It("should reject a controller with no sources", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -408,7 +407,7 @@ target:
 		})
 
 		It("should reject a controller with no target", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -432,7 +431,7 @@ pipeline:
 		})
 
 		It("should reject a controller with an invalid pipeline", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -457,7 +456,7 @@ target:
 
 	Describe("With complex Controllers", func() {
 		It("should implement a controller with a join pipeline", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -631,7 +630,7 @@ target:
 		})
 
 		It("should implement 2 compex parallel controller pipelines", func() {
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -767,7 +766,7 @@ target:
 			err := yaml.Unmarshal([]byte(jsonData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -819,7 +818,7 @@ target:
 			err := yaml.Unmarshal([]byte(jsonData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -889,7 +888,7 @@ target:
 			err := yaml.Unmarshal([]byte(jsonData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -959,7 +958,7 @@ target:
 			err := yaml.Unmarshal([]byte(jsonData), &config)
 			Expect(err).NotTo(HaveOccurred())
 
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mgr).NotTo(BeNil())
 
@@ -1037,7 +1036,7 @@ target:
 				},
 			}
 
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = NewDeclarative(mgr, "test", config, Options{})
@@ -1110,7 +1109,7 @@ target:
 				},
 			}
 
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = NewDeclarative(mgr, "test", config, Options{})
@@ -1249,7 +1248,7 @@ target:
 				},
 			}
 
-			mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+			mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create both controllers
@@ -1407,7 +1406,7 @@ target:
 		// 1. Empty pipeline is syntactically valid
 		// 2. Add/Update events pass through with original content preserved
 		// 3. Delete events pass through correctly
-		mgr, err := manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		mgr, err := manager.NewFakeManager(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(mgr).NotTo(BeNil())
 

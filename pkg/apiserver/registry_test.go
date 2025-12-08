@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/manager"
@@ -20,7 +19,7 @@ import (
 
 var _ = Describe("RegisterGVKs", func() {
 	var (
-		mgr        runtimeManager.Manager
+		mgr        manager.Manager
 		server     *APIServer
 		serverCtx  context.Context
 		cancel     context.CancelFunc
@@ -30,7 +29,7 @@ var _ = Describe("RegisterGVKs", func() {
 
 	BeforeEach(func() {
 		var err error
-		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
 		port = rand.IntN(5000) + 32768 //nolint:gosec

@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
@@ -31,7 +30,7 @@ var _ = Describe("Utils - CreateOrUpdate and Update", func() {
 	BeforeEach(func() {
 		ctx, cancel = context.WithCancel(context.Background())
 		var err error
-		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 		c = mgr.GetClient()
 		go func() { mgr.Start(ctx) }()

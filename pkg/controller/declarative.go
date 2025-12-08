@@ -8,10 +8,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
+	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/pipeline"
 	"github.com/l7mp/dcontroller/pkg/reconciler"
 	"github.com/l7mp/dcontroller/pkg/util"
@@ -25,7 +25,7 @@ type DeclarativeController struct {
 	config      opv1a1.Controller
 	sources     []reconciler.Source
 	target      reconciler.Target
-	mgr         runtimeManager.Manager
+	mgr         manager.Manager
 	pipeline    pipeline.Evaluator
 	logger, log logr.Logger
 }
@@ -35,7 +35,7 @@ var _ Controller = &DeclarativeController{}
 // NewDeclarative registers a new declarative controller for an operator, given by the source resource(s)
 // the controller watches, a target resource the controller sends its output, and a processing
 // pipeline to process the base resources into target resources.
-func NewDeclarative(mgr runtimeManager.Manager, operator string, config opv1a1.Controller, opts Options) (Controller, error) {
+func NewDeclarative(mgr manager.Manager, operator string, config opv1a1.Controller, opts Options) (Controller, error) {
 	logger := mgr.GetLogger()
 	if logger.GetSink() == nil {
 		logger = logr.Discard()
@@ -110,8 +110,8 @@ func NewDeclarative(mgr runtimeManager.Manager, operator string, config opv1a1.C
 			Reconciler:         rec,
 		})
 		if err != nil {
-			return c, c.PushCriticalErrorf("failed to create runtime controller "+
-				"for resource %s: %w", gvk.String(), err)
+			return c, c.PushCriticalErrorf("failed to create runtime controller for resource %s: %w",
+				gvk.String(), err)
 		}
 
 		// Set up the watch.

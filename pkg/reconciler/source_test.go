@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/yaml"
 
 	opv1a1 "github.com/l7mp/dcontroller/pkg/api/operator/v1alpha1"
@@ -26,13 +25,13 @@ var _ = Describe("Target Operations", func() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
-		mgr    runtimeManager.Manager
+		mgr    manager.Manager
 	)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithCancel(context.Background())
 		var err error
-		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 		go func() { mgr.Start(ctx) }()
 	})
@@ -272,13 +271,13 @@ var _ = Describe("Virtual Sources", func() {
 		ctx    context.Context
 		cancel context.CancelFunc
 		queue  workqueue.TypedRateLimitingInterface[Request]
-		mgr    runtimeManager.Manager
+		mgr    manager.Manager
 	)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithCancel(context.Background())
 		var err error
-		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 		queue = workqueue.NewTypedRateLimitingQueue[Request](workqueue.DefaultTypedControllerRateLimiter[Request]())
 	})

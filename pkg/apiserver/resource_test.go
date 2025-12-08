@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/log"
-	runtimeManager "sigs.k8s.io/controller-runtime/pkg/manager"
 
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/manager"
@@ -19,7 +18,7 @@ import (
 
 var _ = Describe("APIServerUnitTest", func() {
 	var (
-		mgr                       runtimeManager.Manager
+		mgr                       manager.Manager
 		server                    *APIServer
 		testGroup, test2Group     string
 		testViewGVK, test2ViewGVK schema.GroupVersionKind
@@ -39,7 +38,7 @@ var _ = Describe("APIServerUnitTest", func() {
 
 		// Create mock manager
 		var err error
-		mgr, err = manager.NewFakeManager(runtimeManager.Options{Logger: logger})
+		mgr, err = manager.NewFakeManager(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Set API server logger
