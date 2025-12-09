@@ -230,17 +230,17 @@ func (c *OpController) UpsertOperator(name string, spec *opv1a1.OperatorSpec) (*
 // DeleteOperator removes an operator from the controller.
 func (c *OpController) DeleteOperator(name string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	e, ok := c.operators[name]
 	if !ok {
+		c.mu.Unlock()
 		return
 	}
+	delete(c.operators, name)
+	c.mu.Unlock()
 
 	c.log.V(4).Info("deleting operator", "name", name)
-
+	e.op.UnregisterGVKs()
 	e.cancel()
-	delete(c.operators, name)
 }
 
 // startOp starts error channel aggregation for an operator.
