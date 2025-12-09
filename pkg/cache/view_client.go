@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -20,12 +21,23 @@ var _ client.WithWatch = &ViewCacheClient{}
 
 // ViewCacheClient implements client.WithWatch by delegating to ViewCache.
 type ViewCacheClient struct {
-	cache *ViewCache
+	cache ViewCacheInterface
 }
 
 // GetClient returns a controller-runtime client backed by this ViewCache.
 func (vc *ViewCache) GetClient() client.WithWatch {
 	return &ViewCacheClient{cache: vc}
+}
+
+// NewViewCacheClient creates an empty view cache client. Use SetCache to assgign a cache for the
+// client.
+func NewViewCacheClient() client.WithWatch {
+	return &ViewCacheClient{}
+}
+
+// SetCache sets the cache for the composite client.
+func (c *ViewCacheClient) SetCache(cache ViewCacheInterface) {
+	c.cache = cache
 }
 
 // Client interface implementation.
@@ -77,6 +89,15 @@ func (c *ViewCacheClient) Update(ctx context.Context, obj client.Object, opts ..
 	// Get the current version from cache
 	if err := c.cache.Get(ctx, client.ObjectKeyFromObject(newObj), oldObj); err != nil {
 		return fmt.Errorf("cannot update object with key %s: %w", client.ObjectKeyFromObject(newObj), err)
+	}
+
+	// Option 3: DeepEqual check is safe here for view objects.
+	// View objects are ephemeral in-memory objects without etcd-based optimistic concurrency
+	// control, so there's no resourceVersion staleness to mask. The cache.Update() call
+	// already has a DeepEqual check (line 295 in view_cache.go), but checking here avoids
+	// unnecessary work when content hasn't changed.
+	if object.DeepEqual(oldObj, newObj) {
+		return nil
 	}
 
 	return c.cache.Update(oldObj, newObj)
@@ -288,12 +309,20 @@ func (sr *viewSubResourceClient) Update(ctx context.Context, obj client.Object, 
 		return errors.New("no status sub-resource in object argument")
 	}
 
+	// Option 2: Check if the subresource actually changed before updating.
+	// This prevents triggering watch events when the status hasn't changed.
+	currentSub, currentHasSub, _ := unstructured.NestedMap(current.UnstructuredContent(), sr.subres)
+	if currentHasSub && reflect.DeepEqual(currentSub, sub) {
+		// Subresource unchanged, skip the update
+		return nil
+	}
+
 	if err := unstructured.SetNestedMap(current.UnstructuredContent(), sub, sr.subres); err != nil {
 		return fmt.Errorf("cannot set sub-resource %s: %w", sr.subres, err)
 	}
 
 	// For ViewCache, status is just part of the object - update the whole object
-	return sr.client.Update(ctx, obj)
+	return sr.client.Update(ctx, current)
 }
 
 // Patch patches the subresource for the given object.

@@ -21,10 +21,10 @@ package manager
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"k8s.io/client-go/rest"
-	ctrlCache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeMgr "sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -43,31 +43,38 @@ type (
 // Kubernetes resources and a new delegating view cache created on top of the shared view
 // cache. This allows the per-manager caches (and hence the operators created on top of the
 // managers) to have independent lifetimes.
-func CacheInjector(sharedCache ctrlCache.Cache) ctrlCache.NewCacheFunc {
-	return func(config *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
-		compositeCache, ok := sharedCache.(*cache.CompositeCache)
-		if !ok {
-			return nil, errors.New("expecting CompositeCache")
+func CacheInjector(sharedCache cache.Cache) cache.NewCacheFunc {
+	return func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
+		var ret cache.Cache
+		switch c := sharedCache.(type) {
+		case *cache.CompositeCache:
+			// Get the shared view cache (must be *ViewCache)
+			sharedViewCache, ok := c.GetViewCache().(*cache.ViewCache)
+			if !ok {
+				return nil, errors.New("shared cache view cache must be *ViewCache")
+			}
+
+			delegatingViewCache := cache.NewDelegatingViewCache(sharedViewCache,
+				cache.CacheOptions{Options: opts})
+
+			compositeCache, err := cache.NewCompositeCache(config, cache.CacheOptions{
+				ViewCache: delegatingViewCache,
+				Options:   opts,
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			ret = compositeCache
+
+		case *cache.ViewCache:
+			ret = cache.NewDelegatingViewCache(c, cache.CacheOptions{Options: opts})
+
+		default:
+			return nil, fmt.Errorf("expected CompositeCache or ViewCache, got %T", sharedCache)
 		}
 
-		// Get the shared view cache (must be *ViewCache)
-		sharedViewCache, ok := compositeCache.GetViewCache().(*cache.ViewCache)
-		if !ok {
-			return nil, errors.New("shared cache view cache must be *ViewCache")
-		}
-
-		delegatingViewCache := cache.NewDelegatingViewCache(sharedViewCache,
-			cache.CacheOptions{Options: opts})
-
-		compositeCache, err := cache.NewCompositeCache(config, cache.CacheOptions{
-			ViewCache: delegatingViewCache,
-			Options:   opts,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		return compositeCache, nil
+		return ret, nil
 	}
 }
 
@@ -88,7 +95,7 @@ func New(config *rest.Config, opts Options) (Manager, error) {
 	logger := opts.Logger
 	if opts.NewCache == nil {
 		// cache is not injected, setup our own infrastructure
-		opts.NewCache = func(config *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
+		opts.NewCache = func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
 			return cache.NewCompositeCache(config, cache.CacheOptions{
 				Options: opts,
 				Logger:  logger,
@@ -135,7 +142,7 @@ func NewHeadless(opts Options) (Manager, error) {
 	// called by the controller runtime to reveal the cache options and client options.
 	if opts.NewCache == nil {
 		c := cache.NewViewCache(cache.CacheOptions{Logger: logger})
-		opts.NewCache = func(_ *rest.Config, opts ctrlCache.Options) (ctrlCache.Cache, error) {
+		opts.NewCache = func(_ *rest.Config, opts cache.Options) (cache.Cache, error) {
 			return c, nil
 		}
 
@@ -146,7 +153,7 @@ func NewHeadless(opts Options) (Manager, error) {
 		// cache is being injected: override the client getter to generate clients for the
 		// injected cache
 		opts.NewClient = func(config *rest.Config, options client.Options) (client.Client, error) {
-			return cache.NewCompositeClient(config, options)
+			return cache.NewViewCacheClient(), nil
 		}
 	}
 
@@ -156,11 +163,15 @@ func NewHeadless(opts Options) (Manager, error) {
 	}
 
 	// Pass the composite cache in to the client.
-	c, ok := mgr.GetClient().(*cache.CompositeClient)
+	viewCacheClient, ok := mgr.GetClient().(*cache.ViewCacheClient)
 	if !ok {
-		return nil, errors.New("client must be a composite client")
+		return nil, fmt.Errorf("expected view cache client, got %T", viewCacheClient)
 	}
-	c.SetCache(mgr.GetCache())
+	viewCache, ok := mgr.GetCache().(cache.ViewCacheInterface)
+	if !ok {
+		return nil, fmt.Errorf("expected ViewCacheInterface, got %T", mgr.GetCache())
+	}
+	viewCacheClient.SetCache(viewCache)
 
 	return mgr, nil
 }

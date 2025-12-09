@@ -346,16 +346,11 @@ func (c *ViewCache) Delete(obj object.Object) error {
 		return err
 	}
 
-	// Delete the existing object from cache by key lookup (not the incoming obj directly).
+	// Delete the existing object from the cache by key lookup (not the incoming obj directly).
 	// This ensures we remove what's actually cached, handling cases where the caller passes a
-	// stale object version. However, we trigger the informer event with the incoming obj, not
-	// existingObj, to preserve pipeline semantics: the incoming obj represents the computed
-	// delete delta from an upstream controller's pipeline, which must propagate downstream
-	// unchanged. If we sent existingObj instead, controller chains would break because
-	// downstream controllers would receive stale cached state rather than the transformed
-	// delta. This differs from typical Kubernetes delete watches (which only send
-	// name/namespace), but aligns with delta-controller's incremental computation model where
-	// delete deltas carry meaningful transformed state.
+	// stale object version. Note that this may break controller chains because downstream
+	// controllers would receive stale cached state rather than the transformed delta. However,
+	// this behavior is in-line with typical Kubernetes delete watches.
 	key, err := toolscache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	if err != nil {
 		return err
@@ -382,9 +377,7 @@ func (c *ViewCache) Delete(obj object.Object) error {
 	}
 
 	// Trigger event on shared informer
-	// Trigger the informer event with the incoming obj. This may break some watchers, but
-	// critically needed for controller chains to work.
-	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Deleted, nil, obj, false)
+	informer.(*ViewCacheInformer).TriggerEvent(toolscache.Deleted, nil, existingObj.(object.Object), false)
 
 	// Also trigger event on all delegating informers
 	c.mu.RLock()
@@ -392,7 +385,7 @@ func (c *ViewCache) Delete(obj object.Object) error {
 	c.mu.RUnlock()
 
 	for _, dinf := range delegatingInfs {
-		dinf.TriggerEvent(toolscache.Deleted, nil, obj, false)
+		dinf.TriggerEvent(toolscache.Deleted, nil, existingObj.(object.Object), false)
 	}
 
 	return nil

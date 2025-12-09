@@ -236,6 +236,8 @@ func (t *target) patch(ctx context.Context, delta object.Delta, originalObject o
 				"event-type", delta.Type)
 		}
 
+		t.log.V(4).Info("patched object", "result", object.Dump(obj))
+
 	case object.Deleted:
 		t.log.V(4).Info("delete-patch", "event-type", delta.Type,
 			"key", client.ObjectKeyFromObject(delta.Object).String())

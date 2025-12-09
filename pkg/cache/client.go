@@ -63,7 +63,7 @@ func (c *CompositeClient) SetClient(client client.Client) {
 	c.Client = client
 }
 
-// SetClient sets the cache in the composite client.
+// SetCache sets the cache for the composite client.
 func (c *CompositeClient) SetCache(cache Cache) {
 	c.compositeCache = cache
 	if viewCache, ok := cache.(*CompositeCache); ok {
