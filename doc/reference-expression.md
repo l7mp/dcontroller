@@ -17,7 +17,7 @@ Every valid JSON/YAML value is a potential expression. The framework interprets 
 
 ## Operators
 
-Expression operators perform data transformations and computations. They are always represented as a JSON object with a single key that begins with the `@` symbol. The value associated with the key contains the operator's arguments. 
+Expression operators perform data transformations and computations. They are always represented as a JSON object with a single key that begins with the `@` symbol. The value associated with the key contains the operator's arguments.
 
 This example shows an equality check with an argument list:
 ```yaml
@@ -199,6 +199,18 @@ Returns the number of items in a list.
       "@len": "$.spec.containers"
     ```
 
+#### `@min`/`@max`
+Returns the minimum/maximum of the numbers in a list.
+
+*   **Signature**: `{"@min": <list_expression>}`, `{"@max": <list_expression>}`
+*   **Arguments**: An expression that evaluates to a numeric list.
+*   **Returns**: An `integer` or a `float`, depending on the type of the list
+*   **Example**:
+    ```yaml
+    allowedBandwith:
+      "@min": ["$.spec.bandwidth.requested", "$.spec.bandwidth.limit"]
+    ```
+
 #### `@in`
 Checks if an element exists within a list.
 
@@ -279,6 +291,19 @@ Returns `true` if the expression evaluates to `null`.
 *   **Arguments**: Any expression.
 *   **Returns**: A `boolean`.
 
+#### `@rnd`
+Returns an integer between min (inclusive) and max (exclusive).
+
+*   **Signature**: `{"@rnd": <expression>}`
+*   **Arguments**: A list expression `[min, max]` that specifies the range.
+*   **Returns**: A random integer between min (inclusive) and max (exclusive).
+*   **Example**:
+    ```yaml
+    IPAddress:
+      "@concat":
+        - "192.168.0."
+        - "@rnd": [0, 256]
+    ```
 #### `@now`
 A special string literal that evaluates to the current time in RFC3339 format.
 
