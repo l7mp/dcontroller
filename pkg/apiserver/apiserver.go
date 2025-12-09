@@ -145,7 +145,7 @@ func (s *APIServer) Start(ctx context.Context) error {
 
 // runServerInstance runs a single instance of the API server
 func (s *APIServer) runServerInstance(ctx context.Context) error {
-	s.log.Info("starting API server", "addr", s.GetServerAddress())
+	s.log.Info("starting API server", "https-addr", s.GetServerAddress(), "http-addr", s.GetInsecureServerAddress())
 
 	s.mu.Lock()
 	s.running = true
