@@ -85,7 +85,7 @@ func NewDeclarative(mgr manager.Manager, operator string, config opv1a1.Controll
 
 	on := true
 	baseviews := []schema.GroupVersionKind{}
-	for _, s := range c.sources {
+	for i, s := range c.sources {
 		gvk, err := s.GetGVK()
 		if err != nil {
 			return c, c.PushCriticalErrorf("failed to obtain GVK for source %s: %w",
@@ -104,8 +104,12 @@ func NewDeclarative(mgr manager.Manager, operator string, config opv1a1.Controll
 			baseviews = append(baseviews, gvk)
 		}
 
-		// Create the controller.
-		ctrl, err := controller.NewTyped(name, mgr, controller.TypedOptions[reconciler.Request]{
+		// Create the controller with a unique name per source.
+		// Each source gets its own controller-runtime controller to avoid duplicate event delivery.
+		// Without unique names, multiple controllers would be created with the same name, causing
+		// the same watch event to be delivered multiple times.
+		ctrlName := fmt.Sprintf("%s-%d", name, i)
+		ctrl, err := controller.NewTyped(ctrlName, mgr, controller.TypedOptions[reconciler.Request]{
 			SkipNameValidation: &on,
 			Reconciler:         rec,
 		})
@@ -127,7 +131,7 @@ func NewDeclarative(mgr manager.Manager, operator string, config opv1a1.Controll
 				gvk.String(), err)
 		}
 
-		c.log.V(4).Info("watching resource", "GVK", s.String())
+		c.log.V(4).Info("watching resource", "GVK", s.String(), "controller", ctrlName)
 	}
 
 	// Create the pipeline.
