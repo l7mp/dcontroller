@@ -109,6 +109,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := op.RegisterGVKs(); err != nil {
+		log.Error(err, "failed to register GVKs")
+		os.Exit(1)
+	}
+
 	// Create an error reporter thread
 	ctx := ctrl.SetupSignalHandler()
 	go func() {

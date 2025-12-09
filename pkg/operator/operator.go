@@ -116,6 +116,11 @@ func (op *Operator) AddSpec(spec *opv1a1.OperatorSpec) {
 				"error", err)
 		}
 	}
+
+	if err := op.RegisterGVKs(); err != nil {
+		// this is not fatal
+		op.log.Error(err, "failed to register GKVs with the API server")
+	}
 }
 
 // NewFromFile creates a new operator from a serialized operator spec. Note that once this call
@@ -174,11 +179,6 @@ func (op *Operator) AddDeclarativeController(config opv1a1.Controller) error {
 	// status update triggers to show the controller errors to the user
 	op.controllers = append(op.controllers, c)
 
-	if err := op.RegisterGVKs(); err != nil {
-		// this is not fatal
-		op.log.Error(err, "failed to register GKVs with the API server")
-	}
-
 	return err
 }
 
@@ -192,11 +192,6 @@ func (op *Operator) AddNativeController(name string, ctrl dcontroller.RuntimeCon
 	// the controller returned is always valid: this makes sure we will receive the
 	// status update triggers to show the controller errors to the user
 	op.controllers = append(op.controllers, c)
-
-	if err := op.RegisterGVKs(); err != nil {
-		// this is not fatal
-		op.log.Error(err, "failed to register GKVs with the API server")
-	}
 
 	return err
 }
