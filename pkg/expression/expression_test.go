@@ -216,6 +216,23 @@ var _ = Describe("Expressions", func() {
 		// 	Expect(reflect.ValueOf(res).Bool()).To(BeTrue())
 		// })
 
+		It("should evaluate an @rnd expression", func() {
+			jsonData := `{"@rnd":[1,10]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).NotTo(BeNil())
+			Expect(reflect.ValueOf(res).Kind()).To(Equal(reflect.Int64))
+			Expect(reflect.ValueOf(res).Int()).To(And(
+				BeNumerically(">=", 1),
+				BeNumerically("<", 10),
+			))
+		})
+
 		It("should deserialize and evaluate a compound literal expression", func() {
 			jsonData := `{"@eq": [10, 10]}`
 			var exp Expression

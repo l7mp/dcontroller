@@ -32,6 +32,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
 	"slices"
 	"strings"
@@ -743,6 +744,22 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			}
 
 			v := args[0] != nil && args[1] != nil && reflect.DeepEqual(args[0], args[1])
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
+			return v, nil
+
+		case "@rnd":
+			args, err := AsIntList(arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			if len(args) != 2 {
+				return nil, NewExpressionError(e, errors.New("expected 2 arguments"))
+			}
+
+			min := args[0]
+			max := args[1]
+			v := int64(rand.Intn(int(max-min)) + int(min))
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
 			return v, nil
 
