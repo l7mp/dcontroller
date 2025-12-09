@@ -461,6 +461,48 @@ var _ = Describe("Expressions", func() {
 			Expect(res).To(Equal(int64(6)))
 		})
 
+		It("should deserialize and evaluate a min list expression", func() {
+			jsonData := `{"@min":[1,2,-3]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			kind := reflect.ValueOf(res).Kind()
+			Expect(kind).To(Equal(reflect.Int64))
+			Expect(res).To(Equal(int64(-3)))
+		})
+
+		It("should deserialize and evaluate a max list expression", func() {
+			jsonData := `{"@max":[1,2,-3]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			kind := reflect.ValueOf(res).Kind()
+			Expect(kind).To(Equal(reflect.Int64))
+			Expect(res).To(Equal(int64(2)))
+		})
+
+		It("should deserialize and evaluate an empty min list expression", func() {
+			jsonData := `{"@min":[]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(BeNil())
+		})
+
 		It("should deserialize and evaluate an @in expression", func() {
 			jsonData := `{"@in":[1,[1,2,3]]}`
 			var exp Expression

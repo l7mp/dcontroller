@@ -13,6 +13,7 @@
 //   - String operations: @concat, @split, @replace, @regex.
 //   - Arithmetic: @add, @sub, @mul, @div, @mod.
 //   - Collections: @len, @contains, @in, @keys, @values.
+//   - Lists: @len, @filter, @any, @none, @all, @map, @min, @max
 //   - Kubernetes: @selector for label matching.
 //
 // Example usage:
@@ -32,6 +33,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -903,6 +905,50 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			}
 
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", arg, "result", v)
+			return v, nil
+
+		case "@min":
+			is, fs, kind, err := AsIntOrFloatList(arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			var v any
+			switch kind {
+			case reflect.Int64:
+				if len(is) != 0 {
+					v = int64(slices.Min(is))
+				}
+			case reflect.Float64:
+				if len(fs) != 0 {
+					v = int64(slices.Min(fs))
+				}
+			default:
+			}
+
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", v)
+			return v, nil
+
+		case "@max":
+			is, fs, kind, err := AsIntOrFloatList(arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			var v any
+			switch kind {
+			case reflect.Int64:
+				if len(is) != 0 {
+					v = int64(slices.Max(is))
+				}
+			case reflect.Float64:
+				if len(fs) != 0 {
+					v = int64(slices.Max(fs))
+				}
+			default:
+			}
+
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", v)
 			return v, nil
 
 		case "@len":
