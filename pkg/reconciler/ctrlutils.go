@@ -10,7 +10,15 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 )
+
+// isViewObject returns true if the object is a view object.
+func isViewObject(obj client.Object) bool {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	return viewv1a1.IsViewKind(gvk)
+}
 
 // CreateOrUpdate creates or updates the given object in the Kubernetes cluster. The object's
 // desired state must be reconciled with the existing state inside the passed in callback MutateFn.
@@ -55,8 +63,13 @@ update:
 		return controllerutil.OperationResultNone, err
 	}
 
-	// take care of the status just now
-	if hasStatus {
+	// Option 1: Skip redundant status update for view objects.
+	// For view objects, client.Update() already updates the status field since views don't have
+	// status as a subresource. Calling Status().Update() would cause a second update, triggering
+	// duplicate watch events and potential reconciliation loops.
+	// For native Kubernetes objects, we still need the separate Status().Update() call since
+	// client.Update() ignores the status subresource.
+	if hasStatus && !isViewObject(obj) {
 		if err := unstructured.SetNestedMap(obj.UnstructuredContent(), newStatus, "status"); err == nil {
 			if err := c.Status().Update(ctx, obj); err != nil {
 				return controllerutil.OperationResultNone, err
@@ -112,9 +125,13 @@ func Update(ctx context.Context, c client.Client, obj object.Object) error {
 		}
 
 		// Restore and update status if it was present.
-		// For resources with status as a subresource: Update() cleared it, so we restore and update.
-		// For resources without status subresource: This redundantly updates status again (harmless).
-		if hasStatus {
+		// Option 1: Skip redundant status update for view objects.
+		// For view objects, client.Update() already updates status since views don't have status
+		// as a subresource. Calling Status().Update() would cause a second update, triggering
+		// duplicate watch events and potential reconciliation loops.
+		// For native Kubernetes objects with status as a subresource: Update() cleared it, so we
+		// restore and update it separately.
+		if hasStatus && !isViewObject(obj) {
 			if err := unstructured.SetNestedMap(obj.UnstructuredContent(), savedStatus, "status"); err == nil {
 				if err := c.Status().Update(ctx, obj); err != nil {
 					return err
