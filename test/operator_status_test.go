@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"path/filepath"
 	"runtime/debug"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -22,29 +23,36 @@ import (
 	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
+	"github.com/l7mp/dcontroller/pkg/testsuite"
 )
 
 var _ = Describe("Operator status report test:", Ordered, func() {
 	Context("When creating a controller with an invalid config", Ordered, Label("controller"), func() {
 		var (
+			suite      *testsuite.Suite
 			off        = true
 			ctrlCtx    context.Context
 			ctrlCancel context.CancelFunc
 		)
 
 		BeforeAll(func() {
-			ctrlCtx, ctrlCancel = context.WithCancel(context.Background())
+			var err error
+			suite, err = testsuite.New(loglevel, filepath.Join("..", "config", "crd", "resources"))
+			Expect(err).NotTo(HaveOccurred())
+
+			ctrlCtx, ctrlCancel = context.WithCancel(suite.Ctx)
 		})
 
 		AfterAll(func() {
 			ctrlCancel()
+			suite.Close()
 		})
 
 		It("should create and start the operator controller", func() {
-			setupLog.Info("setting up operator controller")
+			suite.Log.Info("setting up operator controller")
 			var err error
-			c, err := controllers.NewOpController(cfg, nil, ctrl.Options{
-				Scheme:                 scheme,
+			c, err := controllers.NewOpController(suite.Cfg, nil, ctrl.Options{
+				Scheme:                 suite.Scheme,
 				LeaderElection:         false, // disable leader-election
 				HealthProbeBindAddress: "0",   // disable health-check
 				Metrics: metricsserver.Options{
@@ -53,14 +61,14 @@ var _ = Describe("Operator status report test:", Ordered, func() {
 				Controller: config.Controller{
 					SkipNameValidation: &off,
 				},
-				Logger: logger,
+				Logger: suite.Log,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			setupLog.Info("starting operator controller")
+			suite.Log.Info("starting operator controller")
 			go func() {
 				defer GinkgoRecover()
-				err := c.Start(ctx)
+				err := c.Start(ctrlCtx)
 				if err != nil {
 					debug.PrintStack()
 				}
@@ -86,8 +94,8 @@ spec:
 			var op opv1a1.Operator
 			Expect(yaml.Unmarshal([]byte(yamlData), &op)).NotTo(HaveOccurred())
 
-			setupLog.Info("adding new operator")
-			Expect(k8sClient.Create(ctx, &op)).Should(Succeed())
+			suite.Log.Info("adding new operator")
+			Expect(suite.K8sClient.Create(ctrlCtx, &op)).Should(Succeed())
 		})
 
 		It("should set the accepted operator status to False", func() {
@@ -95,7 +103,7 @@ spec:
 			var status opv1a1.ControllerStatus
 			Eventually(func() bool {
 				get := &opv1a1.Operator{}
-				err := k8sClient.Get(ctx, key, get)
+				err := suite.K8sClient.Get(ctrlCtx, key, get)
 				if err != nil {
 					return false
 				}
@@ -104,7 +112,7 @@ spec:
 				}
 				status = get.Status.Controllers[0]
 				return status.Conditions[0].Status == metav1.ConditionFalse
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 
 			cond := meta.FindStatusCondition(status.Conditions, string(opv1a1.ControllerConditionReady))
 			Expect(cond).NotTo(BeNil())
@@ -116,16 +124,17 @@ spec:
 		})
 
 		It("should survive deleting the operator", func() {
-			ctrl.Log.Info("deleting op")
+			suite.Log.Info("deleting op")
 			op := opv1a1.Operator{}
 			op.SetName("bogus-operator")
-			Expect(k8sClient.Delete(ctrlCtx, &op)).Should(Succeed())
+			Expect(suite.K8sClient.Delete(ctrlCtx, &op)).Should(Succeed())
 		})
 	})
 
 	// write container-num into pods
 	Context("When applying a controller with a pipeline that makes a runtime error", Ordered, Label("controller"), func() {
 		var (
+			suite      *testsuite.Suite
 			ctrlCtx    context.Context
 			ctrlCancel context.CancelFunc
 			api        *cache.API
@@ -134,25 +143,30 @@ spec:
 		)
 
 		BeforeAll(func() {
-			ctrlCtx, ctrlCancel = context.WithCancel(context.Background())
+			var err error
+			suite, err = testsuite.New(loglevel, filepath.Join("..", "config", "crd", "resources"))
+			Expect(err).NotTo(HaveOccurred())
+
+			ctrlCtx, ctrlCancel = context.WithCancel(suite.Ctx)
 			pod = testutils.TestPod.DeepCopy()
 		})
 
 		AfterAll(func() {
 			ctrlCancel()
+			suite.Close()
 		})
 
 		It("should create and start the operator controller", func() {
-			setupLog.Info("setting up operator controller")
+			suite.Log.Info("setting up operator controller")
 			off := true
 			var err error
-			api, err = cache.NewAPI(cfg, cache.APIOptions{
-				CacheOptions: cache.CacheOptions{Logger: logger},
+			api, err = cache.NewAPI(suite.Cfg, cache.APIOptions{
+				CacheOptions: cache.CacheOptions{Logger: suite.Log},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			c, err := controllers.NewOpController(cfg, api.Cache, ctrl.Options{
-				Scheme:                 scheme,
+			c, err := controllers.NewOpController(suite.Cfg, api.Cache, ctrl.Options{
+				Scheme:                 suite.Scheme,
 				LeaderElection:         false, // disable leader-election
 				HealthProbeBindAddress: "0",   // disable health-check
 				Metrics: metricsserver.Options{
@@ -161,21 +175,21 @@ spec:
 				Controller: config.Controller{
 					SkipNameValidation: &off,
 				},
-				Logger: logger,
+				Logger: suite.Log,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			setupLog.Info("starting shared view storage")
+			suite.Log.Info("starting shared view storage")
 			go func() {
 				defer GinkgoRecover()
-				err := api.Cache.Start(ctx)
+				err := api.Cache.Start(ctrlCtx)
 				Expect(err).NotTo(HaveOccurred(), "failed to shared cache")
 			}()
 
-			setupLog.Info("starting operator controller")
+			suite.Log.Info("starting operator controller")
 			go func() {
 				defer GinkgoRecover()
-				err := c.Start(ctx)
+				err := c.Start(ctrlCtx)
 				Expect(err).ToNot(HaveOccurred(), "failed to run controller")
 			}()
 		})
@@ -206,8 +220,8 @@ spec:
         type: Patcher`
 			Expect(yaml.Unmarshal([]byte(yamlData), &op)).NotTo(HaveOccurred())
 
-			setupLog.Info("adding new operator")
-			Expect(k8sClient.Create(ctx, &op)).Should(Succeed())
+			suite.Log.Info("adding new operator")
+			Expect(suite.K8sClient.Create(ctrlCtx, &op)).Should(Succeed())
 		})
 
 		It("should create a nonempty status on the operator resource", func() {
@@ -215,7 +229,7 @@ spec:
 			var status opv1a1.ControllerStatus
 			Eventually(func() bool {
 				get := &opv1a1.Operator{}
-				err := k8sClient.Get(ctx, key, get)
+				err := suite.K8sClient.Get(ctrlCtx, key, get)
 				if err != nil {
 					return false
 				}
@@ -224,7 +238,7 @@ spec:
 				}
 				status = get.Status.Controllers[0]
 				return true
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 
 			cond := meta.FindStatusCondition(status.Conditions, string(opv1a1.ControllerConditionReady))
 			Expect(cond).NotTo(BeNil())
@@ -236,14 +250,14 @@ spec:
 		})
 
 		It("should report a failure in the operator ready status conditions when inserting a pod", func() {
-			setupLog.Info("adding pod")
-			Expect(k8sClient.Create(ctx, pod)).Should(Succeed())
+			suite.Log.Info("adding pod")
+			Expect(suite.K8sClient.Create(ctrlCtx, pod)).Should(Succeed())
 
 			key := types.NamespacedName{Name: "pod-container-num-annotator"}
 			var status opv1a1.ControllerStatus
 			Eventually(func() bool {
 				get := &opv1a1.Operator{}
-				err := k8sClient.Get(ctx, key, get)
+				err := suite.K8sClient.Get(ctrlCtx, key, get)
 				if err != nil || len(get.Status.Controllers) != 1 {
 					return false
 				}
@@ -253,7 +267,7 @@ spec:
 					return false
 				}
 				return cond.Status == metav1.ConditionUnknown
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 
 			cond := meta.FindStatusCondition(status.Conditions, string(opv1a1.ControllerConditionReady))
 			Expect(cond).NotTo(BeNil())
@@ -292,8 +306,8 @@ spec:
 			newOp := opv1a1.Operator{}
 			Expect(yaml.Unmarshal([]byte(yamlData), &newOp)).NotTo(HaveOccurred())
 
-			setupLog.Info("updating operator")
-			_, err := ctrlutil.CreateOrUpdate(ctx, k8sClient, &op, func() error {
+			suite.Log.Info("updating operator")
+			_, err := ctrlutil.CreateOrUpdate(ctrlCtx, suite.K8sClient, &op, func() error {
 				newOp.Spec.DeepCopyInto(&op.Spec)
 				return nil
 			})
@@ -303,7 +317,7 @@ spec:
 			var status opv1a1.ControllerStatus
 			Eventually(func() bool {
 				get := &opv1a1.Operator{}
-				err := k8sClient.Get(ctx, key, get)
+				err := suite.K8sClient.Get(ctrlCtx, key, get)
 				if err != nil || len(get.Status.Controllers) != 1 {
 					return false
 				}
@@ -313,7 +327,7 @@ spec:
 					return false
 				}
 				return cond.Status == metav1.ConditionTrue
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 
 			cond := meta.FindStatusCondition(status.Conditions, string(opv1a1.ControllerConditionReady))
 			Expect(cond).NotTo(BeNil())
@@ -323,14 +337,14 @@ spec:
 		})
 
 		It("should survive deleting the pod", func() {
-			ctrl.Log.Info("deleting pod")
-			Expect(k8sClient.Delete(ctrlCtx, pod)).Should(Succeed())
+			suite.Log.Info("deleting pod")
+			Expect(suite.K8sClient.Delete(ctrlCtx, pod)).Should(Succeed())
 		})
 
 		It("should survive deleting the operator", func() {
-			ctrl.Log.Info("deleting op")
+			suite.Log.Info("deleting op")
 			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				return k8sClient.Delete(ctrlCtx, &op)
+				return suite.K8sClient.Delete(ctrlCtx, &op)
 			})
 			Expect(err).Should(Succeed())
 		})

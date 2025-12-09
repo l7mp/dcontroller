@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -9,7 +10,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	ctrlutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -21,6 +21,7 @@ import (
 	"github.com/l7mp/dcontroller/pkg/controller"
 	"github.com/l7mp/dcontroller/pkg/manager"
 	"github.com/l7mp/dcontroller/pkg/object"
+	"github.com/l7mp/dcontroller/pkg/testsuite"
 )
 
 var _ = Describe("Controller test:", Ordered, func() {
@@ -28,6 +29,7 @@ var _ = Describe("Controller test:", Ordered, func() {
 	Context("When applying a self-referencial controller", Ordered, Label("controller"), func() {
 		const annotationName = "service-type"
 		var (
+			suite      *testsuite.Suite
 			ctrlCtx    context.Context
 			ctrlCancel context.CancelFunc
 			svc        object.Object
@@ -36,7 +38,11 @@ var _ = Describe("Controller test:", Ordered, func() {
 		)
 
 		BeforeAll(func() {
-			ctrlCtx, ctrlCancel = context.WithCancel(context.Background())
+			var err error
+			suite, err = testsuite.New(loglevel, filepath.Join("..", "config", "crd", "resources"))
+			Expect(err).NotTo(HaveOccurred())
+
+			ctrlCtx, ctrlCancel = context.WithCancel(suite.Ctx)
 			svc = testutils.TestSvc.DeepCopy()
 			gvk = schema.GroupVersionKind{
 				Group:   "",
@@ -48,12 +54,13 @@ var _ = Describe("Controller test:", Ordered, func() {
 
 		AfterAll(func() {
 			ctrlCancel()
+			suite.Close()
 		})
 
 		It("should create and start a manager succcessfully", func() {
-			setupLog.Info("setting up controller manager")
+			suite.Log.Info("setting up controller manager")
 			off := true
-			m, err := manager.New(cfg, manager.Options{
+			m, err := manager.New(suite.Cfg, manager.Options{
 				LeaderElection:         false, // disable leader-election
 				HealthProbeBindAddress: "0",   // disable health-check
 				Metrics: metricsserver.Options{
@@ -62,13 +69,13 @@ var _ = Describe("Controller test:", Ordered, func() {
 				Controller: config.Controller{
 					SkipNameValidation: &off,
 				},
-				Logger: logger,
+				Logger: suite.Log,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			mgr = m
 			Expect(mgr).NotTo(BeNil())
 
-			setupLog.Info("starting manager")
+			suite.Log.Info("starting manager")
 			go func() {
 				defer GinkgoRecover()
 				err := mgr.Start(ctrlCtx)
@@ -104,16 +111,16 @@ target:
 		})
 
 		It("should add the clusterIP annotation to a service", func() {
-			ctrl.Log.Info("loading service")
-			Expect(k8sClient.Create(ctrlCtx, svc)).Should(Succeed())
+			suite.Log.Info("loading service")
+			Expect(suite.K8sClient.Create(ctrlCtx, svc)).Should(Succeed())
 
 			get := object.New()
 			get.SetGroupVersionKind(gvk)
 			key := client.ObjectKeyFromObject(svc)
 			Eventually(func() bool {
-				// if err := mgr.GetClient().Get(ctx, key, get); err != nil && apierrors.IsNotFound(err) {
-				if err := k8sClient.Get(ctx, key, get); err != nil && apierrors.IsNotFound(err) {
-					setupLog.Info("could not query starting manager")
+				// if err := mgr.GetClient().Get(suite.Ctx, key, get); err != nil && apierrors.IsNotFound(err) {
+				if err := suite.K8sClient.Get(suite.Ctx, key, get); err != nil && apierrors.IsNotFound(err) {
+					suite.Log.Info("could not query starting manager")
 					return false
 				}
 
@@ -128,13 +135,13 @@ target:
 
 				anns := get.GetAnnotations()
 				return len(anns) > 0 && anns[annotationName] == serviceType
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 		})
 
 		It("should adjust the annotation when the service type is manually updated", func() {
-			ctrl.Log.Info("updating service service")
+			suite.Log.Info("updating service service")
 
-			_, err := ctrlutil.CreateOrUpdate(ctrlCtx, k8sClient, svc, func() error {
+			_, err := ctrlutil.CreateOrUpdate(ctrlCtx, suite.K8sClient, svc, func() error {
 				return unstructured.SetNestedField(svc.UnstructuredContent(), "NodePort", "spec", "type")
 			})
 			Expect(err).Should(Succeed())
@@ -143,8 +150,8 @@ target:
 			get.SetGroupVersionKind(gvk)
 			key := client.ObjectKeyFromObject(svc)
 			Eventually(func() bool {
-				if err := k8sClient.Get(ctx, key, get); err != nil && apierrors.IsNotFound(err) {
-					setupLog.Info("could not query starting manager")
+				if err := suite.K8sClient.Get(suite.Ctx, key, get); err != nil && apierrors.IsNotFound(err) {
+					suite.Log.Info("could not query starting manager")
 					return false
 				}
 
@@ -154,18 +161,18 @@ target:
 
 				anns := get.GetAnnotations()
 				return len(anns) > 0 && anns[annotationName] == "NodePort"
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 		})
 
 		It("should survive deleting the service", func() {
-			ctrl.Log.Info("deleting service")
-			Expect(k8sClient.Delete(ctrlCtx, svc)).Should(Succeed())
+			suite.Log.Info("deleting service")
+			Expect(suite.K8sClient.Delete(ctrlCtx, svc)).Should(Succeed())
 
 			// removed from the cache?
 			Eventually(func() bool {
 				return apierrors.IsNotFound(mgr.GetCache().Get(ctrlCtx,
 					client.ObjectKeyFromObject(svc), svc))
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 
 		})
 	})

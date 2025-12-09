@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -72,7 +73,7 @@ var _ = BeforeSuite(func() {
 	opv1a1.AddToScheme(scheme)
 
 	var err error
-	suite, err = testsuite.New(loglevel, "./configdeployment-crd.yaml")
+	suite, err = testsuite.New(loglevel, filepath.Join("..", "..", "config", "crd", "resources"), "./")
 	Expect(err).NotTo(HaveOccurred())
 	k8sClient = suite.K8sClient
 	cfg = suite.Cfg

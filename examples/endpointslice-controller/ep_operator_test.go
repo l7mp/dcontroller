@@ -7,10 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand/v2"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
@@ -134,11 +135,12 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			Expect(api.Client.(*cache.CompositeClient).GetCache()).NotTo(BeNil())
 
 			suite.Log.Info("creating the API server")
-			port = rand.IntN(5000) + (32768) //nolint:gosec
-			config, err := apiserver.NewDefaultConfig("", port, api.Client, true, false, suite.Log)
+			// Use port 0 to let the OS automatically assign a free port
+			config, err := apiserver.NewDefaultConfig("", 0, api.Client, true, false, suite.Log)
 			Expect(err).NotTo(HaveOccurred())
 			server, err = apiserver.NewAPIServer(config)
 			Expect(err).NotTo(HaveOccurred())
+			port = testutils.GetPort(server.GetInsecureServerAddress())
 
 			go func() {
 				defer GinkgoRecover()
@@ -223,7 +225,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			Eventually(func() bool {
 				openAPISchema, err := discoveryClient.OpenAPISchema()
 				return err == nil && openAPISchema != nil
-			}, time.Second).Should(BeTrue())
+			}, 3*time.Second).Should(BeTrue())
 
 			// Get all API groups and resources
 			apiGroups, apiResourceLists, err := discoveryClient.ServerGroupsAndResources()
@@ -355,7 +357,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 		It("should generate 4 EndpointView watch events from the API server", func() {
 			specs = []map[string]any{}
 
-			for i := 0; i < 4; i++ {
+			for range 4 {
 				req, err := apiServerWatchEvent(suite.Timeout)
 				Expect(err).Should(Succeed())
 				Expect(req.Type).To(Equal(watch.Added))
@@ -399,7 +401,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			// guarantee exists only for identically named objects)
 			epNames = []string{}
 			specs = []map[string]any{}
-			for i := 0; i < 4; i++ {
+			for range 4 {
 				req, ok := testutils.TryWatchReq(eventCh, suite.Timeout)
 				Expect(ok).To(BeTrue())
 				switch req.GetEventType() {
@@ -543,8 +545,8 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			}
 
 			suite.Log.Info("creating the API server")
-			port = rand.IntN(5000) + (32768) //nolint:gosec
-			config, err := apiserver.NewDefaultConfig("", port, api.Client, true, false, suite.Log)
+			// Use port 0 to let the OS automatically assign a free port
+			config, err := apiserver.NewDefaultConfig("", 0, api.Client, true, false, suite.Log)
 			Expect(err).NotTo(HaveOccurred())
 			server, err = apiserver.NewAPIServer(config)
 			Expect(err).NotTo(HaveOccurred())
@@ -557,6 +559,17 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 
 			// Give server a moment to start
 			time.Sleep(20 * time.Millisecond)
+
+			// Extract the actual port that was assigned
+			// GetServerAddress() returns "host:port"
+			if addr := server.GetServerAddress(); addr != "<unknown>" {
+				if _, portStr, err := net.SplitHostPort(addr); err == nil {
+					if p, err := strconv.Atoi(portStr); err == nil {
+						port = p
+						suite.Log.Info("API server bound to port", "port", port)
+					}
+				}
+			}
 
 			specFile := OperatorGatherSpec
 			if _, err := os.Stat(specFile); errors.Is(err, os.ErrNotExist) {

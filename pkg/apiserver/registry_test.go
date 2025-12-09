@@ -3,7 +3,6 @@ package apiserver
 import (
 	"context"
 	"fmt"
-	"math/rand/v2"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -13,6 +12,7 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 
+	"github.com/l7mp/dcontroller/internal/testutils"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/manager"
 )
@@ -32,18 +32,12 @@ var _ = Describe("RegisterGVKs", func() {
 		mgr, err = manager.NewFakeManager(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
-		port = rand.IntN(5000) + 32768 //nolint:gosec
 		serverAddr = "localhost"
-		config, err := NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, false, logger)
+		config, err := NewDefaultConfig(serverAddr, 0, mgr.GetClient(), true, false, logger)
 		Expect(err).NotTo(HaveOccurred())
 		server, err = NewAPIServer(config)
-		if err != nil {
-			port = rand.IntN(5000) + 32768 //nolint:gosec
-			config, err = NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, false, logger)
-			Expect(err).NotTo(HaveOccurred())
-			server, err = NewAPIServer(config)
-		}
 		Expect(err).NotTo(HaveOccurred())
+		port = testutils.GetPort(server.GetInsecureServerAddress())
 
 		// Start the server
 		serverCtx, cancel = context.WithCancel(context.Background())

@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -22,6 +23,7 @@ import (
 	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
+	"github.com/l7mp/dcontroller/pkg/testsuite"
 )
 
 const serviceTypeAnnotationName = "dcontroller.io/service-type"
@@ -30,6 +32,7 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 	// annotate EndpointSlices with the type of the corresponding Service
 	Context("When creating an endpoint annotator operator", Ordered, Label("operator"), func() {
 		var (
+			suite                          *testsuite.Suite
 			ctx                            context.Context
 			cancel                         context.CancelFunc
 			api                            *cache.API
@@ -37,7 +40,11 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 		)
 
 		BeforeAll(func() {
-			ctx, cancel = context.WithCancel(context.Background())
+			var err error
+			suite, err = testsuite.New(loglevel, filepath.Join("..", "config", "crd", "resources"))
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx, cancel = context.WithCancel(suite.Ctx)
 
 			svc1 = testutils.TestSvc.DeepCopy()
 			svc1.SetName("test-service-1")
@@ -70,19 +77,20 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 
 		AfterAll(func() {
 			cancel()
+			suite.Close()
 		})
 
 		It("should create and start the operator controller", func() {
 			off := true
-			setupLog.Info("setting up operator controller")
+			suite.Log.Info("setting up operator controller")
 			var err error
-			api, err = cache.NewAPI(cfg, cache.APIOptions{
-				CacheOptions: cache.CacheOptions{Logger: logger},
+			api, err = cache.NewAPI(suite.Cfg, cache.APIOptions{
+				CacheOptions: cache.CacheOptions{Logger: suite.Log},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			c, err := controllers.NewOpController(cfg, api.Cache, ctrl.Options{
-				Scheme:                 scheme,
+			c, err := controllers.NewOpController(suite.Cfg, api.Cache, ctrl.Options{
+				Scheme:                 suite.Scheme,
 				LeaderElection:         false, // disable leader-election
 				HealthProbeBindAddress: "0",   // disable health-check
 				Metrics: metricsserver.Options{
@@ -91,18 +99,18 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 				Controller: config.Controller{
 					SkipNameValidation: &off,
 				},
-				Logger: logger,
+				Logger: suite.Log,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			setupLog.Info("starting shared view storage")
+			suite.Log.Info("starting shared view storage")
 			go func() {
 				defer GinkgoRecover()
 				err := api.Cache.Start(ctx)
 				Expect(err).NotTo(HaveOccurred(), "failed to shared cache")
 			}()
 
-			setupLog.Info("starting operator controller")
+			suite.Log.Info("starting operator controller")
 			go func() {
 				defer GinkgoRecover()
 				err := c.Start(ctx)
@@ -111,46 +119,46 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 		})
 
 		It("should let an operator to be attached to the manager", func() {
-			setupLog.Info("reading YAML file")
+			suite.Log.Info("reading YAML file")
 			yamlData, err := os.ReadFile("endpointslice_annotator.yaml")
 			Expect(err).NotTo(HaveOccurred())
 			var op opv1a1.Operator
 			Expect(yaml.Unmarshal(yamlData, &op)).NotTo(HaveOccurred())
 
-			setupLog.Info("adding new operator")
-			Expect(k8sClient.Create(ctx, &op)).Should(Succeed())
+			suite.Log.Info("adding new operator")
+			Expect(suite.K8sClient.Create(ctx, &op)).Should(Succeed())
 
 			key := client.ObjectKeyFromObject(&op)
 			Eventually(func() bool {
 				get := &opv1a1.Operator{}
-				err := k8sClient.Get(ctx, key, get)
+				err := suite.K8sClient.Get(ctx, key, get)
 				return err == nil
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 		})
 
 		It("should add an annotation", func() {
-			ctrl.Log.Info("loading service")
-			Expect(k8sClient.Create(ctx, svc1)).Should(Succeed())
+			suite.Log.Info("loading service")
+			Expect(suite.K8sClient.Create(ctx, svc1)).Should(Succeed())
 
-			ctrl.Log.Info("loading endpointslice")
-			Expect(k8sClient.Create(ctx, es1)).Should(Succeed())
+			suite.Log.Info("loading endpointslice")
+			Expect(suite.K8sClient.Create(ctx, es1)).Should(Succeed())
 
 			Eventually(func() bool {
 				key := client.ObjectKeyFromObject(es1)
 				get := &discoveryv1.EndpointSlice{}
-				if err := k8sClient.Get(ctx, key, get); err != nil {
+				if err := suite.K8sClient.Get(ctx, key, get); err != nil {
 					return false
 				}
 
 				anns := get.GetAnnotations()
 				return len(anns) > 0 && anns[serviceTypeAnnotationName] == "ClusterIP"
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 		})
 
 		It("should adjust the annotation when the service type is manually updated", func() {
-			ctrl.Log.Info("updating service")
+			suite.Log.Info("updating service")
 			svc := svc1.DeepCopy()
-			_, err := ctrlutil.CreateOrUpdate(ctx, k8sClient, svc, func() error {
+			_, err := ctrlutil.CreateOrUpdate(ctx, suite.K8sClient, svc, func() error {
 				return unstructured.SetNestedField(svc.UnstructuredContent(), "NodePort", "spec", "type")
 			})
 			Expect(err).Should(Succeed())
@@ -159,13 +167,13 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 			Eventually(func() bool {
 				key := client.ObjectKeyFromObject(es1)
 				get := &discoveryv1.EndpointSlice{}
-				if err := k8sClient.Get(ctx, key, get); err != nil {
+				if err := suite.K8sClient.Get(ctx, key, get); err != nil {
 					return false
 				}
 
 				anns = get.GetAnnotations()
 				return len(anns) > 0 && anns[serviceTypeAnnotationName] == "NodePort"
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 
 			// just to make sure
 			Expect(anns[serviceTypeAnnotationName]).To(Equal("NodePort"))
@@ -173,29 +181,29 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 
 		It("should handle the addition of another EndpointSlice referring to the same Service", func() {
 			// can this happen in real K8s?
-			ctrl.Log.Info("adding new referring EndpointSlice")
-			Expect(k8sClient.Create(ctx, es2)).Should(Succeed())
+			suite.Log.Info("adding new referring EndpointSlice")
+			Expect(suite.K8sClient.Create(ctx, es2)).Should(Succeed())
 
 			var anns map[string]string
 			Eventually(func() bool {
 				key := client.ObjectKeyFromObject(es2)
 				get := &discoveryv1.EndpointSlice{}
-				if err := k8sClient.Get(ctx, key, get); err != nil {
+				if err := suite.K8sClient.Get(ctx, key, get); err != nil {
 					return false
 				}
 
 				anns = get.GetAnnotations()
 				return len(anns) > 0 && anns[serviceTypeAnnotationName] == "NodePort"
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 
 			// just to make sure
 			Expect(anns[serviceTypeAnnotationName]).To(Equal("NodePort"))
 		})
 
 		It("should update all referring EndpointSlices when the Service changes", func() {
-			ctrl.Log.Info("updating service")
+			suite.Log.Info("updating service")
 			svc := svc1.DeepCopy()
-			_, err := ctrlutil.CreateOrUpdate(ctx, k8sClient, svc, func() error {
+			_, err := ctrlutil.CreateOrUpdate(ctx, suite.K8sClient, svc, func() error {
 				return unstructured.SetNestedField(svc.UnstructuredContent(), "LoadBalancer", "spec", "type")
 			})
 			Expect(err).Should(Succeed())
@@ -203,104 +211,104 @@ var _ = Describe("EndpointSlice annotator operator test:", Ordered, func() {
 			Eventually(func() bool {
 				key1 := client.ObjectKeyFromObject(es1)
 				get1 := &discoveryv1.EndpointSlice{}
-				if err := k8sClient.Get(ctx, key1, get1); err != nil {
+				if err := suite.K8sClient.Get(ctx, key1, get1); err != nil {
 					return false
 				}
 				anns1 := get1.GetAnnotations()
 
 				key2 := client.ObjectKeyFromObject(es2)
 				get2 := &discoveryv1.EndpointSlice{}
-				if err := k8sClient.Get(ctx, key2, get2); err != nil {
+				if err := suite.K8sClient.Get(ctx, key2, get2); err != nil {
 					return false
 				}
 				anns2 := get2.GetAnnotations()
 
 				return len(anns1) > 0 && anns1[serviceTypeAnnotationName] == "LoadBalancer" &&
 					len(anns2) > 0 && anns2[serviceTypeAnnotationName] == "LoadBalancer"
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 		})
 
 		It("should not allow EndpointSlices in other namespaces to attach to the Service", func() {
 			// can this happen in real K8s?
-			ctrl.Log.Info("adding referring EndpointSlice from a different namespace")
-			Expect(k8sClient.Create(ctx, es3)).Should(Succeed())
+			suite.Log.Info("adding referring EndpointSlice from a different namespace")
+			Expect(suite.K8sClient.Create(ctx, es3)).Should(Succeed())
 
 			// makes sure the es is written
 			Eventually(func() bool {
 				key := client.ObjectKeyFromObject(es3)
 				get := &discoveryv1.EndpointSlice{}
-				err := k8sClient.Get(ctx, key, get)
+				err := suite.K8sClient.Get(ctx, key, get)
 				return err == nil
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 
 			// this is ugly and prone to errors
 			time.Sleep(250 * time.Millisecond)
 
 			key := client.ObjectKeyFromObject(es3)
 			get := &discoveryv1.EndpointSlice{}
-			Expect(k8sClient.Get(ctx, key, get)).To(Succeed())
+			Expect(suite.K8sClient.Get(ctx, key, get)).To(Succeed())
 			Expect(get.GetAnnotations()).To(BeEmpty())
 		})
 
 		It("should allow EndpointSlices in other namespaces to attach to Services in the same namespace", func() {
-			ctrl.Log.Info("loading endpointslice in the other namespace")
-			Expect(k8sClient.Create(ctx, es4)).Should(Succeed())
+			suite.Log.Info("loading endpointslice in the other namespace")
+			Expect(suite.K8sClient.Create(ctx, es4)).Should(Succeed())
 
-			ctrl.Log.Info("loading service in the other namespace")
-			Expect(k8sClient.Create(ctx, svc2)).Should(Succeed())
+			suite.Log.Info("loading service in the other namespace")
+			Expect(suite.K8sClient.Create(ctx, svc2)).Should(Succeed())
 
 			Eventually(func() bool {
 				key := client.ObjectKeyFromObject(es4)
 				get := &discoveryv1.EndpointSlice{}
-				if err := k8sClient.Get(ctx, key, get); err != nil {
+				if err := suite.K8sClient.Get(ctx, key, get); err != nil {
 					return false
 				}
 
 				anns := get.GetAnnotations()
 				return len(anns) > 0 && anns[serviceTypeAnnotationName] == "ClusterIP"
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 		})
 
 		// target.delete-patch is unsafe
-		// It("should remove annotations from all referring EndpointSlices when Service is deleted", func() {
-		// 	ctrl.Log.Info("deleting service-1")
-		// 	Expect(k8sClient.Delete(ctx, svc1)).Should(Succeed())
+		It("should remove annotations from all referring EndpointSlices when Service is deleted", func() {
+			suite.Log.Info("deleting service-1")
+			Expect(suite.K8sClient.Delete(ctx, svc1)).Should(Succeed())
 
-		// 	Eventually(func() bool {
-		// 		key := client.ObjectKeyFromObject(es1)
-		// 		get := &discoveryv1.EndpointSlice{}
-		// 		if err := k8sClient.Get(ctx, key, get); err != nil {
-		// 			return false
-		// 		}
-		// 		return len(get.GetAnnotations()) == 0
-		// 	}, timeout, interval).Should(BeTrue())
+			Eventually(func() bool {
+				key := client.ObjectKeyFromObject(es1)
+				get := &discoveryv1.EndpointSlice{}
+				if err := suite.K8sClient.Get(ctx, key, get); err != nil {
+					return false
+				}
+				return len(get.GetAnnotations()) == 0
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 
-		// 	Eventually(func() bool {
-		// 		key := client.ObjectKeyFromObject(es2)
-		// 		get := &discoveryv1.EndpointSlice{}
-		// 		if err := k8sClient.Get(ctx, key, get); err != nil {
-		// 			return false
-		// 		}
-		// 		return len(get.GetAnnotations()) == 0
-		// 	}, timeout, interval).Should(BeTrue())
-		// })
+			Eventually(func() bool {
+				key := client.ObjectKeyFromObject(es2)
+				get := &discoveryv1.EndpointSlice{}
+				if err := suite.K8sClient.Get(ctx, key, get); err != nil {
+					return false
+				}
+				return len(get.GetAnnotations()) == 0
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
+		})
 
 		It("should delete the operator", func() {
-			ctrl.Log.Info("deleting operator")
+			suite.Log.Info("deleting operator")
 			yamlData, err := os.ReadFile("endpointslice_annotator.yaml")
 			Expect(err).NotTo(HaveOccurred())
 			var op opv1a1.Operator
 			Expect(yaml.Unmarshal(yamlData, &op)).NotTo(HaveOccurred())
-			Expect(k8sClient.Delete(ctx, &op)).Should(Succeed())
+			Expect(suite.K8sClient.Delete(ctx, &op)).Should(Succeed())
 		})
 
 		It("should delete the objects added", func() {
-			ctrl.Log.Info("deleting objects")
-			Expect(k8sClient.Delete(ctx, svc2)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, es1)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, es2)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, es3)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, es4)).Should(Succeed())
+			suite.Log.Info("deleting objects")
+			Expect(suite.K8sClient.Delete(ctx, svc2)).Should(Succeed())
+			Expect(suite.K8sClient.Delete(ctx, es1)).Should(Succeed())
+			Expect(suite.K8sClient.Delete(ctx, es2)).Should(Succeed())
+			Expect(suite.K8sClient.Delete(ctx, es3)).Should(Succeed())
+			Expect(suite.K8sClient.Delete(ctx, es4)).Should(Succeed())
 		})
 	})
 })

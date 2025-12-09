@@ -103,10 +103,18 @@ func NewAPIServer(config Config) (*APIServer, error) {
 
 // GetServerAddress returns the address and the port of the running API server.
 func (s *APIServer) GetServerAddress() string {
-	if s.config.Addr == nil {
-		return "<unknown>"
+	if s.server.SecureServingInfo != nil && s.server.SecureServingInfo.Listener != nil {
+		return s.server.SecureServingInfo.Listener.Addr().String()
 	}
-	return s.config.Addr.String()
+	return "<unknown>"
+}
+
+// GetInsecureServerAddress returns the address and the port of the running API server.
+func (s *APIServer) GetInsecureServerAddress() string {
+	if s.insecureListener != nil {
+		return s.insecureListener.Addr().String()
+	}
+	return "<unknown>"
 }
 
 // GetScheme returns the scheme used by the API server.

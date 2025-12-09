@@ -2,7 +2,6 @@ package testsuite
 
 import (
 	"context"
-	"path/filepath"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -35,7 +34,7 @@ type Suite struct {
 	Log               logr.Logger
 }
 
-func New(loglevel int8, crds ...string) (*Suite, error) {
+func New(loglevel int8, crdPaths ...string) (*Suite, error) {
 	s := &Suite{
 		Timeout:  time.Second * 5,
 		Interval: time.Millisecond * 250,
@@ -71,10 +70,7 @@ func New(loglevel int8, crds ...string) (*Suite, error) {
 
 	By("bootstrapping test environment")
 	s.TestEnv = &envtest.Environment{
-		CRDDirectoryPaths: append(
-			[]string{filepath.Join("..", "..", "config", "crd", "resources")},
-			crds...,
-		),
+		CRDDirectoryPaths:        crdPaths,
 		ErrorIfCRDPathMissing:    true,
 		AttachControlPlaneOutput: true,
 	}
@@ -93,12 +89,12 @@ func New(loglevel int8, crds ...string) (*Suite, error) {
 	}
 
 	// create default test namespace
-	if err := s.K8sClient.Create(s.Ctx, testutils.TestNs); err != nil {
+	if err := s.K8sClient.Create(s.Ctx, testutils.TestNs.DeepCopy()); err != nil {
 		return nil, err
 	}
 
 	// create another testing namespace
-	if err := s.K8sClient.Create(s.Ctx, testutils.TestNs2); err != nil {
+	if err := s.K8sClient.Create(s.Ctx, testutils.TestNs2.DeepCopy()); err != nil {
 		return nil, err
 	}
 

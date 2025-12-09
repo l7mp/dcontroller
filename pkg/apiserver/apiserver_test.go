@@ -30,6 +30,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/l7mp/dcontroller/internal/testutils"
 	viewv1a1 "github.com/l7mp/dcontroller/pkg/api/view/v1alpha1"
 	"github.com/l7mp/dcontroller/pkg/auth"
 	"github.com/l7mp/dcontroller/pkg/cache"
@@ -88,17 +89,11 @@ var _ = Describe("APIServerUnitTest", func() {
 		mgr, err = manager.NewFakeManager(manager.Options{Logger: logger})
 		Expect(err).NotTo(HaveOccurred())
 
-		port = rand.IntN(5000) + (32768) //nolint:gosec
-		config, err := NewDefaultConfig("", port, mgr.GetClient(), true, false, logger)
+		config, err := NewDefaultConfig("", 0, mgr.GetClient(), true, false, logger)
 		Expect(err).NotTo(HaveOccurred())
 		server, err = NewAPIServer(config)
-		if err != nil {
-			port = rand.IntN(5000) + (32768) //nolint:gosec
-			config, err = NewDefaultConfig("", port, mgr.GetClient(), true, false, logger)
-			Expect(err).NotTo(HaveOccurred())
-			server, err = NewAPIServer(config)
-		}
 		Expect(err).NotTo(HaveOccurred())
+		port = testutils.GetPort(server.GetInsecureServerAddress())
 	})
 
 	Describe("Lifecycle Management", func() {
@@ -287,20 +282,11 @@ var _ = Describe("APIServer Integration", func() {
 
 		// Create API server at random port
 		serverAddr = "localhost"
-		port = rand.IntN(15000) + 32768 //nolint:gosec
-		config, err := NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, false, logger)
+		config, err := NewDefaultConfig(serverAddr, 0, mgr.GetClient(), true, false, logger)
 		Expect(err).NotTo(HaveOccurred())
 		apiServer, err = NewAPIServer(config)
-		if err != nil {
-			// Try again of there was a port clash
-			serverAddr = "localhost"
-			port = rand.IntN(15000) + 32768 //nolint:gosec
-			config, err = NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, false, logger)
-			Expect(err).NotTo(HaveOccurred())
-			apiServer, err = NewAPIServer(config)
-			Expect(err).NotTo(HaveOccurred())
-		}
 		Expect(err).NotTo(HaveOccurred())
+		port = testutils.GetPort(apiServer.GetInsecureServerAddress())
 
 		err = apiServer.RegisterAPIGroup(viewv1a1.Group("test"), []schema.GroupVersionKind{
 			viewv1a1.GroupVersionKind("test", "TestView2"), // use reverse order for testing the codec

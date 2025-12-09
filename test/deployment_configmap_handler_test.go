@@ -6,6 +6,7 @@ package integration
 import (
 	"context"
 	"os"
+	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -25,10 +26,11 @@ import (
 	"github.com/l7mp/dcontroller/pkg/cache"
 	"github.com/l7mp/dcontroller/pkg/kubernetes/controllers"
 	"github.com/l7mp/dcontroller/pkg/object"
+	"github.com/l7mp/dcontroller/pkg/testsuite"
 )
 
 const (
-	relatedConfigMapAnnotationName = "dcontroller.io/related-configmap"
+	// relatedConfigMapAnnotationName = "dcontroller.io/related-configmap"
 	deploymentMarkerAnnotationName = "dcontroller.io/configmap-version"
 )
 
@@ -36,6 +38,7 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 	// restart Deployments whenever the related ConfigMap changes
 	Context("When creating a Deployment handler operator", Ordered, Label("operator"), func() {
 		var (
+			suite        *testsuite.Suite
 			ctx          context.Context
 			cancel       context.CancelFunc
 			api          *cache.API
@@ -44,7 +47,11 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 		)
 
 		BeforeAll(func() {
-			ctx, cancel = context.WithCancel(context.Background())
+			var err error
+			suite, err = testsuite.New(loglevel, filepath.Join("..", "config", "crd", "resources"))
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx, cancel = context.WithCancel(suite.Ctx)
 
 			// each dp relate to the same configmapach
 			dp1 = testutils.TestDeployment.DeepCopy()
@@ -61,18 +68,19 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 
 		AfterAll(func() {
 			cancel()
+			suite.Close()
 		})
 
 		It("should create and start the operator controller", func() {
-			setupLog.Info("setting up operator controller")
+			suite.Log.Info("setting up operator controller")
 			var err error
-			api, err = cache.NewAPI(cfg, cache.APIOptions{
-				CacheOptions: cache.CacheOptions{Logger: logger},
+			api, err = cache.NewAPI(suite.Cfg, cache.APIOptions{
+				CacheOptions: cache.CacheOptions{Logger: suite.Log},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			c, err := controllers.NewOpController(cfg, api.Cache, ctrl.Options{
-				Scheme:                 scheme,
+			c, err := controllers.NewOpController(suite.Cfg, api.Cache, ctrl.Options{
+				Scheme:                 suite.Scheme,
 				LeaderElection:         false, // disable leader-election
 				HealthProbeBindAddress: "0",   // disable health-check
 				Metrics: metricsserver.Options{
@@ -81,18 +89,18 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 				Controller: config.Controller{
 					SkipNameValidation: &off,
 				},
-				Logger: logger,
+				Logger: suite.Log,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			setupLog.Info("starting shared view storage")
+			suite.Log.Info("starting shared view storage")
 			go func() {
 				defer GinkgoRecover()
 				err := api.Cache.Start(ctx)
 				Expect(err).NotTo(HaveOccurred(), "failed to shared cache")
 			}()
 
-			setupLog.Info("starting operator controller")
+			suite.Log.Info("starting operator controller")
 			go func() {
 				defer GinkgoRecover()
 				err := c.Start(ctx)
@@ -101,40 +109,40 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 		})
 
 		It("should let an operator to be attached to the manager", func() {
-			setupLog.Info("reading YAML file")
+			suite.Log.Info("reading YAML file")
 			yamlData, err := os.ReadFile("deployment_configmap_handler.yaml")
 			Expect(err).NotTo(HaveOccurred())
 			var op opv1a1.Operator
 			Expect(yaml.Unmarshal(yamlData, &op)).NotTo(HaveOccurred())
 
-			setupLog.Info("adding new operator")
-			Expect(k8sClient.Create(ctx, &op)).Should(Succeed())
+			suite.Log.Info("adding new operator")
+			Expect(suite.K8sClient.Create(ctx, &op)).Should(Succeed())
 
 			key := client.ObjectKeyFromObject(&op)
 			Eventually(func() bool {
 				get := &opv1a1.Operator{}
-				err := k8sClient.Get(ctx, key, get)
+				err := suite.K8sClient.Get(ctx, key, get)
 				return err == nil
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 		})
 
 		It("should add an annotation to a Deployment we start", func() {
-			ctrl.Log.Info("loading deployment")
-			Expect(k8sClient.Create(ctx, dp1)).Should(Succeed())
+			suite.Log.Info("loading deployment")
+			Expect(suite.K8sClient.Create(ctx, dp1)).Should(Succeed())
 
-			ctrl.Log.Info("loading configmap")
-			Expect(k8sClient.Create(ctx, cm)).Should(Succeed())
+			suite.Log.Info("loading configmap")
+			Expect(suite.K8sClient.Create(ctx, cm)).Should(Succeed())
 
 			Eventually(func() bool {
 				cmkey := client.ObjectKeyFromObject(cm)
 				cmget := &corev1.ConfigMap{}
-				if err := k8sClient.Get(ctx, cmkey, cmget); err != nil {
+				if err := suite.K8sClient.Get(ctx, cmkey, cmget); err != nil {
 					return false
 				}
 
 				dpkey := client.ObjectKeyFromObject(dp1)
 				dpget := &appsv1.Deployment{}
-				if err := k8sClient.Get(ctx, dpkey, dpget); err != nil {
+				if err := suite.K8sClient.Get(ctx, dpkey, dpget); err != nil {
 					return false
 				}
 
@@ -145,13 +153,13 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 
 				rv, ok := anns[deploymentMarkerAnnotationName]
 				return ok && rv == cmget.GetResourceVersion()
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 		})
 
 		It("should adjust the annotation when the configmap is updated", func() {
-			ctrl.Log.Info("updating configmap")
+			suite.Log.Info("updating configmap")
 			cmup := testutils.TestConfigMap.DeepCopy()
-			_, err := ctrlutil.CreateOrUpdate(ctx, k8sClient, cmup, func() error {
+			_, err := ctrlutil.CreateOrUpdate(ctx, suite.K8sClient, cmup, func() error {
 				return unstructured.SetNestedField(cmup.UnstructuredContent(), "value3", "data", "key3")
 			})
 			Expect(err).Should(Succeed())
@@ -159,13 +167,13 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 			Eventually(func() bool {
 				cmkey := client.ObjectKeyFromObject(cm)
 				cmget := &corev1.ConfigMap{}
-				if err := k8sClient.Get(ctx, cmkey, cmget); err != nil {
+				if err := suite.K8sClient.Get(ctx, cmkey, cmget); err != nil {
 					return false
 				}
 
 				dpkey := client.ObjectKeyFromObject(dp1)
 				dpget := &appsv1.Deployment{}
-				if err := k8sClient.Get(ctx, dpkey, dpget); err != nil {
+				if err := suite.K8sClient.Get(ctx, dpkey, dpget); err != nil {
 					return false
 				}
 
@@ -176,23 +184,23 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 
 				rv, ok := anns[deploymentMarkerAnnotationName]
 				return ok && rv == cmget.GetResourceVersion()
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 		})
 
 		It("should handle the addition of another Deployment referring to the same ConfigMap", func() {
-			ctrl.Log.Info("adding new referring Deployment")
-			Expect(k8sClient.Create(ctx, dp2)).Should(Succeed())
+			suite.Log.Info("adding new referring Deployment")
+			Expect(suite.K8sClient.Create(ctx, dp2)).Should(Succeed())
 
 			Eventually(func() bool {
 				cmkey := client.ObjectKeyFromObject(cm)
 				cmget := &corev1.ConfigMap{}
-				if err := k8sClient.Get(ctx, cmkey, cmget); err != nil {
+				if err := suite.K8sClient.Get(ctx, cmkey, cmget); err != nil {
 					return false
 				}
 
 				dpkey := client.ObjectKeyFromObject(dp2)
 				dpget := &appsv1.Deployment{}
-				if err := k8sClient.Get(ctx, dpkey, dpget); err != nil {
+				if err := suite.K8sClient.Get(ctx, dpkey, dpget); err != nil {
 					return false
 				}
 
@@ -203,27 +211,27 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 
 				rv, ok := anns[deploymentMarkerAnnotationName]
 				return ok && rv == cmget.GetResourceVersion()
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 		})
 
 		It("should update both Deployments when the Service changes", func() {
-			ctrl.Log.Info("updating ConfigMap")
+			suite.Log.Info("updating ConfigMap")
 			cmup := testutils.TestConfigMap.DeepCopy()
-			_, err := ctrlutil.CreateOrUpdate(ctx, k8sClient, cmup, func() error {
+			_, err := ctrlutil.CreateOrUpdate(ctx, suite.K8sClient, cmup, func() error {
 				return unstructured.SetNestedField(cmup.UnstructuredContent(), "value4", "data", "key3")
 			})
 			Expect(err).Should(Succeed())
 
 			Eventually(func() bool {
-				cmkey := client.ObjectKeyFromObject(cm)
+				cmkey := client.ObjectKeyFromObject(cmup)
 				cmget := &corev1.ConfigMap{}
-				if err := k8sClient.Get(ctx, cmkey, cmget); err != nil {
+				if err := suite.K8sClient.Get(ctx, cmkey, cmget); err != nil {
 					return false
 				}
 
 				dpkey := client.ObjectKeyFromObject(dp1)
 				dpget := &appsv1.Deployment{}
-				if err := k8sClient.Get(ctx, dpkey, dpget); err != nil {
+				if err := suite.K8sClient.Get(ctx, dpkey, dpget); err != nil {
 					return false
 				}
 
@@ -239,7 +247,7 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 
 				dpkey = client.ObjectKeyFromObject(dp2)
 				dpget = &appsv1.Deployment{}
-				if err := k8sClient.Get(ctx, dpkey, dpget); err != nil {
+				if err := suite.K8sClient.Get(ctx, dpkey, dpget); err != nil {
 					return false
 				}
 
@@ -254,23 +262,23 @@ var _ = Describe("Deployment handler operator test:", Ordered, func() {
 				}
 
 				return true
-			}, timeout, interval).Should(BeTrue())
+			}, suite.Timeout, suite.Interval).Should(BeTrue())
 		})
 
 		It("should delete the operator", func() {
-			ctrl.Log.Info("deleting operator")
+			suite.Log.Info("deleting operator")
 			yamlData, err := os.ReadFile("deployment_configmap_handler.yaml")
 			Expect(err).NotTo(HaveOccurred())
 			var op opv1a1.Operator
 			Expect(yaml.Unmarshal(yamlData, &op)).NotTo(HaveOccurred())
-			Expect(k8sClient.Delete(ctx, &op)).Should(Succeed())
+			Expect(suite.K8sClient.Delete(ctx, &op)).Should(Succeed())
 		})
 
 		It("should delete the objects added", func() {
-			ctrl.Log.Info("deleting objects")
-			Expect(k8sClient.Delete(ctx, dp1)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, dp2)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, cm)).Should(Succeed())
+			suite.Log.Info("deleting objects")
+			Expect(suite.K8sClient.Delete(ctx, dp1)).Should(Succeed())
+			Expect(suite.K8sClient.Delete(ctx, dp2)).Should(Succeed())
+			Expect(suite.K8sClient.Delete(ctx, cm)).Should(Succeed())
 		})
 	})
 })

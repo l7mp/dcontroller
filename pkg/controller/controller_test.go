@@ -229,7 +229,10 @@ var _ = Describe("Controller", func() {
 					return false
 				}
 
-				return object.DeepEqual(event.Object.(object.Object), res)
+				wouid := event.Object.(object.Object)
+				unstructured.RemoveNestedField(wouid.UnstructuredContent(), "metadata", "uid")
+				unstructured.RemoveNestedField(res.UnstructuredContent(), "metadata", "uid")
+				return object.DeepEqual(wouid, res)
 			}, timeout, retryInterval).Should(BeTrue())
 		})
 

@@ -60,9 +60,6 @@ func NewDefaultConfig(addr string, port int, client client.Client, httpMode, ins
 	if addr == "" {
 		addr = "localhost"
 	}
-	if port == 0 {
-		port = DefaultAPIServerPort
-	}
 
 	bindAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", addr, port))
 	if err != nil {

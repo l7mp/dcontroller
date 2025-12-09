@@ -7,6 +7,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/watch"
 	toolscache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -674,7 +675,10 @@ var _ = Describe("DelegatingViewCache", func() {
 			event, ok := tryWatch(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Added))
-			Expect(object.DeepEqual(obj, event.Object.(object.Object))).To(BeTrue())
+			wouid := event.Object.(object.Object)
+			unstructured.RemoveNestedField(obj.UnstructuredContent(), "metadata", "uid")
+			unstructured.RemoveNestedField(wouid.UnstructuredContent(), "metadata", "uid")
+			Expect(obj).To(Equal(wouid))
 		})
 
 		It("should notify of added objects", func() {
@@ -697,8 +701,10 @@ var _ = Describe("DelegatingViewCache", func() {
 			event, ok := tryWatch(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Added))
-			// Expect(object.DeepEqual(obj, event.Object.(object.Object))).To(BeTrue())
-			Expect(obj).To(Equal(event.Object.(object.Object)))
+			wouid := event.Object.(object.Object)
+			unstructured.RemoveNestedField(obj.UnstructuredContent(), "metadata", "uid")
+			unstructured.RemoveNestedField(wouid.UnstructuredContent(), "metadata", "uid")
+			Expect(obj).To(Equal(wouid))
 		})
 
 		It("should notify of objects added to the underlying storageCache", func() {
@@ -721,8 +727,10 @@ var _ = Describe("DelegatingViewCache", func() {
 			event, ok := tryWatch(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Added))
-			// Expect(object.DeepEqual(obj, event.Object.(object.Object))).To(BeTrue())
-			Expect(obj).To(Equal(event.Object.(object.Object)))
+			wouid := event.Object.(object.Object)
+			unstructured.RemoveNestedField(obj.UnstructuredContent(), "metadata", "uid")
+			unstructured.RemoveNestedField(wouid.UnstructuredContent(), "metadata", "uid")
+			Expect(obj).To(Equal(wouid))
 		})
 
 		It("should notify of updated objects", func() {
@@ -787,14 +795,18 @@ var _ = Describe("DelegatingViewCache", func() {
 			event, ok := tryWatch(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Added))
-			Expect(obj).To(Equal(event.Object.(object.Object)))
-			Expect(object.DeepEqual(obj, event.Object.(object.Object))).To(BeTrue())
+			wouid := event.Object.(object.Object)
+			unstructured.RemoveNestedField(obj.UnstructuredContent(), "metadata", "uid")
+			unstructured.RemoveNestedField(wouid.UnstructuredContent(), "metadata", "uid")
+			Expect(obj).To(Equal(wouid))
 
 			event, ok = tryWatch(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Modified))
-			Expect(updatedObj).To(Equal(event.Object.(object.Object)))
-			Expect(object.DeepEqual(updatedObj, event.Object.(object.Object))).To(BeTrue())
+			wouid = event.Object.(object.Object)
+			unstructured.RemoveNestedField(updatedObj.UnstructuredContent(), "metadata", "uid")
+			unstructured.RemoveNestedField(wouid.UnstructuredContent(), "metadata", "uid")
+			Expect(updatedObj).To(Equal(wouid))
 		})
 
 		It("should notify of deleted objects", func() {
@@ -824,7 +836,10 @@ var _ = Describe("DelegatingViewCache", func() {
 			event, ok = tryWatch(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Deleted))
-			Expect(object.DeepEqual(obj, event.Object.(object.Object))).To(BeTrue())
+			wouid := event.Object.(object.Object)
+			unstructured.RemoveNestedField(obj.UnstructuredContent(), "metadata", "uid")
+			unstructured.RemoveNestedField(wouid.UnstructuredContent(), "metadata", "uid")
+			Expect(obj).To(Equal(wouid))
 		})
 
 		It("should notify of objects deleted in the underlying storage", func() {
@@ -854,7 +869,10 @@ var _ = Describe("DelegatingViewCache", func() {
 			event, ok = tryWatch(watcher, interval)
 			Expect(ok).To(BeTrue())
 			Expect(event.Type).To(Equal(watch.Deleted))
-			Expect(object.DeepEqual(obj, event.Object.(object.Object))).To(BeTrue())
+			wouid := event.Object.(object.Object)
+			unstructured.RemoveNestedField(obj.UnstructuredContent(), "metadata", "uid")
+			unstructured.RemoveNestedField(wouid.UnstructuredContent(), "metadata", "uid")
+			Expect(obj).To(Equal(wouid))
 		})
 	})
 })

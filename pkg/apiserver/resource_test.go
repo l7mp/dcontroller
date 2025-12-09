@@ -2,7 +2,6 @@ package apiserver
 
 import (
 	"context"
-	"math/rand/v2"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,7 +24,6 @@ var _ = Describe("APIServerUnitTest", func() {
 		serverCtx                 context.Context
 		serverCancel              context.CancelFunc
 		serverAddr                string
-		port                      int
 	)
 
 	BeforeEach(func() {
@@ -50,17 +48,9 @@ var _ = Describe("APIServerUnitTest", func() {
 
 		// Create API server at random port
 		serverAddr = "localhost"
-		port = rand.IntN(15000) + 32768 //nolint:gosec
-		config, err := NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, false, logger)
+		config, err := NewDefaultConfig(serverAddr, 0, mgr.GetClient(), true, false, logger)
 		Expect(err).NotTo(HaveOccurred())
 		server, err = NewAPIServer(config)
-		if err != nil {
-			serverAddr = "localhost"
-			port = rand.IntN(15000) + 32768 //nolint:gosec
-			config, err = NewDefaultConfig(serverAddr, port, mgr.GetClient(), true, false, logger)
-			Expect(err).NotTo(HaveOccurred())
-			server, err = NewAPIServer(config)
-		}
 		Expect(err).NotTo(HaveOccurred())
 
 		// Start the server

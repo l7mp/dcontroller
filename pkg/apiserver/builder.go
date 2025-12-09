@@ -107,7 +107,7 @@ func (s *APIServer) createServerConfig() (*genericapiserver.RecommendedConfig, e
 	if config.HTTPMode {
 		secureAddr = net.ParseIP("127.0.0.1")
 		// use a random port for the mandatory TLS server
-		securePort = rand.IntN(15000) + 32768 //nolint:gosec
+		securePort = rand.IntN(16384) + 16383 //nolint:gosec
 	}
 	secureServingOptions := &genericoptions.SecureServingOptions{
 		BindAddress: secureAddr,
