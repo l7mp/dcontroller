@@ -759,7 +759,7 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 
 			min := args[0]
 			max := args[1]
-			v := int64(rand.Intn(int(max-min)) + int(min))
+			v := int64(rand.Intn(int(max-min)) + int(min)) //nolint:gosec
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", args, "result", v)
 			return v, nil
 
@@ -934,11 +934,11 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			switch kind {
 			case reflect.Int64:
 				if len(is) != 0 {
-					v = int64(slices.Min(is))
+					v = slices.Min(is)
 				}
 			case reflect.Float64:
 				if len(fs) != 0 {
-					v = int64(slices.Min(fs))
+					v = slices.Min(fs)
 				}
 			default:
 			}
@@ -956,11 +956,11 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			switch kind {
 			case reflect.Int64:
 				if len(is) != 0 {
-					v = int64(slices.Max(is))
+					v = slices.Max(is)
 				}
 			case reflect.Float64:
 				if len(fs) != 0 {
-					v = int64(slices.Max(fs))
+					v = slices.Max(fs)
 				}
 			default:
 			}
