@@ -3,6 +3,7 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -11,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/duration"
 	"k8s.io/apimachinery/pkg/watch"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
@@ -352,20 +352,7 @@ func (s *ClientDelegatedStorage) ConvertToTable(ctx context.Context, object runt
 			APIVersion: metav1.SchemeGroupVersion.String(),
 			Kind:       "Table",
 		},
-		ColumnDefinitions: []metav1.TableColumnDefinition{
-			{
-				Name:        "Name",
-				Type:        "string",
-				Format:      "name",
-				Description: "Name of the resource",
-			},
-			{
-				Name:        "Age",
-				Type:        "string",
-				Format:      "date",
-				Description: "Age of the resource",
-			},
-		},
+		ColumnDefinitions: s.getColumnDefinitions(),
 	}
 
 	// Handle both single objects and lists.
@@ -396,33 +383,186 @@ func (s *ClientDelegatedStorage) ConvertToTable(ctx context.Context, object runt
 	return table, nil
 }
 
+// getColumnDefinitions returns the column definitions for table output.
+// Priority 0 columns are shown by default, priority 1 columns are shown with -o wide.
+func (s *ClientDelegatedStorage) getColumnDefinitions() []metav1.TableColumnDefinition {
+	columns := []metav1.TableColumnDefinition{
+		{
+			Name:        "Name",
+			Type:        "string",
+			Format:      "name",
+			Description: "Name of the resource",
+			Priority:    0,
+		},
+		{
+			Name:        "Conditions",
+			Type:        "string",
+			Description: "Status conditions summary",
+			Priority:    0,
+		},
+		{
+			Name:        "Labels",
+			Type:        "string",
+			Description: "Resource labels",
+			Priority:    1,
+		},
+		{
+			Name:        "Annotations",
+			Type:        "string",
+			Description: "Number of annotations",
+			Priority:    1,
+		},
+	}
+
+	// Add namespace column at the beginning for namespaced resources.
+	if s.NamespaceScoped() {
+		columns = append([]metav1.TableColumnDefinition{
+			{
+				Name:        "Namespace",
+				Type:        "string",
+				Description: "Namespace of the resource",
+				Priority:    0,
+			},
+		}, columns...)
+	}
+
+	return columns
+}
+
 // objectToTableRow converts a single unstructured object to a table row.
 func (s *ClientDelegatedStorage) objectToTableRow(obj *unstructured.Unstructured) (metav1.TableRow, error) { //nolint:unparam
 	name := obj.GetName()
-	creationTime := obj.GetCreationTimestamp()
+	namespace := obj.GetNamespace()
 
-	// Calculate age
-	age := ""
-	if !creationTime.IsZero() {
-		age = translateTimestampSince(creationTime)
+	// Extract conditions summary.
+	conditions := extractConditionsSummary(obj)
+
+	// Format labels and annotations.
+	labels := formatLabels(obj.GetLabels())
+	annotations := formatAnnotations(obj.GetAnnotations())
+
+	// Build cells - namespace comes first for namespaced resources.
+	var cells []interface{}
+	if s.NamespaceScoped() {
+		cells = []interface{}{namespace, name, conditions, labels, annotations}
+	} else {
+		cells = []interface{}{name, conditions, labels, annotations}
 	}
 
 	row := metav1.TableRow{
-		Cells:  []interface{}{name, age},
+		Cells:  cells,
 		Object: runtime.RawExtension{Object: obj},
 	}
 
 	return row, nil
 }
 
-// translateTimestampSince returns a human-readable approximation of how long ago a timestamp
-// occurred (similar to kubectl's age column).
-func translateTimestampSince(timestamp metav1.Time) string {
-	if timestamp.IsZero() {
-		return "<unknown>"
+// extractConditionsSummary extracts and formats status.conditions from an unstructured object.
+// It looks for status.conditions as a list of maps with "type" and "status" fields.
+// Returns a comma-separated list of "Type:Status" pairs, or "<none>" if no conditions exist.
+// Well-known condition types (Ready, Available, Progressing) are prioritized and shown first.
+func extractConditionsSummary(obj *unstructured.Unstructured) string {
+	// Try to extract status.conditions.
+	status, found, err := unstructured.NestedFieldNoCopy(obj.Object, "status", "conditions")
+	if !found || err != nil {
+		return "<none>"
 	}
 
-	// Use Kubernetes' duration formatting
-	d := metav1.Now().Sub(timestamp.Time)
-	return duration.ShortHumanDuration(d)
+	// status.conditions should be a slice of maps.
+	conditions, ok := status.([]interface{})
+	if !ok || len(conditions) == 0 {
+		return "<none>"
+	}
+
+	// Extract type:status pairs and prioritize well-known types.
+	priorityConditions := []string{} // Ready, Available, Progressing, etc.
+	otherConditions := []string{}
+
+	// Define well-known condition types in priority order.
+	wellKnownTypes := map[string]int{
+		"Ready":       1,
+		"Available":   2,
+		"Progressing": 3,
+		"Degraded":    4,
+	}
+
+	for _, cond := range conditions {
+		condMap, ok := cond.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		condType, typeOk := condMap["type"].(string)
+		condStatus, statusOk := condMap["status"].(string)
+		if typeOk && statusOk {
+			pair := fmt.Sprintf("%s:%s", condType, condStatus)
+			if priority, isWellKnown := wellKnownTypes[condType]; isWellKnown {
+				// Insert in priority order.
+				inserted := false
+				for i, existing := range priorityConditions {
+					existingType := strings.Split(existing, ":")[0]
+					if wellKnownTypes[existingType] > priority {
+						priorityConditions = append(priorityConditions[:i], append([]string{pair}, priorityConditions[i:]...)...)
+						inserted = true
+						break
+					}
+				}
+				if !inserted {
+					priorityConditions = append(priorityConditions, pair)
+				}
+			} else {
+				otherConditions = append(otherConditions, pair)
+			}
+		}
+	}
+
+	// Combine priority conditions first, then others.
+	allPairs := append(priorityConditions, otherConditions...)
+
+	if len(allPairs) == 0 {
+		return "<none>"
+	}
+
+	// Limit to first 3 conditions to avoid excessive width.
+	if len(allPairs) > 3 {
+		remaining := len(allPairs) - 3
+		pairs := allPairs[:3]
+		return fmt.Sprintf("%s +%d more", strings.Join(pairs, ","), remaining)
+	}
+
+	return strings.Join(allPairs, ",")
+}
+
+// formatLabels formats labels as a comma-separated list of key=value pairs.
+// Returns "<none>" if no labels exist.
+func formatLabels(labels map[string]string) string {
+	if len(labels) == 0 {
+		return "<none>"
+	}
+
+	// Convert to key=value pairs.
+	pairs := make([]string, 0, len(labels))
+	for k, v := range labels {
+		pairs = append(pairs, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	// Limit display to avoid excessive width.
+	if len(pairs) > 3 {
+		remaining := len(pairs) - 3
+		pairs = pairs[:3]
+		return fmt.Sprintf("%s +%d more", strings.Join(pairs, ","), remaining)
+	}
+
+	return strings.Join(pairs, ",")
+}
+
+// formatAnnotations formats annotations count or key annotations.
+// Returns the count as "N annotations" or "<none>" if no annotations exist.
+func formatAnnotations(annotations map[string]string) string {
+	if len(annotations) == 0 {
+		return "<none>"
+	}
+
+	// Just show the count for annotations as they can be verbose.
+	return fmt.Sprintf("%d", len(annotations))
 }
