@@ -59,7 +59,7 @@ type Expression struct {
 // Evaluate processes an expression.
 func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 	if e == nil || len(e.Op) == 0 {
-		return nil, NewInvalidArgumentsError(fmt.Sprintf("empty operator in expession %q", e.String()))
+		return nil, NewInvalidArgumentsError(fmt.Sprintf("empty operator in expression %q", e.String()))
 	}
 
 	switch e.Op {
@@ -1019,6 +1019,23 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "arg", args, "result", v)
 
 			return v, nil
+
+		case "@range":
+			args, err := AsIntList(arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+			if len(args) != 2 {
+				return nil, NewExpressionError(e, errors.New("expected 2 arguments [start, end]"))
+			}
+			if args[0] > args[1] {
+				args[0] = args[1]
+			}
+			result := make([]any, 0, args[1]-args[0])
+			for i := args[0]; i < args[1]; i++ {
+				result = append(result, i)
+			}
+			return result, nil
 
 		case "@hash":
 			js, err := json.Marshal(arg)

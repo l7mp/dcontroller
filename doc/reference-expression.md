@@ -225,6 +225,21 @@ Checks if an element exists within a list.
       - "@map": ["$$.image", "$.spec.containers"]
     ```
 
+#### `@range`
+Generates a list of sequential integers from a start value (inclusive) to an end value (exclusive).
+
+*   **Signature**: `{"@range": [<start_expression>, <end_expression>]}`
+*   **Arguments**:
+    1.  An expression that evaluates to an integer (the start value, inclusive).
+    2.  An expression that evaluates to an integer (the end value, exclusive).
+*   **Returns**: A `list` of integers `[start, start+1, ..., end-1]`. Returns an empty list if `start >= end`.
+*   **Example**:
+```yaml
+    # Generates [0, 1, 2] for a ReplicaSet with 3 replicas
+    podSlots:
+      "@range": [0, "$.spec.replicas"]
+```
+
 ### String Operators
 
 #### `@concat`

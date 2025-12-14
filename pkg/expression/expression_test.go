@@ -1304,6 +1304,113 @@ var _ = Describe("Expressions", func() {
 			Expect(vs).To(Equal([]any{int64(1), int64(2), int64(3), int64(4), int64(5)}))
 		})
 
+		It("should evaluate a @range sequence from 0 to n-1", func() {
+			expr := Expression{
+				Op: "@range",
+				Arg: &Expression{Op: "@list", Literal: []Expression{
+					{Op: "@int", Literal: int64(0)},
+					{Op: "@int", Literal: int64(5)},
+				}},
+			}
+
+			result, err := expr.Evaluate(EvalCtx{Log: logger})
+			Expect(err).NotTo(HaveOccurred())
+
+			list, ok := result.([]any)
+			Expect(ok).To(BeTrue())
+			Expect(list).To(HaveLen(5))
+			Expect(list).To(Equal([]any{int64(0), int64(1), int64(2), int64(3), int64(4)}))
+		})
+
+		It("should evaluate a @range sequence with custom start", func() {
+			expr := Expression{
+				Op: "@range",
+				Arg: &Expression{Op: "@list", Literal: []Expression{
+					{Op: "@int", Literal: int64(3)},
+					{Op: "@int", Literal: int64(7)},
+				}},
+			}
+
+			result, err := expr.Evaluate(EvalCtx{Log: logger})
+			Expect(err).NotTo(HaveOccurred())
+
+			list, ok := result.([]any)
+			Expect(ok).To(BeTrue())
+			Expect(list).To(HaveLen(4))
+			Expect(list).To(Equal([]any{int64(3), int64(4), int64(5), int64(6)}))
+		})
+
+		It("should return empty list on @range when start equals end", func() {
+			expr := Expression{
+				Op: "@range",
+				Arg: &Expression{Op: "@list", Literal: []Expression{
+					{Op: "@int", Literal: int64(5)},
+					{Op: "@int", Literal: int64(5)},
+				}},
+			}
+
+			result, err := expr.Evaluate(EvalCtx{Log: logger})
+			Expect(err).NotTo(HaveOccurred())
+
+			list, ok := result.([]any)
+			Expect(ok).To(BeTrue())
+			Expect(list).To(BeEmpty())
+		})
+
+		It("should return empty list on @range when start is greater than end", func() {
+			expr := Expression{
+				Op: "@range",
+				Arg: &Expression{Op: "@list", Literal: []Expression{
+					{Op: "@int", Literal: int64(10)},
+					{Op: "@int", Literal: int64(5)},
+				}},
+			}
+
+			result, err := expr.Evaluate(EvalCtx{Log: logger})
+			Expect(err).NotTo(HaveOccurred())
+
+			list, ok := result.([]any)
+			Expect(ok).To(BeTrue())
+			Expect(list).To(BeEmpty())
+		})
+
+		It("should evaluate a @range with JSONPath expressions for end value", func() {
+			obj := map[string]any{
+				"spec": map[string]any{
+					"replicas": int64(3),
+				},
+			}
+
+			expr := Expression{
+				Op: "@range",
+				Arg: &Expression{Op: "@list", Literal: []Expression{
+					{Op: "@int", Literal: int64(0)},
+					{Op: "@string", Literal: "$.spec.replicas"},
+				}},
+			}
+
+			result, err := expr.Evaluate(EvalCtx{Object: obj, Log: logger})
+			Expect(err).NotTo(HaveOccurred())
+
+			list, ok := result.([]any)
+			Expect(ok).To(BeTrue())
+			Expect(list).To(HaveLen(3))
+			Expect(list).To(Equal([]any{int64(0), int64(1), int64(2)}))
+		})
+
+		It("should evaluate a @range with error on non-integer arguments", func() {
+			expr := Expression{
+				Op: "@range",
+				Arg: &Expression{Op: "@list", Literal: []Expression{
+					{Op: "@string", Literal: "not-a-number"},
+					{Op: "@int", Literal: int64(5)},
+				}},
+			}
+
+			_, err := expr.Evaluate(EvalCtx{Log: logger})
+			Expect(err).To(HaveOccurred())
+		})
+
 		// It("should evaluate stacked @map expressions", func() {
 		// 	jsonData := `{"@map":[{"@lte":["$",2]},{"@first":[{"@map":["$.spec.x"]}]}]}`
 		// 	var exp Expression

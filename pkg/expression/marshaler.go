@@ -71,6 +71,10 @@ func (e *Expression) UnmarshalJSON(b []byte) error {
 
 // UnmarshalJSON serializes an expression into JSON.
 func (e *Expression) MarshalJSON() ([]byte, error) {
+	if len(e.Op) == 0 {
+		return []byte("<nil>"), nil
+	}
+
 	switch e.Op {
 	case "@any":
 		return json.Marshal(e.Literal)
@@ -165,6 +169,9 @@ func (e *Expression) MarshalJSON() ([]byte, error) {
 
 // String stringifies an expression.
 func (e *Expression) String() string {
+	if e == nil {
+		return "<invalid>"
+	}
 	b, err := json.Marshal(e)
 	if err != nil {
 		return ""
