@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -37,15 +36,6 @@ func NewIncrementalReconciler(mgr manager.Manager, c *DeclarativeController) *In
 func (r *IncrementalReconciler) Reconcile(ctx context.Context, req reconciler.Request) (reconcile.Result, error) {
 	r.log.V(2).Info("processing request", "request", util.Stringify(req))
 
-	obj := req.Object
-	if obj == nil {
-		// Fallback: if Object is nil (shouldn't happen), create a minimal object for the key.
-		obj = &unstructured.Unstructured{}
-		obj.SetGroupVersionKind(req.GVK)
-		obj.SetNamespace(req.Namespace)
-		obj.SetName(req.Name)
-	}
-
 	switch req.EventType {
 	case object.Added, object.Updated, object.Replaced, object.Deleted:
 		// Do nothing: Object snapshot already captured in req.Object at event generation time
@@ -54,6 +44,10 @@ func (r *IncrementalReconciler) Reconcile(ctx context.Context, req reconciler.Re
 		return reconcile.Result{}, nil
 	}
 
+	// Automatically decode Secret data fields for use in pipeline expressions.
+	obj := object.DecodeSecretData(req.Object)
+
+	// Create the delta
 	delta := object.Delta{
 		Type:   req.EventType,
 		Object: obj,
@@ -106,6 +100,9 @@ func NewStateOfTheWorldReconciler(mgr manager.Manager, c *DeclarativeController)
 // target state (based on current sources) and the actual target state, then applies
 // the delta to bring the target up to date.
 func (r *StateOfTheWorldReconciler) Reconcile(ctx context.Context, req reconciler.Request) (reconcile.Result, error) {
+	// Automatically decode Secret data fields for use in pipeline expressions.
+	req.Object = object.DecodeSecretData(req.Object)
+
 	// Call pipeline.Sync() to compute the delta needed to reconcile target state.
 	deltas, err := r.controller.pipeline.Sync()
 	if err != nil {

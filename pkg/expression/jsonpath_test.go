@@ -479,5 +479,76 @@ var _ = Describe("JSONPath", func() {
 			Expect(ok).To(BeTrue())
 			Expect(s).To(Equal("aaa"))
 		})
+
+		It("should evaluate a JSONPath expression on a Secret with decoded data", func() {
+			input := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "testnamespace",
+					Name:      "testsecret",
+				},
+				Type: corev1.SecretTypeOpaque,
+				Data: map[string][]byte{
+					"username": []byte("admin"),
+					"password": []byte("s3cr3t"),
+					"config":   []byte(`{"key":"value"}`),
+				},
+			}
+
+			obj, err := object.NewViewObjectFromNativeObject("test", "Secret", input)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Decode Secret data (normally done by the event handler)
+			object.DecodeSecretData(obj)
+
+			// Test reading a single key from Secret data
+			res, err := GetJSONPathRaw(`$.data.username`, obj.UnstructuredContent())
+			Expect(err).NotTo(HaveOccurred())
+			s, err := AsString(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(s).To(Equal("admin"), "Secret data.username should be decoded from base64")
+
+			// Test reading password
+			res, err = GetJSONPathRaw(`$.data.password`, obj.UnstructuredContent())
+			Expect(err).NotTo(HaveOccurred())
+			s, err = AsString(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(s).To(Equal("s3cr3t"), "Secret data.password should be decoded from base64")
+
+			// Test reading JSON config
+			res, err = GetJSONPathRaw(`$.data.config`, obj.UnstructuredContent())
+			Expect(err).NotTo(HaveOccurred())
+			s, err = AsString(res)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(s).To(Equal(`{"key":"value"}`), "Secret data.config should be decoded from base64")
+		})
+
+		It("should evaluate an expression on a decoded Secret using the expression language", func() {
+			input := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "testnamespace",
+					Name:      "testsecret",
+				},
+				Type: corev1.SecretTypeOpaque,
+				Data: map[string][]byte{
+					"username": []byte("admin"),
+				},
+			}
+
+			obj, err := object.NewViewObjectFromNativeObject("test", "Secret", input)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Decode Secret data (normally done by the event handler)
+			object.DecodeSecretData(obj)
+
+			jsonData := `"$.data.username"`
+			var exp Expression
+			err = json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal("admin"), "Expression should work with decoded Secret data")
+		})
 	})
 })
