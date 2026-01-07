@@ -28,3 +28,11 @@
 //	op := dbsp.NewProjection(projector)
 //	result, err := op.Process(zset)
 package dbsp
+
+// SortGatherValues controls whether @gather sorts lists for deterministic output.  When true,
+// values in each group are sorted before being passed to the aggregator.  This ensures consistent
+// array ordering across runs, which can prevent unnecessary reconciliation churn in downstream
+// systems that compare arrays element-by-element.
+//
+// Default is false for backward compatibility.
+var SortGatherValues = true

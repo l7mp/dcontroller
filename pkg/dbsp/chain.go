@@ -23,6 +23,7 @@ type GraphNode struct {
 	Op     Operator
 	Inputs []*GraphNode
 	Output *GraphNode
+	Lifted bool // True if this non-linear op has been lifted with I→Op→D.
 }
 
 // NewChainGraph returns a new op chain.
@@ -172,8 +173,35 @@ func (g *ChainGraph) String() string {
 	return strings.Join(parts, " → ")
 }
 
-// getNode returns a node from its id. Names are internal to the graph, only inputs have proper
-// names.
-func (g *ChainGraph) getNode(id string) *GraphNode {
-	return g.nodes[id]
+// ReplaceInChain replaces the operator at the given index with multiple operators.
+// This is useful for lifting: replace Op with [I, Op, D].
+func (g *ChainGraph) ReplaceInChain(index int, ops ...Operator) {
+	if index < 0 || index >= len(g.chain) {
+		return
+	}
+
+	// Remove the old node.
+	oldID := g.chain[index]
+	delete(g.nodes, oldID)
+
+	// Build new chain with replacements.
+	newIDs := make([]string, len(ops))
+	for i, op := range ops {
+		id := fmt.Sprintf("op_%d", g.nextID)
+		g.nextID++
+		g.nodes[id] = &GraphNode{ID: id, Op: op}
+		newIDs[i] = id
+	}
+
+	// Splice into chain.
+	newChain := make([]string, 0, len(g.chain)-1+len(ops))
+	newChain = append(newChain, g.chain[:index]...)
+	newChain = append(newChain, newIDs...)
+	newChain = append(newChain, g.chain[index+1:]...)
+	g.chain = newChain
+
+	// Update output.
+	if len(g.chain) > 0 {
+		g.output = g.chain[len(g.chain)-1]
+	}
 }

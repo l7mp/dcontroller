@@ -43,12 +43,12 @@ var _ = Describe("GraphConverter", func() {
 			Expect(joinOp).To(BeAssignableToTypeOf(&BinaryJoinOp{}))
 		})
 
-		It("should convert incremental gather to snapshot gather", func() {
-			// Build incremental graph with IncrementalGatherOp.
+		It("should preserve snapshot gather", func() {
+			// Build incremental graph with GatherOp.
 			incrementalGraph := NewChainGraph()
 			incrementalGraph.AddInput(NewInput("sales"))
 			keyExt, valueExt, aggregator := createGatherEvaluators("dept", "amount", "department", "amounts")
-			incrementalGraph.AddToChain(NewIncrementalGather(keyExt, valueExt, aggregator))
+			incrementalGraph.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
 			// Convert to snapshot.
 			snapshotGraph, err := ToSnapshotGraph(incrementalGraph)
@@ -101,7 +101,7 @@ var _ = Describe("GraphConverter", func() {
 			incrementalGraph.AddToChain(NewProjection(NewFieldProjection("left_name", "right_amount")))
 			incrementalGraph.AddToChain(NewSelection(NewRangeFilter("right_amount", 1000, 10000)))
 			keyExt, valueExt, aggregator := createGatherEvaluators("left_name", "right_amount", "name", "amounts")
-			incrementalGraph.AddToChain(NewIncrementalGather(keyExt, valueExt, aggregator))
+			incrementalGraph.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
 			// Convert to snapshot.
 			snapshotGraph, err := ToSnapshotGraph(incrementalGraph)
@@ -174,7 +174,7 @@ var _ = Describe("GraphConverter", func() {
 			Expect(joinOp).To(BeAssignableToTypeOf(&IncrementalBinaryJoinOp{}))
 		})
 
-		It("should convert snapshot gather to incremental gather", func() {
+		It("should preserve snapshot gather", func() {
 			// Build snapshot graph with GatherOp.
 			snapshotGraph := NewChainGraph()
 			snapshotGraph.AddInput(NewInput("sales"))
@@ -188,7 +188,7 @@ var _ = Describe("GraphConverter", func() {
 			// Verify gather was converted.
 			Expect(incrementalGraph.chain).To(HaveLen(1))
 			gatherOp := incrementalGraph.nodes[incrementalGraph.chain[0]].Op
-			Expect(gatherOp).To(BeAssignableToTypeOf(&IncrementalGatherOp{}))
+			Expect(gatherOp).To(BeAssignableToTypeOf(&GatherOp{}))
 		})
 
 		It("should preserve linear operators", func() {
@@ -209,22 +209,6 @@ var _ = Describe("GraphConverter", func() {
 			Expect(incrementalGraph.nodes[incrementalGraph.chain[1]].Op).To(BeAssignableToTypeOf(&SelectionOp{}))
 			Expect(incrementalGraph.nodes[incrementalGraph.chain[2]].Op).To(BeAssignableToTypeOf(&DistinctOp{}))
 		})
-
-		It("should handle already-incremental operators gracefully", func() {
-			// Build graph that's already incremental.
-			incrementalGraph1 := NewChainGraph()
-			incrementalGraph1.AddInput(NewInput("sales"))
-			keyExt, valueExt, aggregator := createGatherEvaluators("dept", "amount", "department", "amounts")
-			incrementalGraph1.AddToChain(NewIncrementalGather(keyExt, valueExt, aggregator))
-
-			// Convert again (should be idempotent).
-			incrementalGraph2, err := ToIncrementalGraph(incrementalGraph1)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Should still have incremental operators.
-			gatherOp := incrementalGraph2.nodes[incrementalGraph2.chain[0]].Op
-			Expect(gatherOp).To(BeAssignableToTypeOf(&IncrementalGatherOp{}))
-		})
 	})
 
 	Context("Round-trip conversion", func() {
@@ -237,7 +221,7 @@ var _ = Describe("GraphConverter", func() {
 			incrementalGraph1.SetJoin(NewIncrementalBinaryJoin(NewFlexibleJoin("id", inputs), inputs))
 			incrementalGraph1.AddToChain(NewProjection(NewFieldProjection("left_name", "right_title")))
 			keyExt, valueExt, aggregator := createGatherEvaluators("left_name", "right_title", "name", "titles")
-			incrementalGraph1.AddToChain(NewIncrementalGather(keyExt, valueExt, aggregator))
+			incrementalGraph1.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
 			// Convert to snapshot.
 			snapshotGraph, err := ToSnapshotGraph(incrementalGraph1)
@@ -257,7 +241,7 @@ var _ = Describe("GraphConverter", func() {
 			Expect(joinOp).To(BeAssignableToTypeOf(&IncrementalBinaryJoinOp{}))
 
 			gatherOp := incrementalGraph2.nodes[incrementalGraph2.chain[1]].Op
-			Expect(gatherOp).To(BeAssignableToTypeOf(&IncrementalGatherOp{}))
+			Expect(gatherOp).To(BeAssignableToTypeOf(&GatherOp{}))
 		})
 
 		It("should handle snapshot -> incremental -> snapshot round-trip", func() {

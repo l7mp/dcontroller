@@ -2,29 +2,167 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: -role
+  name: manager-role
 rules:
 - apiGroups:
-  - '*'
+  - ""
   resources:
-  - '*'
+  - events
   verbs:
-  - '*'
+  - create
+  - patch
 - apiGroups:
-  - dcontroller.io
+  - ""
   resources:
-  - operators
+  - namespaces
+  - pods
+  - secrets
+  - services
   verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apisix.apache.org
+  resources:
+  - apisixconsumers
+  - apisixglobalrules
+  - apisixpluginconfigs
+  - apisixroutes
+  - apisixtlses
+  - apisixupstreams
+  - backendtrafficpolicies
+  - consumers
+  - gatewayproxies
+  - httproutepolicies
+  - pluginconfigs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apisix.apache.org
+  resources:
+  - apisixconsumers/status
+  - apisixglobalrules/status
+  - apisixpluginconfigs/status
+  - apisixroutes/status
+  - apisixtlses/status
+  - apisixupstreams/status
+  - backendtrafficpolicies/status
+  - consumers/status
+  - httproutepolicies/status
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
   - get
   - list
   - patch
   - update
   - watch
 - apiGroups:
-  - dcontroller.io
+  - cache.example.com
   resources:
-  - operators/finalizers
-  - operators/status
+  - memcacheds
   verbs:
+  - create
+  - delete
+  - get
+  - list
   - patch
+  - update
+  - watch
+- apiGroups:
+  - cache.example.com
+  resources:
+  - memcacheds/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - cache.example.com
+  resources:
+  - memcacheds/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - gatewayclasses
+  verbs:
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - gatewayclasses/status
+  - gateways/status
+  - grpcroutes/status
+  - httproutes/status
+  - referencegrants/status
+  - tcproutes/status
+  - tlsroutes/status
+  - udproutes/status
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - gateways
+  - grpcroutes
+  - httproutes
+  - referencegrants
+  - tcproutes
+  - tlsroutes
+  - udproutes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingressclasses
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - get
   - update

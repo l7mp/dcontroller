@@ -74,16 +74,16 @@ func (n *BaseOp) validateInputs(inputs []*DocumentZSet) error {
 
 // IncrementalizeOp converts a "snapshot" operator into an incremental operator and returns a
 // boolean to signal whether the conversion was successful.
+//
+// Note: Non-linear operators (like GatherOp) are NOT handled here. They are lifted using
+// the DBSP formula F^Δ = D ∘ F ∘ I by the NonLinearLiftingRule in the rewrite engine.
 func IncrementalizeOp(in Operator) (Operator, bool) {
 	switch op := in.(type) {
 	case *ProjectionOp, *SelectionOp, *UnwindOp:
-		// These linear ops are stateless so already incremental - no change needed
+		// These linear ops are stateless so already incremental - no change needed.
 		return op, false
-	case *GatherOp:
-		// Gather, although theoretically linear,  needs a specialized incremental version for efficiency
-		return NewIncrementalGather(op.keyExtractor, op.valueExtractor, op.aggregator), true
 	case *BinaryJoinOp:
-		// Join ops need incrementalization
+		// Bilinear join ops need incrementalization.
 		return NewIncrementalBinaryJoin(op.eval, op.inputs), true
 	case *JoinOp:
 		return NewIncrementalJoin(op.eval, op.inputs), true

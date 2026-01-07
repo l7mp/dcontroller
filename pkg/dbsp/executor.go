@@ -117,9 +117,8 @@ func (e *Executor) resetOperator(op Operator) {
 		o.Reset()
 	case *IncrementalBinaryJoinOp:
 		o.Reset()
-	case *IncrementalGatherOp:
-		o.Reset()
-		// Add other stateful operators as needed
+		// Note: Non-linear operators (GatherOp) don't need Reset() - they are lifted with
+		// I→Op→D and the Integrator/Differentiator handle state management.
 	}
 }
 

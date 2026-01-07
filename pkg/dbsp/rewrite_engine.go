@@ -5,6 +5,16 @@ import (
 )
 
 // LinearChainRewriteEngine rewrites a LinearChainGraph, applying the DBSP rewriter rules.
+//
+// # Deduplication Note
+//
+// In DBSP theory, a "distinct" operator at the end of the chain ensures output multiplicities
+// are clamped to {0, 1}. However, in production pipelines, we do NOT add a distinct operator.
+// Instead, deduplication is handled by pkg/pipeline.Reconcile which uses cache-based
+// disambiguation to resolve add/delete pairs for the same primary key. This avoids the overhead
+// of lifting distinct with I→Distinct→D while achieving the same semantic result.
+//
+// The DistinctOp and DistinctOptimizationRule exist for DBSP theory correctness and testing.
 type LinearChainRewriteEngine struct {
 	rules []LinearChainRule
 }
@@ -17,6 +27,7 @@ func NewLinearChainRewriteEngine() *LinearChainRewriteEngine {
 
 	// Add rules in order of application priority.
 	re.AddRule(&JoinIncrementalizationRule{})
+	re.AddRule(&NonLinearLiftingRule{}) // Lift non-linear ops with I→Op→D before other rules.
 	re.AddRule(&LinearChainIncrementalizationRule{})
 	re.AddRule(&IntegrationDifferentiationEliminationRule{})
 	re.AddRule(&DistinctOptimizationRule{})
@@ -68,6 +79,56 @@ func (re *LinearChainRewriteEngine) Optimize(graph *ChainGraph) error {
 	}
 
 	// fmt.Printf("Linear chain optimization converged after %d iterations\n", iterations)
+	return nil
+}
+
+// Rule 0: Lift non-linear operators with I→Op→D.
+// For a non-linear operator F, DBSP theory says: F^Δ = D ∘ F ∘ I
+// This wraps non-linear operators with Integrator before and Differentiator after.
+type NonLinearLiftingRule struct{}
+
+func (r *NonLinearLiftingRule) Name() string {
+	return "NonLinearLifting"
+}
+
+func (r *NonLinearLiftingRule) CanApply(graph *ChainGraph) bool {
+	// Look for non-linear operators that need lifting (not already wrapped with I and D).
+	for i, nodeID := range graph.chain {
+		op := graph.nodes[nodeID].Op
+		if op.OpType() == OpTypeNonLinear {
+			// Check if already wrapped: [I, Op, D].
+			if r.isAlreadyLifted(graph, i) {
+				continue
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// isAlreadyLifted checks if the operator at index i has already been lifted with I→Op→D.
+func (r *NonLinearLiftingRule) isAlreadyLifted(graph *ChainGraph, i int) bool {
+	return graph.nodes[graph.chain[i]].Lifted
+}
+
+func (r *NonLinearLiftingRule) Apply(graph *ChainGraph) error {
+	// Find and lift non-linear operators.
+	// We process from the end to avoid index shifting issues.
+	for i := len(graph.chain) - 1; i >= 0; i-- {
+		nodeID := graph.chain[i]
+		op := graph.nodes[nodeID].Op
+
+		if op.OpType() == OpTypeNonLinear && !r.isAlreadyLifted(graph, i) {
+			// Replace Op with [I, Op, D].
+			integrator := NewIntegrator()
+			differentiator := NewDifferentiator()
+			graph.ReplaceInChain(i, integrator, op, differentiator)
+
+			// Mark the non-linear op as lifted (it's now at index i+1 after replacement).
+			graph.nodes[graph.chain[i+1]].Lifted = true
+		}
+	}
+
 	return nil
 }
 

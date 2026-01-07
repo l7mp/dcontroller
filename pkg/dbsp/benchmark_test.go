@@ -150,9 +150,9 @@ func createIncrementalGraph() *ChainGraph {
 	// Project: clean up after unwind (linear, already incremental)
 	graph.AddToChain(NewProjection(NewFieldProjection("name", "department", "salary", "skill")))
 
-	// Gather: group by department, collect salaries (use incremental version)
+	// Gather: group by department, collect salaries (use snapshot version)
 	keyExt, valueExt, aggregator := createGatherEvaluators("department", "salary", "department", "salaries")
-	graph.AddToChain(NewIncrementalGather(keyExt, valueExt, aggregator))
+	graph.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
 	if err := graph.Validate(); err != nil {
 		panic(fmt.Sprintf("Invalid incremental graph: %v", err))
@@ -1007,9 +1007,9 @@ func BenchmarkGatherComparison(b *testing.B) {
 		}
 	})
 
-	b.Run("IncrementalGather", func(b *testing.B) {
+	b.Run("SnapshotGather", func(b *testing.B) {
 		keyExt, valueExt, agg := createGatherEvaluators("dept", "amount", "dept", "amounts")
-		op := NewIncrementalGather(keyExt, valueExt, agg)
+		op := NewGather(keyExt, valueExt, agg)
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {

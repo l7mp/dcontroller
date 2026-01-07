@@ -1,10 +1,17 @@
 package dbsp
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 )
 
-// Snapshot Gather Operation (stateless).
+// Snapshot Gather Operation.
+//
+// NOTE: Non-linear operators (like GatherOp) do NOT have dedicated incremental versions.
+// Instead, they are lifted using the DBSP formula F^Δ = D ∘ F ∘ I by the NonLinearLiftingRule
+// in the rewrite engine. This wraps the snapshot operator with Integrator before and
+// Differentiator after, achieving incremental semantics without custom stateful code.
 type GatherOp struct {
 	BaseOp
 	keyExtractor   Extractor   // Extracts grouping key from document
@@ -85,6 +92,11 @@ func (op *GatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
 	// Step 2: Aggregate each group, preserving document content
 	result := NewDocumentZSet()
 	for _, groupData := range groups {
+		// Optionally sort values for deterministic output.
+		if SortGatherValues && len(groupData.Values) > 1 {
+			sortValues(groupData.Values)
+		}
+
 		// Pass a deepcopy of the representative document to aggregator to preserve content
 		resultDoc, err := op.aggregator.Transform(DeepCopyDocument(groupData.Document), &AggregateInput{
 			Key:    groupData.Key,
@@ -120,162 +132,6 @@ func (op *GatherOp) OpType() OperatorType              { return OpTypeNonLinear 
 func (op *GatherOp) IsTimeInvariant() bool             { return true }
 func (op *GatherOp) HasZeroPreservationProperty() bool { return true }
 
-// Incremental Gather Operation (stateful)
-// Implements optimized gather^Δ with O(|delta|) complexity
-type IncrementalGatherOp struct {
-	BaseOp
-	keyExtractor   Extractor
-	valueExtractor Extractor
-	aggregator     Transformer
-
-	// Optimized state: track current groups efficiently
-	currentGroups map[string]*GroupData // groupKey -> current group data
-}
-
-// NewIncrementalGather returns a new incremental gather Operation.
-func NewIncrementalGather(keyExtractor, valueExtractor Extractor, aggregator Transformer) *IncrementalGatherOp {
-	return &IncrementalGatherOp{
-		BaseOp:         NewBaseOp("gather^Δ", 1),
-		keyExtractor:   keyExtractor,
-		valueExtractor: valueExtractor,
-		aggregator:     aggregator,
-		currentGroups:  make(map[string]*GroupData), // groupKey -> current group data with doc
-	}
-}
-
-// Process evaluates the op.
-func (op *IncrementalGatherOp) Process(inputs ...*DocumentZSet) (*DocumentZSet, error) {
-	if err := op.validateInputs(inputs); err != nil {
-		return nil, err
-	}
-
-	input := inputs[0]
-	result := NewDocumentZSet()
-
-	// Process each document in the delta
-	for key, multiplicity := range input.counts {
-		doc := input.docs[key]
-
-		// Extract key and value
-		groupKey, err := op.keyExtractor.Extract(doc)
-		if err != nil {
-			return nil, fmt.Errorf("key extraction failed: %w", err)
-		}
-		if groupKey == nil {
-			continue
-		}
-
-		value, err := op.valueExtractor.Extract(doc)
-		if err != nil {
-			return nil, fmt.Errorf("value extraction failed: %w", err)
-		}
-		if value == nil {
-			continue
-		}
-
-		// Create string key for map grouping
-		groupKeyStr, err := computeJSONAny(groupKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compute group key: %w", err)
-		}
-
-		// Get current group data
-		currentGroup := op.currentGroups[groupKeyStr]
-		var oldValues []any
-		var representativeDoc Document
-
-		if currentGroup != nil {
-			oldValues = make([]any, len(currentGroup.Values))
-			copy(oldValues, currentGroup.Values)
-			representativeDoc = currentGroup.Document
-		} else {
-			// First document in this group becomes the representative
-			representativeDoc = DeepCopyDocument(doc)
-		}
-
-		// Calculate old result for this group (for delta calculation)
-		var oldResultDoc Document
-		if len(oldValues) > 0 {
-			// Pass a deepcopy of the representative document to aggregator to preserve content
-			oldResultDoc, err = op.aggregator.Transform(DeepCopyDocument(representativeDoc), &AggregateInput{
-				Key:    groupKey,
-				Values: oldValues,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("old aggregation failed: %w", err)
-			}
-		}
-
-		// Update the group's values
-		newValues := make([]any, len(oldValues))
-		copy(newValues, oldValues)
-
-		for i := 0; i < abs(multiplicity); i++ {
-			if multiplicity > 0 {
-				newValues = append(newValues, value)
-			} else {
-				// Removal: find and remove matching value
-				newValues = removeFirstMatch(newValues, value)
-			}
-		}
-
-		// Calculate new result for this group
-		var newResultDoc Document
-		if len(newValues) > 0 {
-			// Pass a deepcopy of the representative document to aggregator to preserve content
-			newResultDoc, err = op.aggregator.Transform(DeepCopyDocument(representativeDoc), &AggregateInput{
-				Key:    groupKey,
-				Values: newValues,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("new aggregation failed: %w", err)
-			}
-		}
-
-		// Generate delta output: remove old, add new
-		if len(oldValues) > 0 {
-			if err = result.AddDocumentMutate(oldResultDoc, -1); err != nil {
-				return nil, err
-			}
-		}
-
-		if len(newValues) > 0 {
-			if err = result.AddDocumentMutate(newResultDoc, 1); err != nil {
-				return nil, err
-			}
-		}
-
-		// Update internal state
-		if len(newValues) > 0 {
-			op.currentGroups[groupKeyStr] = &GroupData{
-				Key:      groupKey,
-				Values:   newValues,
-				Document: representativeDoc,
-			}
-		} else {
-			delete(op.currentGroups, groupKeyStr)
-		}
-	}
-
-	return result, nil
-}
-
-func (op *IncrementalGatherOp) OpType() OperatorType              { return OpTypeNonLinear }
-func (op *IncrementalGatherOp) IsTimeInvariant() bool             { return true }
-func (op *IncrementalGatherOp) HasZeroPreservationProperty() bool { return true }
-
-// Reset method for testing
-func (op *IncrementalGatherOp) Reset() {
-	op.currentGroups = map[string]*GroupData{}
-}
-
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
 func removeFirstMatch(slice []any, item any) []any {
 	for i, v := range slice {
 		vKey, _ := computeJSONAny(v)
@@ -285,4 +141,35 @@ func removeFirstMatch(slice []any, item any) []any {
 		}
 	}
 	return slice
+}
+
+// sortValues sorts a slice of any values for deterministic output.
+// Values are sorted by their JSON representation to handle heterogeneous types.
+func sortValues(values []any) {
+	slices.SortFunc(values, func(a, b any) int {
+		// Try to compare as ordered types first for efficiency.
+		switch av := a.(type) {
+		case int:
+			if bv, ok := b.(int); ok {
+				return cmp.Compare(av, bv)
+			}
+		case int64:
+			if bv, ok := b.(int64); ok {
+				return cmp.Compare(av, bv)
+			}
+		case float64:
+			if bv, ok := b.(float64); ok {
+				return cmp.Compare(av, bv)
+			}
+		case string:
+			if bv, ok := b.(string); ok {
+				return cmp.Compare(av, bv)
+			}
+		}
+
+		// Fall back to JSON representation for mixed types.
+		aKey, _ := computeJSONAny(a)
+		bKey, _ := computeJSONAny(b)
+		return cmp.Compare(aKey, bKey)
+	})
 }

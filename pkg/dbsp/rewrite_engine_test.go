@@ -89,28 +89,35 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 		})
 	})
 
-	Context("Linear Chain Incrementalization Rule", func() {
-		It("should incrementalize gather operations", func() {
+	Context("NonLinear Lifting Rule", func() {
+		It("should lift gather operations with I→Gather→D", func() {
 			graph.AddInput(NewInput("sales"))
 
-			// Add a gather operation (non-incremental)
+			// Add a gather operation (non-linear snapshot operator).
 			keyExt, valueExt, aggregator := createGatherEvaluators("dept", "amount", "department", "amounts")
-			gatherID := graph.AddToChain(NewGather(keyExt, valueExt, aggregator))
+			graph.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
-			// Verify it's not incremental initially
-			gatherNode := graph.getNode(gatherID)
-			Expect(gatherNode).NotTo(BeNil())
-			_, isIncremental := gatherNode.Op.(*IncrementalGatherOp)
-			Expect(isIncremental).To(BeFalse())
+			// Verify it's a GatherOp initially.
+			Expect(graph.chain).To(HaveLen(1))
+			_, isGather := graph.nodes[graph.chain[0]].Op.(*GatherOp)
+			Expect(isGather).To(BeTrue())
 
-			// Apply rewrite rules
+			// Apply rewrite rules.
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify the gather was incrementalized
-			gatherNode = graph.nodes[gatherID]
-			_, isIncremental = gatherNode.Op.(*IncrementalGatherOp)
-			Expect(isIncremental).To(BeTrue())
+			// Verify the gather was lifted to I→Gather→D.
+			// Chain should now be: [I, Gather, D].
+			Expect(graph.chain).To(HaveLen(3))
+
+			_, isI := graph.nodes[graph.chain[0]].Op.(*IntegratorOp)
+			Expect(isI).To(BeTrue())
+
+			_, isGather = graph.nodes[graph.chain[1]].Op.(*GatherOp)
+			Expect(isGather).To(BeTrue())
+
+			_, isD := graph.nodes[graph.chain[2]].Op.(*DifferentiatorOp)
+			Expect(isD).To(BeTrue())
 		})
 	})
 
@@ -202,6 +209,20 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 	})
 
 	Context("Distinct Optimization Rule", func() {
+		// NOTE: With the NonLinearLiftingRule, distinct operations are lifted to I→Distinct→D.
+		// This separates adjacent distincts, so the idempotence optimization doesn't apply.
+		// These tests verify behavior with a rewriter that doesn't include lifting.
+		var rewriterNoLifting *LinearChainRewriteEngine
+
+		BeforeEach(func() {
+			// Create a rewriter without the NonLinearLiftingRule for testing distinct idempotence.
+			rewriterNoLifting = &LinearChainRewriteEngine{
+				rules: []LinearChainRule{
+					&DistinctOptimizationRule{},
+				},
+			}
+		})
+
 		It("should remove redundant distinct operations", func() {
 			graph.AddInput(NewInput("collection"))
 
@@ -210,22 +231,22 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			projID := graph.AddToChain(NewProjection(NewFieldProjection("name")))
 			Expect(graph.chain).To(HaveLen(3))
 
-			// Apply rewrite rules
-			err := rewriter.Optimize(graph)
+			// Apply rewrite rules (without lifting).
+			err := rewriterNoLifting.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			// First distinct should be removed, second kept
+			// First distinct should be removed, second kept.
 			Expect(graph.chain).To(HaveLen(2))
 
-			// First distinct should be gone
+			// First distinct should be gone.
 			_, dist1Exists := graph.nodes[dist1ID]
 			Expect(dist1Exists).To(BeFalse())
 
-			// Second distinct should remain
+			// Second distinct should remain.
 			_, dist2Exists := graph.nodes[dist2ID]
 			Expect(dist2Exists).To(BeTrue())
 
-			// Projection should remain
+			// Projection should remain.
 			_, projExists := graph.nodes[projID]
 			Expect(projExists).To(BeTrue())
 		})
@@ -238,11 +259,11 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 			dist3ID := graph.AddToChain(NewDistinct())
 			dist4ID := graph.AddToChain(NewDistinct())
 
-			// Apply rewrite rules
-			err := rewriter.Optimize(graph)
+			// Apply rewrite rules (without lifting).
+			err := rewriterNoLifting.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Should keep only last distinct
+			// Should keep only last distinct.
 			Expect(graph.chain).To(HaveLen(1))
 
 			_, dist1Exists := graph.nodes[dist1ID]
@@ -346,42 +367,65 @@ var _ = Describe("LinearChainRewriteEngine", func() {
 
 	Context("Complex Optimization Scenarios", func() {
 		It("should apply multiple rules in sequence", func() {
-			// Complex graph with multiple optimization opportunities
+			// Complex graph with multiple optimization opportunities.
+			// NOTE: This test uses Distinct for DBSP theory completeness. In production,
+			// pipelines do NOT include distinct - deduplication is handled by
+			// pkg/pipeline.Reconcile via cache-based disambiguation.
 			inputs := []string{"users", "projects"}
 			graph.AddInput(NewInput(inputs[0]))
 			graph.AddInput(NewInput(inputs[1]))
 
-			// Non-incremental join
+			// Non-incremental join.
 			joinEval := NewFlexibleJoin("id", inputs)
 			graph.SetJoin(NewBinaryJoin(joinEval, inputs))
 
-			// I->D pair that should be eliminated
+			// I->D pair that should be eliminated.
 			graph.AddToChain(NewIntegrator())
 			graph.AddToChain(NewDifferentiator())
 
-			// Redundant distincts
+			// Redundant distincts (for testing NonLinearLiftingRule).
 			graph.AddToChain(NewDistinct())
 			graph.AddToChain(NewDistinct())
 
-			// Fuseable selection + projection
+			// Fuseable selection + projection.
 			graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 			graph.AddToChain(NewProjection(NewFieldProjection("name")))
 
 			initialChainLength := len(graph.chain)
 			Expect(initialChainLength).To(Equal(6))
 
-			// Apply all optimizations
+			// Apply all optimizations.
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Should be heavily optimized:
-			// - I->D eliminated (saves 2 ops)
-			// - Redundant distinct eliminated (saves 1 op)
-			// - Selection+projection fused (saves 1 op)
-			// Final: 6 - 2 - 1 - 1 = 2 operations
-			Expect(graph.chain).To(HaveLen(2))
+			// With NonLinearLiftingRule, the chain structure changes:
+			// - Initial: [I, D, Distinct1, Distinct2, Select, Project]
+			// - After lifting: [I, D, I, Distinct1, D, I, Distinct2, D, Select, Project]
+			// - After I→D elimination: [I, Distinct1, D, I, Distinct2, D, Select, Project]
+			// - After fusion: [I, Distinct1, D, I, Distinct2, D, FusedSelectProject]
+			// Note: Distinct idempotence doesn't apply because they're separated by D→I.
+			Expect(graph.chain).To(HaveLen(7))
 
-			// Join should be incremental
+			// Verify structure: should have two lifted distincts and one fused op.
+			var integrators, differentiators, distincts, fused int
+			for _, id := range graph.chain {
+				switch graph.nodes[id].Op.(type) {
+				case *IntegratorOp:
+					integrators++
+				case *DifferentiatorOp:
+					differentiators++
+				case *DistinctOp:
+					distincts++
+				case *SelectThenProjectionsOp:
+					fused++
+				}
+			}
+			Expect(integrators).To(Equal(2))
+			Expect(differentiators).To(Equal(2))
+			Expect(distincts).To(Equal(2))
+			Expect(fused).To(Equal(1))
+
+			// Join should be incremental.
 			joinNode := graph.nodes[graph.joinNode]
 			_, isIncrementalJoin := joinNode.Op.(*IncrementalBinaryJoinOp)
 			Expect(isIncrementalJoin).To(BeTrue())

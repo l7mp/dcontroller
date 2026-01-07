@@ -357,686 +357,6 @@ var _ = Describe("Gather Operations", func() {
 		})
 	})
 
-	Context("Incremental Gather Functionality", func() {
-		var (
-			incrementalGather *IncrementalGatherOp
-		)
-
-		BeforeEach(func() {
-			keyExt, valueExt, aggregator := createGatherEvaluators("dept", "amount", "department", "amounts")
-			incrementalGather = NewIncrementalGather(keyExt, valueExt, aggregator)
-		})
-
-		It("should handle initial data correctly", func() {
-			// First batch of data
-			sales1, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1000))
-			Expect(err).NotTo(HaveOccurred())
-			sales2, err := newDocumentFromPairs("dept", "Marketing", "amount", int64(800))
-			Expect(err).NotTo(HaveOccurred())
-
-			delta1 := NewDocumentZSet()
-			delta1, err = delta1.AddDocument(sales1, 1)
-			Expect(err).NotTo(HaveOccurred())
-			delta1, err = delta1.AddDocument(sales2, 1)
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err := incrementalGather.Process(delta1)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Should create 2 groups
-			Expect(result.UniqueCount()).To(Equal(2))
-
-			docs, err := result.GetUniqueDocuments()
-			Expect(err).NotTo(HaveOccurred())
-
-			// Verify both departments are present
-			foundEng := false
-			foundMkt := false
-			for _, doc := range docs {
-				dept := doc["department"]
-				amounts := doc["amounts"].([]any)
-
-				switch dept {
-				case "Engineering":
-					foundEng = true
-					Expect(amounts).To(HaveLen(1))
-					Expect(amounts[0]).To(Equal(int64(1000)))
-				case "Marketing":
-					foundMkt = true
-					Expect(amounts).To(HaveLen(1))
-					Expect(amounts[0]).To(Equal(int64(800)))
-				default:
-				}
-			}
-			Expect(foundEng).To(BeTrue())
-			Expect(foundMkt).To(BeTrue())
-		})
-
-		It("should add to existing groups", func() {
-			// Initialize with first data
-			sales1, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1000))
-			Expect(err).NotTo(HaveOccurred())
-
-			delta1, err := SingletonZSet(sales1)
-			Expect(err).NotTo(HaveOccurred())
-
-			result1, err := incrementalGather.Process(delta1)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result1.UniqueCount()).To(Equal(1))
-
-			// Add more to same department
-			sales2, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1500))
-			Expect(err).NotTo(HaveOccurred())
-
-			delta2, err := SingletonZSet(sales2)
-			Expect(err).NotTo(HaveOccurred())
-
-			result2, err := incrementalGather.Process(delta2)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Should produce a delta showing the change
-			Expect(result2.Size()).To(Equal(1))      // New group addition (size filters removals)
-			Expect(result2.TotalSize()).To(Equal(2)) // Old group removal + new group addition
-
-			// The delta should contain:
-			// 1. Removal of old Engineering group (amounts=[1000])
-			// 2. Addition of new Engineering group (amounts=[1000, 1500])
-			docs, err := result2.GetDocuments()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(docs).To(HaveLen(1)) // Net effect might be the new doc ("amounts=[1000, 1500])
-
-			// Check multiplicities directly
-			uniqueDocs, err := result2.GetUniqueDocuments()
-			Expect(err).NotTo(HaveOccurred())
-
-			for _, doc := range uniqueDocs {
-				if doc["department"] == "Engineering" {
-					mult, err := result2.GetMultiplicity(doc)
-					Expect(err).NotTo(HaveOccurred())
-					amounts := doc["amounts"].([]any)
-
-					if len(amounts) == 1 {
-						// Old group (should be removed)
-						Expect(mult).To(Equal(-1))
-						Expect(amounts[0]).To(Equal(int64(1000)))
-					} else if len(amounts) == 2 {
-						// New group (should be added)
-						Expect(mult).To(Equal(1))
-						Expect(amounts).To(ConsistOf(int64(1000), int64(1500)))
-					}
-				}
-			}
-		})
-
-		It("should create new groups", func() {
-			// Start with Engineering
-			sales1, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1000))
-			Expect(err).NotTo(HaveOccurred())
-
-			delta1, err := SingletonZSet(sales1)
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = incrementalGather.Process(delta1)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Add Marketing (new group)
-			sales2, err := newDocumentFromPairs("dept", "Marketing", "amount", int64(800))
-			Expect(err).NotTo(HaveOccurred())
-
-			delta2, err := SingletonZSet(sales2)
-			Expect(err).NotTo(HaveOccurred())
-
-			result2, err := incrementalGather.Process(delta2)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Should create new Marketing group
-			Expect(result2.Size()).To(Equal(1)) // One new group
-
-			docs, err := result2.GetDocuments()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(docs).To(HaveLen(1))
-
-			newGroup := docs[0]
-			Expect(newGroup["department"]).To(Equal("Marketing"))
-			amounts := newGroup["amounts"].([]any)
-			Expect(amounts).To(HaveLen(1))
-			Expect(amounts[0]).To(Equal(int64(800)))
-		})
-
-		It("should handle removals from groups", func() {
-			// Add two items to same group
-			sales1, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1000))
-			Expect(err).NotTo(HaveOccurred())
-			sales2, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1500))
-			Expect(err).NotTo(HaveOccurred())
-
-			delta1 := NewDocumentZSet()
-			delta1, err = delta1.AddDocument(sales1, 1)
-			Expect(err).NotTo(HaveOccurred())
-			delta1, err = delta1.AddDocument(sales2, 1)
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = incrementalGather.Process(delta1)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Remove one item
-			delta2 := NewDocumentZSet()
-			delta2, err = delta2.AddDocument(sales1, -1) // Remove first sale
-			Expect(err).NotTo(HaveOccurred())
-
-			result2, err := incrementalGather.Process(delta2)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Should produce delta showing group change
-			Expect(result2.IsZero()).To(BeFalse())
-
-			// Should have removal of old group and addition of new group
-			uniqueDocs, err := result2.GetUniqueDocuments()
-			Expect(err).NotTo(HaveOccurred())
-
-			for _, doc := range uniqueDocs {
-				if doc["department"] == "Engineering" {
-					mult, err := result2.GetMultiplicity(doc)
-					Expect(err).NotTo(HaveOccurred())
-					amounts := doc["amounts"].([]any)
-
-					if len(amounts) == 2 {
-						// Old group [1000, 1500] should be removed
-						Expect(mult).To(Equal(-1))
-					} else if len(amounts) == 1 {
-						// New group [1500] should be added
-						Expect(mult).To(Equal(1))
-						Expect(amounts[0]).To(Equal(int64(1500)))
-					}
-				}
-			}
-		})
-
-		It("should handle complete group removal", func() {
-			// Add single item
-			sales1, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1000))
-			Expect(err).NotTo(HaveOccurred())
-
-			delta1, err := SingletonZSet(sales1)
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = incrementalGather.Process(delta1)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Remove the item (should eliminate the group)
-			delta2 := NewDocumentZSet()
-			delta2, err = delta2.AddDocument(sales1, -1)
-			Expect(err).NotTo(HaveOccurred())
-
-			result2, err := incrementalGather.Process(delta2)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Should remove the Engineering group entirely
-			Expect(result2.Size()).To(Equal(0))      // Not counting the removal
-			Expect(result2.TotalSize()).To(Equal(1)) // One removal
-
-			// Check for docs individual docs
-			docs, err := result2.List()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(docs).To(HaveLen(1))
-			Expect(docs[0].Multiplicity).To(Equal(-1)) // Removal
-			Expect(docs[0].Document["department"]).To(Equal("Engineering"))
-		})
-
-		It("should handle multiplicities correctly", func() {
-			// Add item with multiplicity 3
-			sales1, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1000))
-			Expect(err).NotTo(HaveOccurred())
-
-			delta1 := NewDocumentZSet()
-			delta1, err = delta1.AddDocument(sales1, 3) // Multiplicity 3
-			Expect(err).NotTo(HaveOccurred())
-
-			result1, err := incrementalGather.Process(delta1)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Should create group with 3 copies of the amount
-			docs, err := result1.GetDocuments()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(docs).To(HaveLen(1))
-
-			group := docs[0]
-			amounts := group["amounts"].([]any)
-			Expect(amounts).To(HaveLen(3))
-			Expect(amounts).To(ConsistOf(int64(1000), int64(1000), int64(1000)))
-		})
-
-		It("should handle an add followed by a delete", func() {
-			// add 1: should yield one add for list [1000]
-			sales1, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1000))
-			Expect(err).NotTo(HaveOccurred())
-			delta := NewDocumentZSet()
-			delta, err = delta.AddDocument(sales1, 1)
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err := incrementalGather.Process(delta)
-			Expect(err).NotTo(HaveOccurred())
-			des, err := result.List() // preserve negative multiplicities
-			Expect(err).NotTo(HaveOccurred())
-			Expect(des).To(HaveLen(1))
-			Expect(des[0].Multiplicity).To(Equal(1))
-			doc := des[0].Document
-			amounts := doc["amounts"].([]any)
-			Expect(amounts).To(HaveLen(1))
-			Expect(amounts).To(ConsistOf(int64(1000)))
-
-			// add 2: should yield one delete for list [1000] and one add for list [1000,100]
-			sales2, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(100))
-			Expect(err).NotTo(HaveOccurred())
-			delta = NewDocumentZSet()
-			delta, err = delta.AddDocument(sales2, 1)
-			Expect(err).NotTo(HaveOccurred())
-			result, err = incrementalGather.Process(delta)
-			Expect(err).NotTo(HaveOccurred())
-
-			des, err = result.List() // preserve negative multiplicities
-			Expect(err).NotTo(HaveOccurred())
-			Expect(des).To(HaveLen(2))
-			de := des[0] // dunno the order
-			if de.Multiplicity == 1 {
-				de = des[1]
-			}
-			Expect(de.Multiplicity).To(Equal(-1))
-			doc = de.Document
-			amounts = doc["amounts"].([]any)
-			Expect(amounts).To(HaveLen(1))
-			Expect(amounts).To(ConsistOf(int64(1000)))
-
-			de = des[1] // dunno the order
-			if de.Multiplicity == -1 {
-				de = des[0]
-			}
-			Expect(de.Multiplicity).To(Equal(1))
-			doc = de.Document
-			amounts = doc["amounts"].([]any)
-			Expect(amounts).To(HaveLen(2))
-			Expect(amounts).To(ConsistOf(int64(1000), int64(100)))
-
-			// delete 1: should yield one delete for list [1000,100] and one add for list [100]
-			delta = NewDocumentZSet()
-			delta, err = delta.AddDocument(sales1, -1)
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err = incrementalGather.Process(delta)
-			Expect(err).NotTo(HaveOccurred())
-			des, err = result.List() // preserve negative multiplicities
-			Expect(err).NotTo(HaveOccurred())
-			Expect(des).To(HaveLen(2))
-			de = des[0] // dunno the order
-			if de.Multiplicity == 1 {
-				de = des[1]
-			}
-			Expect(de.Multiplicity).To(Equal(-1))
-			doc = de.Document
-			amounts = doc["amounts"].([]any)
-			Expect(amounts).To(HaveLen(2))
-			Expect(amounts).To(ConsistOf(int64(1000), int64(100)))
-			de = des[1] // dunno the order
-			if de.Multiplicity == -1 {
-				de = des[0]
-			}
-			Expect(de.Multiplicity).To(Equal(1))
-			doc = de.Document
-			amounts = doc["amounts"].([]any)
-			Expect(amounts).To(HaveLen(1))
-			Expect(amounts).To(ConsistOf(int64(100)))
-
-			// delete 2: should yield one delete for list [100]
-			delta = NewDocumentZSet()
-			delta, err = delta.AddDocument(sales2, -1)
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err = incrementalGather.Process(delta)
-			Expect(err).NotTo(HaveOccurred())
-			des, err = result.List() // preserve negative multiplicities
-			Expect(err).NotTo(HaveOccurred())
-			Expect(des).To(HaveLen(1))
-			de = des[0] // dunno the order
-			Expect(de.Multiplicity).To(Equal(-1))
-			doc = de.Document
-			amounts = doc["amounts"].([]any)
-			Expect(amounts).To(HaveLen(1))
-			Expect(amounts).To(ConsistOf(int64(100)))
-		})
-
-		It("should handle a multi-add followed by 2 deletes", func() {
-			// add 1: should yield one add for list [1000]
-			sales1, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(1000))
-			Expect(err).NotTo(HaveOccurred())
-			sales2, err := newDocumentFromPairs("dept", "Engineering", "amount", int64(100))
-			Expect(err).NotTo(HaveOccurred())
-
-			delta := NewDocumentZSet()
-			delta, err = delta.AddDocument(sales1, 1)
-			Expect(err).NotTo(HaveOccurred())
-			delta, err = delta.AddDocument(sales2, 1)
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err := incrementalGather.Process(delta)
-			Expect(err).NotTo(HaveOccurred())
-			des, err := result.List() // preserve negative multiplicities
-			Expect(err).NotTo(HaveOccurred())
-			Expect(des).To(HaveLen(1))
-			Expect(des[0].Multiplicity).To(Equal(1))
-			doc := des[0].Document
-			amounts := doc["amounts"].([]any)
-			Expect(amounts).To(HaveLen(2))
-			Expect(amounts).To(ConsistOf(int64(100), int64(1000)))
-
-			// delete 1: should yield one delete for list [1000,100] and one add for list [1000]
-			delta = NewDocumentZSet()
-			delta, err = delta.AddDocument(sales2, -1)
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err = incrementalGather.Process(delta)
-			Expect(err).NotTo(HaveOccurred())
-			des, err = result.List() // preserve negative multiplicities
-			Expect(err).NotTo(HaveOccurred())
-			Expect(des).To(HaveLen(2))
-			de := des[0] // dunno the order
-			if de.Multiplicity == 1 {
-				de = des[1]
-			}
-			Expect(de.Multiplicity).To(Equal(-1))
-			doc = de.Document
-			amounts = doc["amounts"].([]any)
-			Expect(amounts).To(HaveLen(2))
-			Expect(amounts).To(ConsistOf(int64(1000), int64(100)))
-			de = des[1] // dunno the order
-			if de.Multiplicity == -1 {
-				de = des[0]
-			}
-			Expect(de.Multiplicity).To(Equal(1))
-			doc = de.Document
-			amounts = doc["amounts"].([]any)
-			Expect(amounts).To(HaveLen(1))
-			Expect(amounts).To(ConsistOf(int64(1000)))
-
-			// delete 2: should yield one delete for list [1000]
-			delta = NewDocumentZSet()
-			delta, err = delta.AddDocument(sales1, -1)
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err = incrementalGather.Process(delta)
-			Expect(err).NotTo(HaveOccurred())
-			des, err = result.List() // preserve negative multiplicities
-			Expect(err).NotTo(HaveOccurred())
-			Expect(des).To(HaveLen(1))
-			de = des[0]
-			Expect(de.Multiplicity).To(Equal(-1))
-			doc = de.Document
-			amounts = doc["amounts"].([]any)
-			Expect(amounts).To(HaveLen(1))
-			Expect(amounts).To(ConsistOf(int64(1000)))
-		})
-	})
-
-	Context("Incremental vs Snapshot Consistency", func() {
-		var (
-			snapshotGather    *GatherOp
-			incrementalGather *IncrementalGatherOp
-		)
-
-		BeforeEach(func() {
-			keyExt, valueExt, aggregator := createGatherEvaluators("team", "score", "team", "scores")
-			snapshotGather = NewGather(keyExt, valueExt, aggregator)
-			incrementalGather = NewIncrementalGather(keyExt, valueExt, aggregator)
-		})
-
-		It("should produce consistent results through multiple timesteps", func() {
-			// Track cumulative result from incremental operations
-			cumulativeIncremental := NewDocumentZSet()
-
-			// Timeline data
-			allData := NewDocumentZSet()
-
-			// Timestep 1: Initial data
-			game1, err := newDocumentFromPairs("team", "Red", "score", int64(10))
-			Expect(err).NotTo(HaveOccurred())
-			game2, err := newDocumentFromPairs("team", "Blue", "score", int64(15))
-			Expect(err).NotTo(HaveOccurred())
-
-			delta1 := NewDocumentZSet()
-			delta1, err = delta1.AddDocument(game1, 1)
-			Expect(err).NotTo(HaveOccurred())
-			delta1, err = delta1.AddDocument(game2, 1)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Update cumulative data
-			allData, err = allData.Add(delta1)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Process with both approaches
-			snapshotResult1, err := snapshotGather.Process(allData)
-			Expect(err).NotTo(HaveOccurred())
-			incrementalDelta1, err := incrementalGather.Process(delta1)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Update cumulative incremental result
-			cumulativeIncremental, err = cumulativeIncremental.Add(incrementalDelta1)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Should be consistent
-			Expect(cumulativeIncremental.Size()).To(Equal(snapshotResult1.Size()))
-			Expect(cumulativeIncremental.UniqueCount()).To(Equal(snapshotResult1.UniqueCount()))
-
-			// Timestep 2: Add more scores
-			game3, err := newDocumentFromPairs("team", "Red", "score", int64(20))
-			Expect(err).NotTo(HaveOccurred())
-			game4, err := newDocumentFromPairs("team", "Green", "score", int64(12)) // New team
-			Expect(err).NotTo(HaveOccurred())
-
-			delta2 := NewDocumentZSet()
-			delta2, err = delta2.AddDocument(game3, 1)
-			Expect(err).NotTo(HaveOccurred())
-			delta2, err = delta2.AddDocument(game4, 1)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Update cumulative data
-			allData, err = allData.Add(delta2)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Process timestep 2
-			snapshotResult2, err := snapshotGather.Process(allData)
-			Expect(err).NotTo(HaveOccurred())
-			incrementalDelta2, err := incrementalGather.Process(delta2)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Update cumulative incremental result
-			cumulativeIncremental, err = cumulativeIncremental.Add(incrementalDelta2)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Should still be consistent
-			Expect(cumulativeIncremental.UniqueCount()).To(Equal(snapshotResult2.UniqueCount()))
-
-			// Verify final snapshot results match expectations
-			snapshotDocs, err := snapshotResult2.GetUniqueDocuments()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(snapshotDocs).To(HaveLen(3)) // Red, Blue, Green teams
-
-			// Verify Red team has both scores
-			for _, doc := range snapshotDocs {
-				if doc["team"] == "Red" {
-					scores := doc["scores"].([]any)
-					Expect(scores).To(HaveLen(2))
-					Expect(scores).To(ConsistOf(int64(10), int64(20)))
-				}
-			}
-		})
-
-		It("should handle removals consistently", func() {
-			cumulativeIncremental := NewDocumentZSet()
-
-			// Add initial data
-			game1, err := newDocumentFromPairs("team", "Red", "score", int64(10))
-			Expect(err).NotTo(HaveOccurred())
-			game2, err := newDocumentFromPairs("team", "Red", "score", int64(20))
-			Expect(err).NotTo(HaveOccurred())
-
-			delta1 := NewDocumentZSet()
-			delta1, err = delta1.AddDocument(game1, 1)
-			Expect(err).NotTo(HaveOccurred())
-			delta1, err = delta1.AddDocument(game2, 1)
-			Expect(err).NotTo(HaveOccurred())
-
-			allData := delta1
-
-			// Process initial data
-			Expect(err).NotTo(HaveOccurred())
-			incrementalDelta1, err := incrementalGather.Process(delta1)
-			Expect(err).NotTo(HaveOccurred())
-			cumulativeIncremental, err = cumulativeIncremental.Add(incrementalDelta1)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Remove one score
-			delta2 := NewDocumentZSet()
-			delta2, err = delta2.AddDocument(game1, -1) // Remove first game
-			Expect(err).NotTo(HaveOccurred())
-
-			allData, err = allData.Add(delta2)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Process removal
-			snapshotResult2, err := snapshotGather.Process(allData)
-			Expect(err).NotTo(HaveOccurred())
-			incrementalDelta2, err := incrementalGather.Process(delta2)
-			Expect(err).NotTo(HaveOccurred())
-			cumulativeIncremental, err = cumulativeIncremental.Add(incrementalDelta2)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Verify consistency
-			Expect(cumulativeIncremental.UniqueCount()).To(Equal(snapshotResult2.UniqueCount()))
-
-			// Red team should now have only one score
-			docs, err := snapshotResult2.GetUniqueDocuments()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(docs).To(HaveLen(1))
-
-			redTeamDoc := docs[0]
-			scores := redTeamDoc["scores"].([]any)
-			Expect(scores).To(HaveLen(1))
-			Expect(scores[0]).To(Equal(int64(20)))
-		})
-	})
-
-	Context("Edge Cases for Incremental Gather", func() {
-		var incrementalGather *IncrementalGatherOp
-
-		BeforeEach(func() {
-			keyExt, valueExt, aggregator := createGatherEvaluators("category", "value", "category", "values")
-			incrementalGather = NewIncrementalGather(keyExt, valueExt, aggregator)
-		})
-
-		It("should handle empty deltas", func() {
-			emptyDelta := NewDocumentZSet()
-			result, err := incrementalGather.Process(emptyDelta)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.IsZero()).To(BeTrue())
-		})
-
-		It("should handle documents missing required fields", func() {
-			// Document missing "category" field
-			doc, err := newDocumentFromPairs("value", int64(100), "other", "data")
-			Expect(err).NotTo(HaveOccurred())
-
-			delta, err := SingletonZSet(doc)
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err := incrementalGather.Process(delta)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.IsZero()).To(BeTrue()) // No valid documents to process
-		})
-
-		It("should handle zero multiplicity additions", func() {
-			doc, err := newDocumentFromPairs("category", "test", "value", int64(42))
-			Expect(err).NotTo(HaveOccurred())
-
-			delta := NewDocumentZSet()
-			delta, err = delta.AddDocument(doc, 0) // Zero multiplicity
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err := incrementalGather.Process(delta)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.IsZero()).To(BeTrue()) // No effect
-		})
-
-		It("should handle repeated additions and removals", func() {
-			doc, err := newDocumentFromPairs("category", "test", "value", int64(42))
-			Expect(err).NotTo(HaveOccurred())
-
-			// Add, remove, add again
-			delta1, err := SingletonZSet(doc)
-			Expect(err).NotTo(HaveOccurred())
-			result1, err := incrementalGather.Process(delta1)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result1.Size()).To(Equal(1)) // Creates group
-
-			delta2 := NewDocumentZSet()
-			delta2, err = delta2.AddDocument(doc, -1)
-			Expect(err).NotTo(HaveOccurred())
-			result2, err := incrementalGather.Process(delta2)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result2.TotalSize()).To(Equal(1)) // Removes group
-
-			delta3, err := SingletonZSet(doc)
-			Expect(err).NotTo(HaveOccurred())
-			result3, err := incrementalGather.Process(delta3)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result3.Size()).To(Equal(1)) // Recreates group
-		})
-
-		It("should handle complex key types", func() {
-			// Use nested object as grouping key
-			complexKey := map[string]any{
-				"dept":     "Engineering",
-				"location": "NYC",
-			}
-
-			doc, err := newDocumentFromPairs("category", complexKey, "value", int64(100))
-			Expect(err).NotTo(HaveOccurred())
-
-			delta, err := SingletonZSet(doc)
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err := incrementalGather.Process(delta)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Size()).To(Equal(1))
-
-			docs, err := result.GetDocuments()
-			Expect(err).NotTo(HaveOccurred())
-			resultDoc := docs[0]
-
-			// The complex key should be preserved in the result
-			resultKey := resultDoc["category"].(map[string]any)
-			Expect(resultKey["dept"]).To(Equal("Engineering"))
-			Expect(resultKey["location"]).To(Equal("NYC"))
-		})
-
-		It("should reset state correctly", func() {
-			doc, err := newDocumentFromPairs("category", "test", "value", int64(42))
-			Expect(err).NotTo(HaveOccurred())
-
-			// Add some data
-			delta, err := SingletonZSet(doc)
-			Expect(err).NotTo(HaveOccurred())
-			_, err = incrementalGather.Process(delta)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Reset and verify clean state
-			incrementalGather.Reset()
-
-			// Process same data again - should behave like first time
-			result, err := incrementalGather.Process(delta)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Size()).To(Equal(1)) // Should create new group
-		})
-	})
-
 	Context("Empty and Edge Cases", func() {
 		var gatherOp *GatherOp
 
@@ -1284,85 +604,112 @@ var _ = Describe("ComplexChainEval", func() {
 		Expect(gatheredResult.TotalSize()).To(Equal(0))
 	})
 
-	It("should process an unwind followed by a gather - incremental implementation", func() {
+	// This test verifies proper DBSP incremental semantics for non-linear operators.
+	// Non-linear operators like GatherOp must be lifted with I→Op→D to work correctly
+	// on deltas. Without this lifting, feeding deltas directly to GatherOp produces
+	// incorrect results because GatherOp is stateless and expects full state input.
+	It("should process an unwind followed by a gather - proper DBSP lifting with I→Gather→D", func() {
 		// Setup: Original document with array [1,2]
 		originalDoc := Document{
 			"id":    "X",
 			"items": []any{1, 2},
 		}
 
-		// Create input delta: add the original document
-		inputDelta := NewDocumentZSet()
-		err := inputDelta.AddDocumentMutate(originalDoc, 1)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Step 1: Unwind operation
+		// Create the pipeline operators.
 		unwindOp := NewUnwind(
 			&FieldExtractor{fieldName: "items"},     // Extract items array
 			&ReplaceFieldTransformer{field: "item"}, // Replace with single item
 		)
 
-		unwoundResult, err := unwindOp.Process(inputDelta)
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(unwoundResult.TotalSize()).To(Equal(2))
-		docs, err := unwoundResult.List()
-		Expect(err).NotTo(HaveOccurred())
-		for _, doc := range docs {
-			Expect(doc.Document).To(HaveKey("id"))
-			Expect(doc.Document).To(HaveKey("item"))
-			Expect([]any{1, 2}).To(ContainElement(doc.Document["item"]))
-			Expect(doc.Multiplicity).To(Equal(1))
-		}
-
-		// Step 2: Gather operation
-		gatherOp := NewIncrementalGather(
+		// The lifted gather pipeline: I → GatherOp → D
+		// This is what NonLinearLiftingRule produces in the rewrite engine.
+		integrator := NewIntegrator()
+		gatherOp := NewGather(
 			&FieldExtractor{fieldName: "id"},                                // Group by id
 			&FieldExtractor{fieldName: "item"},                              // Extract item values
 			&ArrayAggregateTransformer{keyField: "id", valueField: "items"}, // Rebuild array
 		)
+		differentiator := NewDifferentiator()
 
-		gatheredResult, err := gatherOp.Process(unwoundResult)
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(gatheredResult.TotalSize()).To(Equal(1))
-		docs, err = gatheredResult.List()
-		Expect(err).NotTo(HaveOccurred())
-		doc := docs[0]
-		Expect(doc.Document).To(HaveKey("id"))
-		Expect(doc.Document).To(HaveKey("items"))
-		Expect([]any{[]any{2, 1}, []any{1, 2}}).To(ContainElement(doc.Document["items"]))
-		Expect(doc.Multiplicity).To(Equal(1))
-
-		// Reset the input delta and delete the original document
-		inputDelta = NewDocumentZSet()
-		err = inputDelta.AddDocumentMutate(originalDoc, -1)
-		Expect(err).NotTo(HaveOccurred())
-
-		unwoundResult, err = unwindOp.Process(inputDelta)
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(unwoundResult.TotalSize()).To(Equal(2))
-		docs, err = unwoundResult.List()
-		Expect(err).NotTo(HaveOccurred())
-		for _, doc := range docs {
-			Expect(doc.Document).To(HaveKey("id"))
-			Expect(doc.Document).To(HaveKey("item"))
-			Expect([]any{1, 2}).To(ContainElement(doc.Document["item"]))
-			Expect(doc.Multiplicity).To(Equal(-1))
+		// Helper to process through the lifted gather pipeline.
+		processLiftedGather := func(delta *DocumentZSet) (*DocumentZSet, error) {
+			// I: Integrate delta into full state.
+			fullState, err := integrator.Process(delta)
+			if err != nil {
+				return nil, err
+			}
+			// Op: Gather on full state (snapshot semantics).
+			snapshot, err := gatherOp.Process(fullState)
+			if err != nil {
+				return nil, err
+			}
+			// D: Differentiate to get output delta.
+			return differentiator.Process(snapshot)
 		}
 
-		// Step 2: Gather operation
-		gatheredResult, err = gatherOp.Process(unwoundResult)
+		// Step 1: Add the original document.
+		addDelta := NewDocumentZSet()
+		Expect(addDelta.AddDocumentMutate(originalDoc, 1)).To(Succeed())
+
+		// Unwind produces: +{id: "X", item: 1}, +{id: "X", item: 2}
+		unwoundAdd, err := unwindOp.Process(addDelta)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(unwoundAdd.TotalSize()).To(Equal(2))
+
+		// Lifted gather produces: +{id: "X", items: [1, 2]}
+		gatherAddResult, err := processLiftedGather(unwoundAdd)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(gatheredResult.TotalSize()).To(Equal(1))
-		docs, err = gatheredResult.List()
+		Expect(gatherAddResult.TotalSize()).To(Equal(1))
+		docs, err := gatherAddResult.List()
 		Expect(err).NotTo(HaveOccurred())
-		doc = docs[0]
-		Expect(doc.Document).To(HaveKey("id"))
-		Expect(doc.Document).To(HaveKey("items"))
-		Expect([]any{[]any{2, 1}, []any{1, 2}}).To(ContainElement(doc.Document["items"]))
-		Expect(doc.Multiplicity).To(Equal(-1))
+		Expect(docs).To(HaveLen(1))
+		Expect(docs[0].Document).To(HaveKey("id"))
+		Expect(docs[0].Document["id"]).To(Equal("X"))
+		Expect(docs[0].Document).To(HaveKey("items"))
+		Expect(docs[0].Document["items"]).To(ConsistOf(1, 2))
+		Expect(docs[0].Multiplicity).To(Equal(1)) // Addition
+
+		// Step 2: Delete the original document.
+		deleteDelta := NewDocumentZSet()
+		Expect(deleteDelta.AddDocumentMutate(originalDoc, -1)).To(Succeed())
+
+		// Unwind produces: -{id: "X", item: 1}, -{id: "X", item: 2}
+		unwoundDelete, err := unwindOp.Process(deleteDelta)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(unwoundDelete.TotalSize()).To(Equal(2))
+
+		// Verify unwind output has negative multiplicities.
+		deleteList, err := unwoundDelete.List()
+		Expect(err).NotTo(HaveOccurred())
+		for _, entry := range deleteList {
+			Expect(entry.Multiplicity).To(Equal(-1))
+		}
+
+		// Lifted gather produces: -{id: "X", items: [1, 2]}
+		// The integrator accumulates the deletions, resulting in empty state.
+		// GatherOp on empty state produces empty result.
+		// Differentiator computes: empty - {id: "X", items: [1, 2]} = -{id: "X", items: [1, 2]}
+		gatherDeleteResult, err := processLiftedGather(unwoundDelete)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(gatherDeleteResult.TotalSize()).To(Equal(1))
+		docs, err = gatherDeleteResult.List()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(docs).To(HaveLen(1))
+		Expect(docs[0].Document).To(HaveKey("id"))
+		Expect(docs[0].Document["id"]).To(Equal("X"))
+		Expect(docs[0].Document).To(HaveKey("items"))
+		Expect(docs[0].Document["items"]).To(ConsistOf(1, 2))
+		Expect(docs[0].Multiplicity).To(Equal(-1)) // Deletion - properly cancels the addition
+
+		// Verify: The add and delete outputs cancel each other.
+		// If we were to integrate these outputs, we'd get an empty set.
+		outputIntegrator := NewIntegrator()
+		_, err = outputIntegrator.Process(gatherAddResult)
+		Expect(err).NotTo(HaveOccurred())
+		finalState, err := outputIntegrator.Process(gatherDeleteResult)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(finalState.IsZero()).To(BeTrue(), "Add and delete should cancel to empty state")
 	})
 })

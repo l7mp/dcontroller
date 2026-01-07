@@ -49,7 +49,7 @@ var (
 	suite *testsuite.Suite
 	// loglevel = 1
 	// loglevel = -10
-	loglevel      int8 = -10
+	loglevel      int8 = -4
 	port          int
 	epCtrl        *testEpCtrl
 	errorCh       chan error
@@ -535,15 +535,6 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Load the operator from file
-			eventCh = make(chan testutils.ReconcileRequest, 16)
-			errorCh = make(chan error, 16)
-			opts := doperator.Options{
-				Cache:        api.GetCache(),
-				ErrorChannel: errorCh,
-				Logger:       suite.Log,
-			}
-
 			suite.Log.Info("creating the API server")
 			// Use port 0 to let the OS automatically assign a free port
 			config, err := apiserver.NewDefaultConfig("", 0, api.Client, true, false, suite.Log)
@@ -571,6 +562,15 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 				}
 			}
 
+			// Load the operator from file
+			eventCh = make(chan testutils.ReconcileRequest, 16)
+			errorCh = make(chan error, 16)
+			opts := doperator.Options{
+				Cache:        api.GetCache(),
+				APIServer:    server,
+				ErrorChannel: errorCh,
+				Logger:       suite.Log,
+			}
 			specFile := OperatorGatherSpec
 			if _, err := os.Stat(specFile); errors.Is(err, os.ErrNotExist) {
 				specFile = filepath.Base(specFile)
@@ -635,6 +635,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 			specs = []map[string]any{}
 			req, ok := testutils.TryWatchReq(eventCh, suite.Timeout)
 			Expect(ok).To(BeTrue())
+
 			Expect(req.GetEventType()).To(Equal(object.Added))
 			obj := req.GetObject()
 			Expect(obj.GetName()).To(HavePrefix("test-service"))
@@ -646,6 +647,7 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 
 			req, ok = testutils.TryWatchReq(eventCh, suite.Timeout)
 			Expect(ok).To(BeTrue())
+
 			Expect(req.GetEventType()).To(Equal(object.Added))
 			obj = req.GetObject()
 			Expect(obj.GetName()).To(HavePrefix("test-service"))
@@ -744,8 +746,6 @@ var _ = Describe("EndpointSlice controller test:", Ordered, func() {
 				return nil
 			})
 			Expect(err).ToNot(HaveOccurred())
-
-			time.Sleep(5 * time.Second)
 
 			req, ok := testutils.TryWatchReq(eventCh, suite.Timeout)
 			Expect(ok).To(BeTrue())

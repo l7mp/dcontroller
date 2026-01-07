@@ -237,7 +237,8 @@ func (p *Pipeline) NewGatherOp(e *expression.Expression) (dbsp.Operator, error) 
 		log:            p.log.WithName("@gather"),
 	}
 
-	return dbsp.NewIncrementalGather(eval.keyExtractor, eval.valueExtractor, eval), nil
+	// Return snapshot GatherOp - it will be lifted to I→Gather→D by the rewrite engine.
+	return dbsp.NewGather(eval.keyExtractor, eval.valueExtractor, eval), nil
 }
 
 // Join operator.

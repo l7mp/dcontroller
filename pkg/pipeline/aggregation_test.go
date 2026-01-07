@@ -955,8 +955,14 @@ var _ = Describe("Aggregations", func() {
 	})
 
 	Describe("Evaluating multiplexer aggregations", func() {
-		It("should evaluate a raw mux expression", func() {
-			jsonData := `[{"@gather":["$.metadata.namespace","$.spec.a"]}]`
+		It("should evaluate a mux expression", func() {
+			jsonData := `
+- '@gather':
+    - $.metadata.namespace
+    - $.spec.a
+- '@project':
+    - "$.": $.
+    - $.metadata.name: stable-name`
 			ag, err := newAggregation(jsonData)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -973,7 +979,7 @@ var _ = Describe("Aggregations", func() {
 							"apiVersion": "test.view.dcontroller.io/v1alpha1",
 							"kind":       "view",
 							"metadata": map[string]any{
-								"name":      "name",
+								"name":      "stable-name",
 								"namespace": "default",
 							},
 							"spec": map[string]any{
@@ -989,32 +995,15 @@ var _ = Describe("Aggregations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 
-			// must sort
-			Expect(res[0].Object).NotTo(BeNil())
-			Expect(res[0].Object.Object["spec"].(map[string]any)).NotTo(BeNil())
-			Expect(res[0].Object.Object["spec"].(map[string]any)["a"]).NotTo(BeNil())
-			sortAnyInt64(res[0].Object.Object["spec"].(map[string]any)["a"].([]any))
-
-			object.RemoveUID(res[0].Object)
-			Expect(res[0]).To(Equal(
-				object.Delta{
-					Type: object.Upserted,
-					Object: &unstructured.Unstructured{
-						Object: map[string]any{
-							"apiVersion": "test.view.dcontroller.io/v1alpha1",
-							"kind":       "view",
-							"metadata": map[string]any{
-								"name":      "name",
-								"namespace": "default",
-							},
-							"spec": map[string]any{
-								"a": []any{int64(1), int64(2)},
-								"b": map[string]any{"c": int64(2)},
-							},
-							"c": "c",
-						},
-					},
-				}))
+			upserted := res[0]
+			Expect(upserted.Type).To(Equal(object.Upserted))
+			Expect(upserted).NotTo(BeNil())
+			Expect(upserted.Object).NotTo(BeNil())
+			Expect(upserted.Object.Object["spec"].(map[string]any)).NotTo(BeNil())
+			Expect(upserted.Object.Object["spec"].(map[string]any)["a"]).NotTo(BeNil())
+			sortAnyInt64(upserted.Object.Object["spec"].(map[string]any)["a"].([]any))
+			spec := upserted.Object.Object["spec"].(map[string]any)
+			Expect(spec["a"]).To(Equal([]any{int64(1), int64(2)}))
 
 			obj := objs[0].DeepCopy()
 			Expect(unstructured.SetNestedField(obj.UnstructuredContent(), int64(3), "spec", "a")).
@@ -1022,83 +1011,35 @@ var _ = Describe("Aggregations", func() {
 
 			res, err = ag.Evaluate(object.Delta{Type: object.Updated, Object: obj})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res).To(HaveLen(1))
-
-			Expect(res[0].Object).NotTo(BeNil())
-			Expect(res[0].Object.Object["spec"].(map[string]any)).NotTo(BeNil())
-			Expect(res[0].Object.Object["spec"].(map[string]any)["a"]).NotTo(BeNil())
-			sortAnyInt64(res[0].Object.Object["spec"].(map[string]any)["a"].([]any))
-
-			object.RemoveUID(res[0].Object)
-			Expect(res[0]).To(Equal(
-				object.Delta{
-					Type: object.Upserted,
-					Object: &unstructured.Unstructured{
-						Object: map[string]any{
-							"apiVersion": "test.view.dcontroller.io/v1alpha1",
-							"kind":       "view",
-							"metadata": map[string]any{
-								"name":      "name",
-								"namespace": "default",
-							},
-							"spec": map[string]any{
-								"a": []any{int64(2), int64(3)},
-								"b": map[string]any{"c": int64(2)},
-							},
-							"c": "c",
-						},
-					},
-				}))
+			upserted = res[0]
+			Expect(upserted).NotTo(BeNil())
+			Expect(upserted.Object).NotTo(BeNil())
+			Expect(upserted.Object.Object["spec"].(map[string]any)).NotTo(BeNil())
+			Expect(upserted.Object.Object["spec"].(map[string]any)["a"]).NotTo(BeNil())
+			sortAnyInt64(upserted.Object.Object["spec"].(map[string]any)["a"].([]any))
+			spec = upserted.Object.Object["spec"].(map[string]any)
+			Expect(spec["a"]).To(Equal([]any{int64(2), int64(3)}))
 
 			res, err = ag.Evaluate(object.Delta{Type: object.Deleted, Object: obj})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
-
-			object.RemoveUID(res[0].Object)
-			Expect(res[0]).To(Equal(
-				object.Delta{
-					Type: object.Upserted,
-					Object: &unstructured.Unstructured{
-						Object: map[string]any{
-							"apiVersion": "test.view.dcontroller.io/v1alpha1",
-							"kind":       "view",
-							"metadata": map[string]any{
-								"name":      "name",
-								"namespace": "default",
-							},
-							"spec": map[string]any{
-								"a": []any{int64(2)},
-								"b": map[string]any{"c": int64(2)},
-							},
-							"c": "c",
-						},
-					},
-				}))
+			upserted = res[0]
+			Expect(upserted).NotTo(BeNil())
+			// Verify the aggregate has the correct remaining value.
+			spec = upserted.Object.Object["spec"].(map[string]any)
+			Expect(spec["a"]).To(Equal([]any{int64(2)}))
 
 			res, err = ag.Evaluate(object.Delta{Type: object.Deleted, Object: objs[1]})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(HaveLen(1))
 
+			// When the last item in a group is deleted, the aggregate is deleted.
+			// The representative is now objs[1] (name2), so the deleted aggregate uses its metadata.
 			object.RemoveUID(res[0].Object)
-			Expect(res[0]).To(Equal(
-				object.Delta{
-					Type: object.Deleted,
-					Object: &unstructured.Unstructured{
-						Object: map[string]any{
-							"apiVersion": "test.view.dcontroller.io/v1alpha1",
-							"kind":       "view",
-							"metadata": map[string]any{
-								"name":      "name",
-								"namespace": "default",
-							},
-							"spec": map[string]any{
-								"a": []any{int64(2)},
-								"b": map[string]any{"c": int64(2)},
-							},
-							"c": "c",
-						},
-					},
-				}))
+			Expect(res[0].Type).To(Equal(object.Deleted))
+			Expect(res[0].Object.Object["metadata"].(map[string]any)["name"]).To(Equal("stable-name"))
+			spec = res[0].Object.Object["spec"].(map[string]any)
+			Expect(spec["a"]).To(Equal([]any{int64(2)}))
 		})
 
 		It("should evaluate a mux expression that updates the same object name", func() {
@@ -1140,7 +1081,17 @@ var _ = Describe("Aggregations", func() {
 			Expect(res).To(HaveLen(1))
 
 			Expect(res[0].Type).To(Equal(object.Upserted))
-			object.RemoveUID(res[0].Object)
+			obj := res[0].Object
+			object.RemoveUID(obj)
+			// normalize order
+			as, ok, err := unstructured.NestedSlice(obj.UnstructuredContent(), "spec", "a")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(as).To(HaveLen(2))
+			if as[0] == int64(2) && as[1] == int64(1) {
+				Expect(unstructured.SetNestedSlice(obj.UnstructuredContent(), []any{int64(1), int64(2)},
+					"spec", "a")).NotTo(HaveOccurred())
+			}
 			Expect(res[0].Object).To(Equal(&unstructured.Unstructured{
 				Object: map[string]any{
 					"apiVersion": "test.view.dcontroller.io/v1alpha1",

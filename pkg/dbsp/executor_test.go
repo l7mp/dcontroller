@@ -1157,34 +1157,58 @@ var _ = Describe("LinearChainExecutor", func() {
 
 	Context("Integration with Rewrite Engine", func() {
 		It("should work correctly with all optimization rules applied", func() {
-			// Create a graph that exercises multiple optimization rules
+			// Create a graph that exercises multiple optimization rules.
+			// NOTE: This test uses Distinct for DBSP theory completeness. In production,
+			// pipelines do NOT include distinct - deduplication is handled by
+			// pkg/pipeline.Reconcile via cache-based disambiguation.
 			graph.AddInput(NewInput("stream"))
 
-			// Add I->D pair (will be eliminated)
+			// Add I->D pair (will be eliminated).
 			graph.AddToChain(NewIntegrator())
 			graph.AddToChain(NewDifferentiator())
 
-			// Add redundant distincts (will be optimized)
+			// Add redundant distincts (for testing NonLinearLiftingRule).
 			graph.AddToChain(NewDistinct())
 			graph.AddToChain(NewDistinct())
 
-			// Add fuseable operations (will be fused)
+			// Add fuseable operations (will be fused).
 			graph.AddToChain(NewSelection(NewFieldFilter("active", true)))
 			graph.AddToChain(NewProjection(NewFieldProjection("name")))
 
-			// Add gather (will be incrementalized)
+			// Add gather (will be lifted with I→Gather→D).
 			keyExt, valueExt, aggregator := createGatherEvaluators("name", "name", "name", "names")
 			graph.AddToChain(NewGather(keyExt, valueExt, aggregator))
 
 			originalChainLength := len(graph.chain)
 			Expect(originalChainLength).To(Equal(7))
 
-			// Apply all optimizations
+			// Apply all optimizations.
 			err := rewriter.Optimize(graph)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Should be heavily optimized
-			Expect(len(graph.chain)).To(BeNumerically("<", originalChainLength))
+			// NonLinearLiftingRule wraps non-linear ops (Distinct, Gather) with I→Op→D.
+			// Chain grows due to lifting but adjacent I→D pairs get eliminated.
+			var integrators, differentiators, distincts, gathers, fused int
+			for _, id := range graph.chain {
+				switch graph.nodes[id].Op.(type) {
+				case *IntegratorOp:
+					integrators++
+				case *DifferentiatorOp:
+					differentiators++
+				case *DistinctOp:
+					distincts++
+				case *GatherOp:
+					gathers++
+				case *SelectThenProjectionsOp:
+					fused++
+				}
+			}
+			// Each non-linear op (2 distincts + 1 gather) has its own I and D.
+			Expect(integrators).To(Equal(3))
+			Expect(differentiators).To(Equal(3))
+			Expect(distincts).To(Equal(2))
+			Expect(gathers).To(Equal(1))
+			Expect(fused).To(Equal(1)) // Select + Project fused
 
 			// Should create valid executor
 			executor, err = NewExecutor(graph, logger)

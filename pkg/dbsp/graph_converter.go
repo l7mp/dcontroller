@@ -6,15 +6,17 @@ import "fmt"
 type opConverter func(Operator) (Operator, error)
 
 // ToSnapshotGraph converts an incremental ChainGraph to a snapshot ChainGraph.
-// This replaces incremental operators (IncrementalJoinOp, IncrementalGatherOp) with their
-// snapshot equivalents (JoinOp, GatherOp). Linear operators remain unchanged.
+// This replaces incremental join operators with their snapshot equivalents.
+// Non-linear operators like GatherOp remain unchanged (they're lifted with I→Op→D
+// in incremental mode, which gets stripped when converting to snapshot).
 func ToSnapshotGraph(incrementalGraph *ChainGraph) (*ChainGraph, error) {
 	return convertGraph(incrementalGraph, "incremental", convertToSnapshotJoin, convertToSnapshotOperator)
 }
 
 // ToIncrementalGraph converts a snapshot ChainGraph to an incremental ChainGraph.
-// This replaces snapshot operators (JoinOp, GatherOp) with their incremental equivalents
-// (IncrementalJoinOp, IncrementalGatherOp). Linear operators remain unchanged.
+// This replaces snapshot join operators with their incremental equivalents.
+// Non-linear operators like GatherOp are NOT converted here - they are lifted
+// with I→Op→D by the NonLinearLiftingRule in the rewrite engine.
 func ToIncrementalGraph(snapshotGraph *ChainGraph) (*ChainGraph, error) {
 	return convertGraph(snapshotGraph, "snapshot", convertToIncrementalJoin, convertToIncrementalOperator)
 }
@@ -93,11 +95,7 @@ func convertToIncrementalJoin(op Operator) (Operator, error) {
 
 // convertToSnapshotOperator converts an incremental operator to snapshot operator.
 func convertToSnapshotOperator(op Operator) (Operator, error) {
-	switch o := op.(type) {
-	case *IncrementalGatherOp:
-		// Convert IncrementalGatherOp -> GatherOp.
-		return NewGather(o.keyExtractor, o.valueExtractor, o.aggregator), nil
-
+	switch op.(type) {
 	// Linear operators are the same for snapshot and incremental.
 	case *ProjectionOp, *SelectionOp, *DistinctOp:
 		return op, nil
@@ -125,10 +123,11 @@ func convertToSnapshotOperator(op Operator) (Operator, error) {
 
 // convertToIncrementalOperator converts a snapshot operator to incremental operator.
 func convertToIncrementalOperator(op Operator) (Operator, error) {
-	switch o := op.(type) {
+	switch op.(type) {
+	// Non-linear operators (GatherOp) remain unchanged. They are lifted with I→Op→D
+	// by NonLinearLiftingRule in the rewrite engine.
 	case *GatherOp:
-		// Convert GatherOp -> IncrementalGatherOp.
-		return NewIncrementalGather(o.keyExtractor, o.valueExtractor, o.aggregator), nil
+		return op, nil
 
 	// Linear operators are the same for snapshot and incremental.
 	case *ProjectionOp, *SelectionOp, *DistinctOp:
@@ -136,10 +135,6 @@ func convertToIncrementalOperator(op Operator) (Operator, error) {
 
 	// Fused operators are also the same.
 	case *ProjectThenSelectOp, *SelectThenProjectionsOp:
-		return op, nil
-
-	// Already incremental operator.
-	case *IncrementalGatherOp:
 		return op, nil
 
 	// Structural operators remain unchanged (only used in incremental mode).
