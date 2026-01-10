@@ -579,6 +579,143 @@ var _ = Describe("Expressions", func() {
 			Expect(kind).To(Equal(reflect.Bool))
 			Expect(res).To(BeTrue())
 		})
+
+		// arithmetics
+		It("should deserialize and evaluate an integer @add expression", func() {
+			jsonData := `{"@add":[2,3]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			kind := reflect.ValueOf(res).Kind()
+			Expect(kind).To(Equal(reflect.Int64))
+			Expect(res).To(Equal(int64(5)))
+		})
+
+		It("should deserialize and evaluate an float @add expression", func() {
+			jsonData := `{"@add":[2.2,3]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			kind := reflect.ValueOf(res).Kind()
+			Expect(kind).To(Equal(reflect.Float64))
+			Expect(res).To(And(
+				BeNumerically(">=", 5.19),
+				BeNumerically("<", 5.21),
+			))
+		})
+
+		It("should deserialize and evaluate an integer @sub expression", func() {
+			jsonData := `{"@sub":[2,3]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			kind := reflect.ValueOf(res).Kind()
+			Expect(kind).To(Equal(reflect.Int64))
+			Expect(res).To(Equal(int64(-1)))
+		})
+
+		It("should deserialize and evaluate an float @sub expression", func() {
+			jsonData := `{"@sub":[2.2,3]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			kind := reflect.ValueOf(res).Kind()
+			Expect(kind).To(Equal(reflect.Float64))
+			Expect(res).To(And(
+				BeNumerically(">=", -0.81),
+				BeNumerically("<", -0.79),
+			))
+		})
+
+		It("should deserialize and evaluate an integer @mul expression", func() {
+			jsonData := `{"@mul":[2,3]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			kind := reflect.ValueOf(res).Kind()
+			Expect(kind).To(Equal(reflect.Int64))
+			Expect(res).To(Equal(int64(6)))
+		})
+
+		It("should deserialize and evaluate an float @mul expression", func() {
+			jsonData := `{"@mul":[1.5,3]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			kind := reflect.ValueOf(res).Kind()
+			Expect(kind).To(Equal(reflect.Float64))
+			Expect(res).To(And(
+				BeNumerically(">=", 4.49),
+				BeNumerically("<", 4.51),
+			))
+		})
+
+		It("should deserialize and evaluate an @div expression", func() {
+			jsonData := `{"@div":[3,2]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			kind := reflect.ValueOf(res).Kind()
+			// result always float
+			Expect(kind).To(Equal(reflect.Float64))
+			Expect(res).To(And(
+				BeNumerically(">=", 1.49),
+				BeNumerically("<", 1.51),
+			))
+		})
+
+		It("should deserialize and evaluate an float @div expression", func() {
+			jsonData := `{"@div":[2.2,1.1]}`
+			var exp Expression
+			err := json.Unmarshal([]byte(jsonData), &exp)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx := EvalCtx{Object: obj1.UnstructuredContent(), Log: logger}
+			res, err := exp.Evaluate(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			kind := reflect.ValueOf(res).Kind()
+			Expect(kind).To(Equal(reflect.Float64))
+			Expect(res).To(And(
+				BeNumerically(">=", 1.99),
+				BeNumerically("<", 2.01),
+			))
+		})
 	})
 
 	Describe("Evaluating list expressions", func() {

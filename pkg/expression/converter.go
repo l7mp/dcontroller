@@ -178,6 +178,10 @@ func AsFloat(d any) (float64, error) {
 		return 0.0, errors.New("argument is nil")
 	}
 
+	if reflect.ValueOf(d).Kind() == reflect.Int32 ||
+		reflect.ValueOf(d).Kind() == reflect.Int64 {
+		return float64(reflect.ValueOf(d).Int()), nil
+	}
 	if reflect.ValueOf(d).Kind() == reflect.Float32 ||
 		reflect.ValueOf(d).Kind() == reflect.Float64 {
 		return reflect.ValueOf(d).Float(), nil

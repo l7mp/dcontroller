@@ -899,6 +899,105 @@ func (e *Expression) Evaluate(ctx EvalCtx) (any, error) {
 			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "args", f, "result", v)
 			return v, nil
 
+			// binary
+		case "@add":
+			is, fs, kind, err := AsBinaryIntOrFloatList(arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			var v any
+			switch kind {
+			case reflect.Int64:
+				if len(is) != 0 {
+					v = is[0] + is[1]
+				}
+			case reflect.Float64:
+				if len(fs) != 0 {
+					v = fs[0] + fs[1]
+				}
+			default:
+			}
+
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", v)
+			return v, nil
+
+		case "@sub":
+			is, fs, kind, err := AsBinaryIntOrFloatList(arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			var v any
+			switch kind {
+			case reflect.Int64:
+				if len(is) != 0 {
+					v = is[0] - is[1]
+				}
+			case reflect.Float64:
+				if len(fs) != 0 {
+					v = fs[0] - fs[1]
+				}
+			default:
+			}
+
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", v)
+			return v, nil
+
+		case "@mul":
+			is, fs, kind, err := AsBinaryIntOrFloatList(arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			var v any
+			switch kind {
+			case reflect.Int64:
+				if len(is) != 0 {
+					v = is[0] * is[1]
+				}
+			case reflect.Float64:
+				if len(fs) != 0 {
+					v = fs[0] * fs[1]
+				}
+			default:
+			}
+
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", v)
+			return v, nil
+
+		case "@div":
+			// div always returns a float
+			args, err := AsList(arg)
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+
+			if len(args) != 2 {
+				return nil, NewExpressionError(e,
+					errors.New("invalid arguments: expected 2 arguments"))
+			}
+
+			i1, f1, kind1, err := AsIntOrFloat(args[0])
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+			if kind1 == reflect.Int64 {
+				f1 = float64(i1)
+			}
+
+			i2, f2, kind2, err := AsIntOrFloat(args[1])
+			if err != nil {
+				return nil, NewExpressionError(e, err)
+			}
+			if kind2 == reflect.Int64 {
+				f2 = float64(i2)
+			}
+
+			v := f1 / f2
+			ctx.Log.V(8).Info("eval ready", "expression", e.String(), "result", v)
+			return v, nil
+
 			// list ops
 		case "@sum":
 			is, fs, kind, err := AsIntOrFloatList(arg)

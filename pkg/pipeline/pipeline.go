@@ -150,7 +150,7 @@ func New(operator string, target schema.GroupVersionKind, sources []schema.Group
 		p.graph.AddToChain(op)
 	}
 
-	p.log.Info("pipeline initialization ready", "num-inputs", len(sources), "graph", p.graph.String())
+	p.log.V(2).Info("pipeline initialization ready", "num-inputs", len(sources), "graph", p.graph.String())
 
 	// Optimize
 	if err := p.rewriter.Optimize(p.graph); err != nil {
@@ -164,7 +164,7 @@ func New(operator string, target schema.GroupVersionKind, sources []schema.Group
 	}
 	p.executor = executor
 
-	p.log.Info("pipeline optimization ready", "graph", p.graph.String())
+	p.log.V(2).Info("pipeline optimization ready", "graph", p.graph.String())
 
 	return p, nil
 }
@@ -326,7 +326,7 @@ func (p *Pipeline) Sync() ([]object.Delta, error) {
 		return nil, NewPipelineError(fmt.Errorf("failed to reconcile target cache: %w", err))
 	}
 
-	p.log.V(1).Info("sync ready", "deltas", len(deltas))
+	p.log.V(2).Info("sync ready", "deltas", len(deltas))
 
 	return deltas, nil
 }
